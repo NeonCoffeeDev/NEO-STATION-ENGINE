@@ -204,14 +204,16 @@ def build(args):
     if os.path.isfile(scene):
         pkg_path = os.path.join(src, "scene.ncpkg")
         try:
-            size, n_mesh, n_inst, n_scene, n_tex = ncpkg.pack_file(
-                scene, pkg_path)
-        except (ncpkg.NcpkgError, ncpkg.TextureError) as exc:
+            (size, n_mesh, n_inst, n_scene, n_tex,
+             n_snd) = ncpkg.pack_file(scene, pkg_path)
+        except (ncpkg.NcpkgError, ncpkg.TextureError,
+                ncpkg.AudioError) as exc:
             raise SystemExit(f"ncc: scene.json is not valid -- {exc}")
         except ValueError as exc:
             raise SystemExit(f"ncc: scene.json is not valid JSON -- {exc}")
         print(f"  scene.json -> scene.ncpkg  ({size} bytes, {n_mesh} mesh(es), "
-              f"{n_tex} texture(s), {n_scene} scene(s), {n_inst} instance(s))")
+              f"{n_tex} texture(s), {n_snd} sound(s), {n_scene} scene(s), "
+              f"{n_inst} object(s))")
 
     # Transpile script.ncs -> C before configuring. The generated file lands in
     # src/ so the existing glob picks it up; it is gitignored, because it is

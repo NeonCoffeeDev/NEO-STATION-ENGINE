@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from . import __version__, build as build_mod, doctor
+from . import __version__, build as build_mod, check as check_mod, doctor
 from .targets import TARGETS
 
 
@@ -46,6 +46,10 @@ def main(argv=None):
     c = sub.add_parser("clean", help="delete a project's build directory")
     c.add_argument("path", nargs="?", default=".")
     c.set_defaults(func=build_mod.clean)
+
+    ck = sub.add_parser("check", help="report what fits and what does not")
+    ck.add_argument("path", nargs="?", default=".")
+    ck.set_defaults(func=check_mod.run)
 
     st = sub.add_parser("studio", help="open the NC Studio GUI")
     st.set_defaults(func=_studio)

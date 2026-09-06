@@ -89,6 +89,27 @@ Buttons: `BTN_UP` `BTN_DOWN` `BTN_LEFT` `BTN_RIGHT` `BTN_CROSS` `BTN_CIRCLE`
 | `spin(id, x, y, z)` | Rotation added per frame; `0, 12, 0` turns slowly. |
 | `show(id)` / `hide(id)` | Visibility. |
 
+### Sound
+| | |
+|---|---|
+| `play_sound(id)` | Play a sample. `id` is its index in `scene.json`'s `sounds`. |
+| `sound_count()` | How many are loaded. |
+
+### Arrays
+
+Fixed size, declared at the top of the file. There is no allocator, so the size
+is part of the declaration:
+
+```gdscript
+var bullets: array[16]
+
+func _update():
+    bullets[0] = bullets[0] + 1
+```
+
+An out-of-range index reads as `0` and writes nowhere rather than crashing --
+there is no MMU here, so a stray write would corrupt memory silently.
+
 ### Sprites (2D)
 
 Sprites are flat textured quads in **screen space** -- pixels on the 320x240
@@ -193,9 +214,11 @@ Honest limits of the current version:
 
 - **One script per project.** Not one per object. Branch on `scene()` and object
   index instead. Per-object scripts need an object model that does not exist yet.
+- **Nothing can be created at run time.** Every sprite and object exists from the
+  start; you show, hide and move them. Allocate a pool up front -- the `shooter`
+  template does this for its bullets.
 - **No collision.** You can compare positions yourself with `abs()`, but nothing
   is built in.
-- **No sound.**
 - **Integers only**, 32-bit.
 - **The debug font only.** `draw_text()` works, but it is PSn00bSDK's built-in
   font -- fixed size, one colour. A custom font needs its own texture work.

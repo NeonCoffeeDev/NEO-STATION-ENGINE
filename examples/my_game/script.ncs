@@ -51,6 +51,7 @@ func update_menu():
     set_pos(0, 0, bob, 900)
 
     if btn_pressed(BTN_START):
+        play_sound(0)
         goto_scene(1)
 
 
@@ -58,7 +59,7 @@ func update_level():
     draw_text(8, 8, "LEVEL 1")
     draw_text(8, 20, "X")
     draw_num(24, 20, get_x(player))
-    draw_text(8, 220, "SELECT = MENU")
+    draw_text(8, 220, "X = SOUND   SELECT = MENU")
 
     if btn_held(BTN_LEFT):
         move(player, -speed, 0, 0)
@@ -75,5 +76,9 @@ func update_level():
             get_y(player),
             clamp(get_z(player), 400, 1600))
 
+    if btn_pressed(BTN_CROSS):
+        play_sound(1)
+
     if btn_pressed(BTN_SELECT):
+        play_sound(0)
         goto_scene(0)

@@ -14,7 +14,7 @@
 
 #include "nc.h"
 
-#define NC_PKG_VERSION 5
+#define NC_PKG_VERSION 6
 
 /* Mirrors the writer's layout exactly. Both sides must change together, which
  * is what the version field is for. */
@@ -50,6 +50,12 @@ typedef struct {
     RECT     tex_rect;
     RECT     clut_rect;
 } TexHeader;
+
+typedef struct {
+    uint16_t id, pad;
+    uint32_t rate;
+    uint32_t size;
+} SoundHeader;
 
 typedef struct {
     uint16_t instance_count;
@@ -126,6 +132,11 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
             t->h = th->h;
             if ((int)th->slot >= pkg->texture_count)
                 pkg->texture_count = th->slot + 1;
+
+        } else if (fourcc_is(e->fourcc, "SND0")) {
+            const SoundHeader *sh = (const SoundHeader *)p;
+            nc_audio_add(p + sizeof(SoundHeader), (int)sh->size,
+                         (int)sh->rate);
 
         } else if (fourcc_is(e->fourcc, "MESH")) {
             const MeshHeader *mh = (const MeshHeader *)p;
@@ -208,10 +219,7 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
          * extra sections still loads on an older runtime. */
     }
 
-    if (pkg->mesh_count == 0) {
-        printf("nc_pkg: package contains no meshes\n");
-        return 0;
-    }
+    /* No meshes is fine -- a purely 2D game has sprites and nothing else. */
     if (pkg->scene_count == 0) {
         printf("nc_pkg: package contains no scenes\n");
         return 0;

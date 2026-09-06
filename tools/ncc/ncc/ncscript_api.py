@@ -19,6 +19,11 @@ FUNCTIONS = {
     "draw_text":     {"c": "nc_s_draw_text",    "args": 3},
     "draw_num":      {"c": "nc_s_draw_num",     "args": 3},
 
+    # --- sound ---
+    # Samples live in the SPU's own RAM, so playing one costs almost nothing.
+    "play_sound":    {"c": "nc_s_play_sound",   "args": 1},
+    "sound_count":   {"c": "nc_s_sound_count",  "args": 0},
+
     # --- input ---
     # held() is true every frame the button is down; pressed() only on the frame
     # it goes down, which is what you want for menus and jumps.

@@ -1,10 +1,15 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Texture2D" path="res://art/checker.png" id="1_tex"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_block"]
 size = Vector3(2, 2, 2)
 
 [sub_resource type="BoxMesh" id="BoxMesh_slab"]
 size = Vector3(4.4, 0.6, 4.4)
+
+[sub_resource type="StandardMaterial3D" id="Mat_checker"]
+albedo_texture = ExtResource("1_tex")
 
 [sub_resource type="Environment" id="Environment_bg"]
 background_mode = 1
@@ -24,6 +29,7 @@ metadata/nc_clear = Color(0.063, 0.047, 0.133, 1)
 [node name="Title" type="MeshInstance3D" parent="Scene0_Menu"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -9)
 mesh = SubResource("BoxMesh_block")
+surface_material_override/0 = SubResource("Mat_checker")
 metadata/nc_spin = Vector3(0, 14, 6)
 
 [node name="Bar" type="MeshInstance3D" parent="Scene0_Menu"]

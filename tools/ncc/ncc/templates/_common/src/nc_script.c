@@ -56,6 +56,21 @@ int nc_s_draw_num(int x, int y, int value)
 }
 
 
+/* --- sound --- */
+
+int nc_s_play_sound(int id)
+{
+    nc_audio_play(id);
+    return 0;
+}
+
+
+int nc_s_sound_count(void)
+{
+    return nc_audio_count();
+}
+
+
 /* --- input --- */
 
 int nc_s_btn_held(int button)

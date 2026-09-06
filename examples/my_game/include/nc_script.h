@@ -24,6 +24,10 @@ void nc_s_print_num(int value);
 int  nc_s_draw_text(int x, int y, const char *msg);
 int  nc_s_draw_num(int x, int y, int value);
 
+/* --- sound --- */
+int  nc_s_play_sound(int id);
+int  nc_s_sound_count(void);
+
 /* --- input --- */
 int  nc_s_btn_held(int button);
 int  nc_s_btn_pressed(int button);

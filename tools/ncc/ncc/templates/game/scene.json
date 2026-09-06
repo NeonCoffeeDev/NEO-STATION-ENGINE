@@ -6,6 +6,16 @@
       "file": "textures/checker.png"
     }
   ],
+  "sounds": [
+    {
+      "name": "blip",
+      "file": "sounds/blip.wav"
+    },
+    {
+      "name": "thud",
+      "file": "sounds/thud.wav"
+    }
+  ],
   "meshes": [
     {
       "name": "block",

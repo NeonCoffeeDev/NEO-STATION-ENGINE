@@ -94,6 +94,8 @@ class Studio:
         self.q = queue.Queue()
         self.running = False
         self.proc = None
+        self.failed = False
+        self.explain_on_fail = False
         self.projects = []
         self.settings = load_settings()
         self.autoscroll = tk.BooleanVar(value=self.settings.get("autoscroll", True))
@@ -127,7 +129,8 @@ class Studio:
         self._sync_config_button()
         self.set_target(self.settings.get("target", "ps1"))
         self.log(f"repo   {self.repo}", CYAN)
-        self.log("F5 build+run   F7 build   F9 doctor   Ctrl+L clear", DIM)
+        self.log("F5 build+run   F7 build   F8 check   F9 doctor   Ctrl+L clear",
+                 DIM)
         self.check_toolchain()
 
         self._tty_pos = 0
@@ -211,7 +214,7 @@ class Studio:
         self.b_clean = Button(row, "CLEAN", lambda: self.run_ncc("clean"), DIM,
                               width=9)
         self.b_clean.pack(side="left", padx=4)
-        self.b_doc = Button(row, "DOCTOR", self.check_toolchain, CYAN, width=9)
+        self.b_doc = Button(row, "CHECK", self.check_project, CYAN, width=9)
         self.b_doc.pack(side="left")
 
         self.b_stop = Button(body, "STOP", self.stop_running, RED)
@@ -312,6 +315,7 @@ class Studio:
         self.root.bind("<F5>", lambda _: self.run_ncc("run"))
         self.root.bind("<F7>", lambda _: self.run_ncc("build"))
         self.root.bind("<Shift-F7>", lambda _: self.run_ncc("clean"))
+        self.root.bind("<F8>", lambda _: self.check_project())
         self.root.bind("<F9>", lambda _: self.check_toolchain())
         self.root.bind("<Control-l>", lambda _: self.clear_log())
         self.root.bind("<Control-n>", lambda _: self.new_project())
@@ -524,6 +528,12 @@ class Studio:
 
     def _classify(self, line):
         low = line.lower()
+        if line.lstrip().startswith("[X]") or "PROBLEMS" in line:
+            return RED
+        if line.lstrip().startswith("[!]") or "WARNINGS" in line:
+            return AMBER
+        if "fix:" in low:
+            return CYAN
         if "[missing]" in low or "error" in low or "failed" in low:
             return RED
         if "[ok]" in low or "  ok  " in low or "complete" in low:
@@ -544,6 +554,12 @@ class Studio:
                     self.running = False
                     self.proc = None
                     self.set_buttons(True)
+                    if self.failed and self.explain_on_fail:
+                        # A failed build is exactly when someone wants to know
+                        # what is too big, so run the checker without being
+                        # asked.
+                        self.explain_on_fail = False
+                        self.root.after(50, self.explain_failure)
                 elif isinstance(item, tuple):
                     self.set_status(item[0], item[1])
                 else:
@@ -596,11 +612,13 @@ class Studio:
         except OSError:
             pass
 
-    def _spawn(self, args, done_msg):
+    def _spawn(self, args, done_msg, explain_on_fail=False):
         env = os.environ.copy()
         env["PYTHONPATH"] = (os.path.join(self.repo, "tools", "ncc") + os.pathsep +
                              env.get("PYTHONPATH", ""))
         env["PYTHONUNBUFFERED"] = "1"
+
+        self.explain_on_fail = explain_on_fail
 
         def worker():
             code = -1
@@ -616,6 +634,7 @@ class Studio:
                 code = p.wait()
             except Exception as exc:  # noqa: BLE001 - surfaced in the console
                 self.q.put("ncc failed to start: %s" % exc)
+            self.failed = code != 0 and code > 0
             if code == 0:
                 self.q.put((done_msg, GREEN))
             elif code < 0:
@@ -647,7 +666,28 @@ class Studio:
         self.log("")
         self.log("> " + shown, CYAN)
         self.set_status("%s %s ..." % (cmd, rel), AMBER)
-        self._spawn(argv, "%s %s" % (cmd, rel))
+        self._spawn(argv, "%s %s" % (cmd, rel),
+                    explain_on_fail=cmd in ("build", "run"))
+
+    def explain_failure(self):
+        p = self.selected_project()
+        if not p or self.running:
+            return
+        self.log("")
+        self.log("--- checking what went wrong ---", AMBER)
+        self._spawn(["check", p], "check")
+
+    def check_project(self):
+        if self.running:
+            return
+        p = self.selected_project()
+        if not p:
+            self.log("no project selected.", RED)
+            return
+        self.show_tab("console")
+        self.log("")
+        self.log("> ncc check %s" % os.path.relpath(p, self.repo), CYAN)
+        self._spawn(["check", p], "check")
 
     def check_toolchain(self):
         if self.running:

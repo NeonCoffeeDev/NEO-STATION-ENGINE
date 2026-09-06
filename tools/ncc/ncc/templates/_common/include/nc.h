@@ -13,6 +13,7 @@
 #include <psxgpu.h>
 #include <psxgte.h>
 #include <psxpad.h>
+#include <psxspu.h>
 #include <inline_c.h>
 
 #define NC_SCREEN_W   320
@@ -131,6 +132,7 @@ typedef struct {
 } NC_Scene;
 
 #define NC_MAX_TEXTURES 8
+#define NC_MAX_SOUNDS   16
 #define NC_MAX_MESHES  64
 #define NC_MAX_SCENES  16
 
@@ -153,6 +155,17 @@ typedef struct {
 /* Returns 1 on success, 0 if the blob is not a package this build understands.
  * On failure the reason is printed to TTY. */
 int nc_pkg_load(const void *data, NC_Package *pkg);
+
+
+/* ---- sound ---------------------------------------------------------------
+ *
+ * Samples are uploaded to the SPU's own 512 KB of RAM once, at load. Playing one
+ * is then just pointing a voice at an address -- the CPU does no mixing.
+ */
+void nc_audio_init(void);
+int  nc_audio_add(const void *adpcm, int size, int rate);  /* -> id, or -1   */
+void nc_audio_play(int id);
+int  nc_audio_count(void);
 
 
 /* ---- the live scene -----------------------------------------------------

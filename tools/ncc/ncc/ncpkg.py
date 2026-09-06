@@ -23,10 +23,11 @@ import json
 import os
 import struct
 
+from . import audio as audio_mod
 from . import textures as tex_mod
 
 MAGIC = b"NCPK"
-VERSION = 5
+VERSION = 6
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -42,6 +43,7 @@ class NcpkgError(Exception):
 
 # Texture problems are reported the same way as any other packing problem.
 TextureError = tex_mod.TextureError
+AudioError = audio_mod.AudioError
 
 
 # ---- geometry helpers ---------------------------------------------------
@@ -272,6 +274,10 @@ def pack(doc, base_dir="."):
     for i, data in enumerate(tex_chunks):
         chunks.append((b"TEX0", i, data))
 
+    snd_chunks, _snd_ids = audio_mod.build(doc.get("sounds", []), base_dir)
+    for i, data in enumerate(snd_chunks):
+        chunks.append((b"SND0", i, data))
+
     mesh_ids = {}
     for i, mesh in enumerate(meshes):
         if "name" in mesh:
@@ -318,4 +324,4 @@ def pack_file(scene_path, out_path):
     instances = sum(len(s.get("instances", [])) for s in scenes)
     instances += sum(len(s.get("sprites", [])) for s in scenes)
     return (len(data), len(doc.get("meshes", [])), instances, len(scenes),
-            len(doc.get("textures", [])))
+            len(doc.get("textures", [])), len(doc.get("sounds", [])))

@@ -1,0 +1,14 @@
+build/
+*.bin
+*.cue
+*.exe
+*.elf
+*.map
+
+# generated from scene.json by ncc build
+scene.ncpkg
+
+# generated from script.ncs by ncc build
+src/nc_script_generated.c
+
+build-release/

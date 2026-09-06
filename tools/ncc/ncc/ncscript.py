@@ -10,6 +10,7 @@ So this is a transpiler, not an interpreter.
 What it supports
 ----------------
     var speed: int = 20              module-level and local variables
+    var bullets: array[16]           fixed-size arrays (top level only)
     func _ready():                   called once when the scene starts
     func _update():                  called every frame
     func my_own(a, b):               your own functions
@@ -21,7 +22,8 @@ What it deliberately refuses
 ----------------------------
     floats           there is no FPU; use ints, or fixed-point where you need
                      fractions (4096 = 1.0)
-    arrays, dicts    they need dynamic allocation
+    dicts            they need dynamic allocation
+    growing arrays   an array's size is fixed at compile time
     classes          no object model on the console
     strings          beyond literals passed to print()
 
@@ -66,7 +68,7 @@ TOKEN_RE = re.compile(r"""
     (?P<NUMBER>\d+)
   | (?P<NAME>[A-Za-z_][A-Za-z_0-9]*)
   | (?P<STRING>"[^"\n]*")
-  | (?P<OP>==|!=|<=|>=|[-+*/%<>()=,:])
+  | (?P<OP>==|!=|<=|>=|[-+*/%<>()=,:\[\]])
   | (?P<SPACE>[ \t]+)
   | (?P<COMMENT>\#.*)
 """, re.VERBOSE)
@@ -212,10 +214,10 @@ class Parser:
         self.skip_newlines()
         while not self.at("EOF"):
             if self.at("NAME", "var"):
-                name, expr, line = self.parse_var()
+                name, expr, size, line = self.parse_var()
                 if name in self.globals:
                     raise ScriptError(line, f"'{name}' declared twice")
-                self.globals[name] = expr
+                self.globals[name] = {"expr": expr, "size": size}
             elif self.at("NAME", "func"):
                 self.funcs.append(self.parse_func())
             else:
@@ -229,16 +231,32 @@ class Parser:
     def parse_var(self):
         line = self.expect("NAME", "var").line
         name = self.expect("NAME").value
+        size = None
+
         if self.accept("OP", ":"):
             type_tok = self.expect("NAME")
+            if type_tok.value == "array":
+                # Fixed size, decided now: there is no allocator on the console,
+                # so an array is a static block and its length is part of it.
+                self.expect("OP", "[")
+                count = self.expect("NUMBER").value
+                self.expect("OP", "]")
+                if count < 1 or count > 4096:
+                    raise ScriptError(line,
+                                      f"array size {count} is out of range "
+                                      f"(1..4096)")
+                size = count
+                self.expect("NEWLINE")
+                return name, None, size, line
             if type_tok.value != "int":
                 raise ScriptError(type_tok.line,
-                                  f"only 'int' variables are supported, not "
+                                  f"only 'int' and 'array' are supported, not "
                                   f"'{type_tok.value}'")
+
         self.expect("OP", "=")
         expr = self.parse_expr()
         self.expect("NEWLINE")
-        return name, expr, line
+        return name, expr, size, line
 
     def parse_func(self):
         line = self.expect("NAME", "func").line
@@ -291,7 +309,12 @@ class Parser:
             return {"k": "return", "expr": expr}
 
         if self.at("NAME", "var"):
-            name, expr, line = self.parse_var()
+            name, expr, size, line = self.parse_var()
+            if size is not None:
+                raise ScriptError(line,
+                                  f"'{name}': arrays must be declared at the "
+                                  f"top of the file, not inside a function. "
+                                  f"They are static storage, not locals.")
             self.scopes[-1].add(name)
             return {"k": "local", "name": name, "expr": expr, "line": line}
 
@@ -321,6 +344,19 @@ class Parser:
             body = self.parse_block({var})
             return {"k": "for", "var": var, "start": start, "end": end,
                     "body": body, "line": t.line}
+
+        # indexed assignment: name[expr] = expr
+        if self.at("NAME") and self.peek(1).kind == "OP" and \
+                self.peek(1).value == "[":
+            name = self.next().value
+            self.next()                          # [
+            idx = self.parse_expr()
+            self.expect("OP", "]")
+            self.expect("OP", "=")
+            value = self.parse_expr()
+            self.expect("NEWLINE")
+            return {"k": "idxassign", "name": name, "idx": idx,
+                    "expr": value, "line": t.line}
 
         # assignment or bare call
         if self.at("NAME") and self.peek(1).kind == "OP" and \
@@ -396,6 +432,12 @@ class Parser:
             if t.value in ("true", "false"):
                 return {"k": "num", "v": 1 if t.value == "true" else 0,
                         "line": t.line}
+            if self.at("OP", "["):
+                self.next()
+                idx = self.parse_expr()
+                self.expect("OP", "]")
+                return {"k": "index", "name": t.value, "idx": idx,
+                        "line": t.line}
             if self.at("OP", "("):
                 self.next()
                 args = []
@@ -434,8 +476,13 @@ class Generator:
         self.emit('#include "nc_script.h"')
         self.emit()
 
-        for name, expr in self.globals.items():
-            self.emit("static int %s = %s;" % (name, self.expr(expr)))
+        for name, info in self.globals.items():
+            if info["size"] is not None:
+                # Static storage, zero-initialised. There is no allocator, so
+                # the size has to be known here.
+                self.emit("static int %s[%d];" % (name, info["size"]))
+            else:
+                self.emit("static int %s = %s;" % (name, self.expr(info["expr"])))
         if self.globals:
             self.emit()
 
@@ -496,7 +543,17 @@ class Generator:
             self.emit("int %s = %s;" % (s["name"], self.expr(s["expr"])), ind)
         elif k == "assign":
             self.check_name(s["name"], s["line"])
+            info = self.globals.get(s["name"])
+            if info is not None and info["size"] is not None:
+                raise ScriptError(s["line"],
+                                  f"'{s['name']}' is an array; assign to an "
+                                  f"element, like {s['name']}[0] = 1")
             self.emit("%s = %s;" % (s["name"], self.expr(s["expr"])), ind)
+        elif k == "idxassign":
+            size = self.array_size(s["name"], s["line"])
+            self.emit("nc_arr_set(%s, %d, %s, %s);"
+                      % (s["name"], size, self.expr(s["idx"]),
+                         self.expr(s["expr"])), ind)
         elif k == "exprstmt":
             self.emit("%s;" % self.expr(s["expr"]), ind)
         elif k == "if":
@@ -528,6 +585,16 @@ class Generator:
         else:
             raise ScriptError(s.get("line", 0), f"cannot generate {k}")
 
+    def array_size(self, name, line):
+        info = self.globals.get(name)
+        if info is None:
+            raise ScriptError(line, f"'{name}' is not defined. Declare it with "
+                                    f"'var {name}: array[8]' first.")
+        if info["size"] is None:
+            raise ScriptError(line, f"'{name}' is a plain variable, not an "
+                                    f"array, so it cannot be indexed.")
+        return info["size"]
+
     def check_name(self, name, line):
         if name in self.globals:
             return
@@ -547,7 +614,16 @@ class Generator:
             if e["v"] in self.api.CONSTANTS:
                 return self.api.CONSTANTS[e["v"]]
             self.check_name(e["v"], e["line"])
+            info = self.globals.get(e["v"])
+            if info is not None and info["size"] is not None:
+                raise ScriptError(e["line"],
+                                  f"'{e['v']}' is an array; index it, like "
+                                  f"{e['v']}[0]")
             return e["v"]
+        if k == "index":
+            size = self.array_size(e["name"], e["line"])
+            return "nc_arr_get(%s, %d, %s)" % (e["name"], size,
+                                               self.expr(e["idx"]))
         if k == "un":
             if e["op"] == "not":
                 return "(!%s)" % self.expr(e["v"])
@@ -573,11 +649,16 @@ class Generator:
 
         if name in self.user_funcs:
             want = self.user_funcs[name]
+            # _ready and _update are emitted under their engine names, so a
+            # script calling _ready() to restart a level has to reach the same
+            # function the engine calls.
+            emitted = {"_ready": "nc_script_ready",
+                       "_update": "nc_script_update"}.get(name, name)
             if len(args) != want:
                 raise ScriptError(e["line"],
                                   f"{name}() takes {want} argument(s), "
                                   f"got {len(args)}")
-            return "%s(%s)" % (name, ", ".join(args))
+            return "%s(%s)" % (emitted, ", ".join(args))
 
         known = sorted(list(self.api.FUNCTIONS) + list(self.user_funcs))
         raise ScriptError(e["line"],

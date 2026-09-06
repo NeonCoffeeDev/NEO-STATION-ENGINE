@@ -151,3 +151,27 @@ Still open:
 2. **Collision.** Scripts compare positions by hand.
 3. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
 4. **Per-object scripts**, 4-bit textures, LTO.
+
+
+## Update, 2026-09-06 (audio, arrays, a real game, and diagnostics)
+
+- **Sound.** WAV to SPU-ADPCM, encoded here rather than shelling out to psxavenc.
+  Exhaustive filter/shift search per block: 54.6 dB SNR on a test chirp at 3.5:1.
+  Samples upload to the SPU's own 512 KB; play_sound() costs the CPU nothing.
+- **Arrays in NCScript.** Fixed size, top level, bounds-checked -- an out-of-range
+  write on a machine with no MMU is a lock-up, not an exception.
+- **The `shooter` template.** A complete side-scrolling shmup: parallax
+  starfield, bullet pool, respawning enemies, box collision, lives, score, sound
+  and a game over. 250 lines of generated C.
+- **`ncc check`.** Runs the real converters and reports every budget plus what
+  will stop the build, with the reason and the fix. Studio runs it automatically
+  when a build fails.
+- **docs/LIMITS.md.** Every rule and where it comes from.
+
+Still open:
+
+1. **Music.** Sound effects work; streamed music does not, and would need CD
+   streaming rather than SPU RAM.
+2. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+3. **Per-object scripts**, 4-bit textures, LTO.
+4. **PS2.** Untouched -- see M6.

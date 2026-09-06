@@ -1,0 +1,7 @@
+{
+  "name": "shooter",
+  "title": "Space shooter",
+  "order": 7,
+  "description": "A complete 2D side-scrolling shmup: shooting, enemies, collision, score, sound.",
+  "detail": "The most finished example. Parallax starfield, a bullet pool, respawning enemies, box collision, lives and a game-over. Read script.ncs top to bottom to see how a whole game fits together on this hardware."
+}

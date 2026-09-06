@@ -29,6 +29,15 @@ extends RefCounted
 ## starts at its own origin.
 ##
 ## Meshes are shared across every scene, so a prop used in two levels ships once.
+##
+## Textures and sprites
+## --------------------
+## A MeshInstance3D whose material has an albedo texture gets that texture
+## exported to ../textures/ as a PNG and referenced from scene.json. Sprite2D
+## nodes are exported as 2D sprites in screen space.
+##
+## The PS1 has eight texture slots of at most 256x240, so oversized images are
+## rejected with a warning rather than silently rescaled into mush.
 
 const SCALE := 100.0          ## PS1 units per Godot metre
 const OUT_PATH := "res://../scene.json"
@@ -37,6 +46,12 @@ const OUT_PATH := "res://../scene.json"
 ## where a scene stops being plausible on the hardware, not hard limits.
 const WARN_VERTS_PER_MESH := 256
 const WARN_TOTAL_QUADS := 900
+
+## Hardware limits, mirrored from tools/ncc/ncc/textures.py.
+const MAX_TEXTURES := 8
+const MAX_TEX_W := 256
+const MAX_TEX_H := 240
+const TEXTURE_DIR := "res://../textures"
 
 ## Rotation on the PS1 is a 16-bit angle where 4096 is one full turn.
 const TURN := 4096.0
@@ -47,6 +62,9 @@ static func export_scene(root: Node) -> Dictionary:
 	var meshes: Array = []
 	var mesh_index := {}          ## cache key -> index into `meshes`
 	var instances: Array = []
+
+	var textures: Array = []
+	var texture_cache := {}
 
 	var groups := _find_scene_groups(root)
 	var grouped := not groups.is_empty()
@@ -59,15 +77,12 @@ static func export_scene(root: Node) -> Dictionary:
 		# Positions are relative to the group, so the offset you give a group to
 		# keep it clear of the others in the viewport stays an editor concern.
 		var origin := Transform3D.IDENTITY
-		if grouped and group is Node3D:
+		if grouped and group is Node3D and not (group is Node2D):
 			origin = group.global_transform.affine_inverse()
 
 		var cam := _find_camera(group)
 		if cam == null:
 			cam = _find_camera(root)
-		if cam == null:
-			warnings.append("%s: no Camera3D, so the PS1 camera starts at the "
-				% group.name + "world origin looking down +Z.")
 
 		var nodes: Array[MeshInstance3D] = []
 		_collect(group, nodes)
@@ -95,11 +110,16 @@ static func export_scene(root: Node) -> Dictionary:
 				for w in built.get("warnings", []):
 					warnings.append("%s: %s" % [node.name, w])
 				idx = meshes.size()
-				meshes.append({
+				var entry := {
 					"name": "m%d" % idx,
 					"verts": built["verts"],
 					"quads": built["quads"],
-				})
+				}
+				var tex_name := _texture_for(node, textures, texture_cache,
+					warnings)
+				if tex_name != "":
+					entry["texture"] = tex_name
+				meshes.append(entry)
 				mesh_index[key] = idx
 
 			instances.append({
@@ -109,7 +129,16 @@ static func export_scene(root: Node) -> Dictionary:
 				"spin": _read_spin(node),
 			})
 
-		if instances.is_empty():
+		var sprites := _collect_sprites(group, origin, textures, texture_cache,
+			warnings)
+
+		# A purely 2D scene has no use for a camera, so only mention it when
+		# there is 3D geometry that would actually be framed by one.
+		if cam == null and not instances.is_empty():
+			warnings.append("%s: no Camera3D, so the PS1 camera starts at the "
+				% group.name + "world origin looking down +Z.")
+
+		if instances.is_empty() and sprites.is_empty():
 			warnings.append("%s: exported no objects" % group.name)
 
 		var g_cam_pos := [0, 0, 0]
@@ -124,11 +153,20 @@ static func export_scene(root: Node) -> Dictionary:
 			"clear": _resolve_clear(group, root),
 			"camera": {"pos": g_cam_pos, "rot": g_cam_rot},
 			"instances": instances,
+			"sprites": sprites,
 		})
 
-	if meshes.is_empty():
+	# A purely 2D game has sprites and no meshes at all, which is valid.
+	var any_sprites := false
+	for sc in scenes:
+		if not sc["sprites"].is_empty():
+			any_sprites = true
+			break
+
+	if meshes.is_empty() and not any_sprites:
 		return {"ok": false, "error": "Nothing exportable. Add a MeshInstance3D "
-			+ "with a BoxMesh, or check the warnings in the Output panel."}
+			+ "with a BoxMesh for 3D, or a Sprite2D for 2D -- and check the "
+			+ "warnings in the Output panel."}
 
 	var total_quads := 0
 	for m in meshes:
@@ -139,6 +177,7 @@ static func export_scene(root: Node) -> Dictionary:
 
 	var scene := {
 		"name": root.name,
+		"textures": textures,
 		"meshes": meshes,
 		"scenes": scenes,
 	}
@@ -155,6 +194,7 @@ static func export_scene(root: Node) -> Dictionary:
 		"ok": true,
 		"path": path,
 		"mesh_count": meshes.size(),
+		"texture_count": textures.size(),
 		"scene_count": scenes.size(),
 		"instance_count": _total_instances(scenes),
 		"warnings": warnings,
@@ -162,9 +202,12 @@ static func export_scene(root: Node) -> Dictionary:
 
 
 static func _total_instances(scenes: Array) -> int:
+	## Sprites count as objects too -- a 2D scene reporting "0 objects" would
+	## look like the export had failed.
 	var n := 0
 	for s in scenes:
 		n += s["instances"].size()
+		n += s["sprites"].size()
 	return n
 
 
@@ -174,7 +217,7 @@ static func _find_scene_groups(root: Node) -> Array:
 	## works without opening the metadata panel.
 	var groups: Array = []
 	for child in root.get_children():
-		if not (child is Node3D):
+		if not (child is Node3D or child is Node2D):
 			continue
 		if child.has_meta("nc_scene") or child.name.to_lower().begins_with("scene"):
 			groups.append(child)
@@ -328,3 +371,119 @@ static func _build_from_surface(mesh: Mesh, scale_v: Vector3,
 			% mesh.get_surface_count())
 
 	return {"verts": verts, "quads": quads, "warnings": warnings}
+
+
+# ---- textures ---------------------------------------------------------------
+
+static func _texture_for(node: MeshInstance3D, textures: Array, cache: Dictionary,
+		warnings: Array) -> String:
+	## The albedo texture of the node's material, exported as a PNG. Returns the
+	## name to reference from scene.json, or "" if there is none.
+	var mat := node.get_active_material(0)
+	if mat == null or not (mat is BaseMaterial3D):
+		return ""
+	var tex: Texture2D = mat.albedo_texture
+	if tex == null:
+		return ""
+	return _export_texture(tex, textures, cache, warnings, node.name)
+
+
+static func _export_texture(tex: Texture2D, textures: Array, cache: Dictionary,
+		warnings: Array, owner: String) -> String:
+	var key := str(tex.get_rid())
+	if cache.has(key):
+		return cache[key]
+
+	if textures.size() >= MAX_TEXTURES:
+		warnings.append("%s: more than %d textures; this one was skipped"
+			% [owner, MAX_TEXTURES])
+		return ""
+
+	var img := tex.get_image()
+	if img == null:
+		warnings.append("%s: texture has no readable image" % owner)
+		return ""
+	if img.is_compressed():
+		# Imported textures are usually compressed; the packer needs raw pixels.
+		if img.decompress() != OK:
+			warnings.append("%s: could not decompress texture" % owner)
+			return ""
+
+	var w := img.get_width()
+	var h := img.get_height()
+	if w > MAX_TEX_W or h > MAX_TEX_H:
+		warnings.append("%s: texture is %dx%d, over the %dx%d limit. Resize it "
+			% [owner, w, h, MAX_TEX_W, MAX_TEX_H]
+			+ "-- rescaling automatically would just turn it to mush.")
+		return ""
+	if w % 2 == 1:
+		warnings.append("%s: texture width %d is odd; two 8-bit texels share a "
+			% [owner, w] + "VRAM cell, so it must be even.")
+		return ""
+
+	var name := "tex%d" % textures.size()
+	DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path(TEXTURE_DIR))
+	var path := "%s/%s.png" % [TEXTURE_DIR, name]
+	if img.save_png(path) != OK:
+		warnings.append("%s: could not write %s" % [owner, path])
+		return ""
+
+	textures.append({"name": name, "file": "textures/%s.png" % name})
+	cache[key] = name
+	return name
+
+
+# ---- 2D sprites -------------------------------------------------------------
+
+static func _collect_sprite_nodes(node: Node, out: Array) -> void:
+	if node is Sprite2D:
+		out.append(node)
+	for child in node.get_children():
+		_collect_sprite_nodes(child, out)
+
+
+static func _collect_sprites(group: Node, _origin: Transform3D, textures: Array,
+		cache: Dictionary, warnings: Array) -> Array:
+	## Sprite2D nodes become screen-space sprites.
+	##
+	## Godot's 2D origin is the top-left with +Y down, which is exactly how the
+	## PS1 addresses the screen -- so positions map across 1:1 with no flip. Set
+	## the project's viewport to 320x240 and what you lay out is what you get.
+	var nodes: Array = []
+	_collect_sprite_nodes(group, nodes)
+
+	var sprites: Array = []
+	for node in nodes:
+		if not node.visible or node.texture == null:
+			continue
+
+		var tex_name := _export_texture(node.texture, textures, cache, warnings,
+			node.name)
+		if tex_name == "":
+			continue
+
+		var u := 0
+		var v := 0
+		var w: int = node.texture.get_width()
+		var h: int = node.texture.get_height()
+		if node.region_enabled:
+			u = int(node.region_rect.position.x)
+			v = int(node.region_rect.position.y)
+			w = int(node.region_rect.size.x)
+			h = int(node.region_rect.size.y)
+
+		# Sprite2D draws centred on its position by default.
+		var pos: Vector2 = node.global_position
+		var x := int(round(pos.x))
+		var y := int(round(pos.y))
+		if node.centered:
+			x -= w / 2
+			y -= h / 2
+
+		sprites.append({
+			"texture": tex_name, "x": x, "y": y,
+			"w": w, "h": h, "u": u, "v": v,
+		})
+
+	return sprites

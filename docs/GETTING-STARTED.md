@@ -61,6 +61,7 @@ first run the loop is a couple of seconds.
 ./ncc clean mygame     # delete the build directory
 ./ncc templates        # list project templates
 ./ncc targets          # hardware profiles and budgets
+./ncc check mygame     # what fits, what does not, and why
 ./ncc doctor           # toolchain status
 ```
 
@@ -79,6 +80,7 @@ On Windows `ncc.cmd` takes the same arguments as `./ncc`.
 | `scene`  | Four objects, swinging camera, fixed-point circular motion.        |
 | `game`   | **Menu + level, Godot scenes, and a script. No C.** Start here.     |
 | `sprite2d` | **A 2D game.** Sprite sheet, animation, screen-space movement.     |
+| `shooter` | **A whole game.** Scrolling shmup: shooting, enemies, collision, score, sound. |
 
 Every template gets the same engine files; only `src/main.c` differs. They live in
 `tools/ncc/ncc/templates/`, with the shared engine in `_common/`. To add one, drop
@@ -246,6 +248,35 @@ Debug (the default) is `-Og` and keeps every function separate, which is what yo
 want while iterating. Release is `-O2` and inlines your script's functions away
 entirely. NC Studio has a DEBUG/RELEASE toggle; the two use separate build
 directories so switching costs nothing.
+
+## 3c. Knowing what fits
+
+```bash
+./ncc check mygame
+```
+
+or **F8** in NC Studio. It runs the same converters the build does and reports
+every budget -- textures, VRAM, sound, SPU RAM, meshes, sprites, package size --
+plus anything that will stop the build, with the reason and the fix.
+
+A failed build runs it automatically, so a too-large texture tells you so instead
+of surfacing as a linker error.
+
+`docs/LIMITS.md` is the full set of rules and why each one exists.
+
+## 3d. Sound
+
+```json
+"sounds": [ { "name": "shoot", "file": "sounds/shoot.wav" } ]
+```
+
+```gdscript
+play_sound(0)
+```
+
+Mono PCM WAV in, SPU-ADPCM out (about 3.5:1). Samples live in the SPU's own
+512 KB, so playing one costs the CPU almost nothing. 22050 Hz is the sweet spot;
+keep effects short.
 
 ## 4. The development loop
 
