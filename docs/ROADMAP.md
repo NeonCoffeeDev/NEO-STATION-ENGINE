@@ -19,7 +19,7 @@ Locks down MESH/TEX0/CLUT. `ncc` gains a `pack` command that builds one by hand.
 The addon exists. A `.tscn` with `NCStaticMesh` nodes compiles through `ncc build
 --target ps1` to the same booting cube. This is the first end-to-end vertical slice.
 
-## M4 - Make it a game engine  (you are here)
+## M4 - Make it a game engine  (in progress)
 Controller input, a camera you can move, multiple meshes, a scene graph, audio,
 collision. Roughly in that order, each one hardware-verified.
 
@@ -58,3 +58,27 @@ What M3 does **not** yet cover, and should before M4 is called finished:
 - **Compound rotations are approximate.** Euler order differs between Godot and
   the PS1's RotMatrix. Single-axis rotations are exact; combined ones drift.
 - **No collision, no gameplay, no audio.** That is M4.
+
+
+## Update, 2026-09-06
+
+Added since the last note:
+
+- **A runtime camera.** The viewpoint moves; it is no longer baked at export.
+- **Multiple scenes** in one package, with `goto_scene()`. Menu and level 1 both
+  exist in the `game` template.
+- **NCScript**, a GDScript-shaped language transpiled to C at build time. This is
+  the answer to "how do I program it without writing C" -- see docs/SCRIPTING.md.
+- **A live scene layer**, so scripts can move objects. The package stays
+  read-only; a mutable copy is made per scene.
+
+Still missing, in the order they hurt most:
+
+1. **Textures.** Everything is flat-lit Gouraud. This blocks 2D entirely and is
+   the biggest visual gap in 3D. Needs TIM plus VRAM allocation in the packer.
+2. **2D.** Sprites and tilemaps in screen space. Cheap on this hardware once
+   textures exist -- and arguably the faster route to a finished-looking game.
+3. **Collision.** Scripts can compare positions by hand; nothing is built in.
+4. **Text on screen.** `print()` reaches the TTY log, not the TV. Needs textures.
+5. **Audio.**
+6. **Per-object scripts.** One script per project today; branch on `scene()`.

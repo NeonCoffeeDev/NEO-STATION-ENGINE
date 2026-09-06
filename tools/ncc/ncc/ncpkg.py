@@ -23,7 +23,7 @@ import json
 import struct
 
 MAGIC = b"NCPK"
-VERSION = 2
+VERSION = 3
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -158,11 +158,24 @@ def build_scene(scene, mesh_ids):
 
 # ---- container ----------------------------------------------------------
 
-def pack(scene):
-    """Turn a scene dict into .ncpkg bytes."""
-    meshes = scene.get("meshes", [])
+def pack(doc):
+    """Turn a project document into .ncpkg bytes.
+
+    Accepts either a single scene, or {"meshes": [...], "scenes": [...]} where
+    every scene shares one mesh table. Sharing matters on a 2 MB machine: a menu
+    and a level that use the same props should not ship the geometry twice.
+    """
+    meshes = doc.get("meshes", [])
     if not meshes:
-        raise NcpkgError("scene has no meshes")
+        raise NcpkgError("no meshes -- add at least one to 'meshes'")
+
+    scenes = doc.get("scenes")
+    if scenes is None:
+        scenes = [doc]                      # single-scene document
+    if not scenes:
+        raise NcpkgError("'scenes' is empty")
+    if len(scenes) > 255:
+        raise NcpkgError("more than 255 scenes")
 
     mesh_ids = {}
     chunks = []
@@ -170,7 +183,12 @@ def pack(scene):
         if "name" in mesh:
             mesh_ids[mesh["name"]] = i
         chunks.append((b"MESH", i, build_mesh(mesh)))
-    chunks.append((b"SCN0", 0, build_scene(scene, mesh_ids or list(range(len(meshes))))))
+
+    lookup = mesh_ids or {i: i for i in range(len(meshes))}
+    for i, sc in enumerate(scenes):
+        if "clear" not in sc:
+            sc = dict(sc, clear=doc.get("clear", [24, 16, 48]))
+        chunks.append((b"SCN0", i, build_scene(sc, lookup)))
 
     # Header, then the table, then payloads -- so offsets need the table size first.
     table_size = ENTRY.size * len(chunks)
@@ -197,8 +215,10 @@ def pack(scene):
 
 def pack_file(scene_path, out_path):
     with open(scene_path, encoding="utf-8") as fh:
-        scene = json.load(fh)
-    data = pack(scene)
+        doc = json.load(fh)
+    data = pack(doc)
     with open(out_path, "wb") as fh:
         fh.write(data)
-    return len(data), len(scene.get("meshes", [])), len(scene.get("instances", []))
+    scenes = doc.get("scenes", [doc])
+    instances = sum(len(s.get("instances", [])) for s in scenes)
+    return len(data), len(doc.get("meshes", [])), instances, len(scenes)

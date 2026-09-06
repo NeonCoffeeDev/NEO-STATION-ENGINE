@@ -1,0 +1,70 @@
+# @NAME@ - game logic
+#
+# This is NCScript. It looks like GDScript, but it is TRANSPILED TO C when you
+# build, then compiled natively for the PlayStation. Nothing is interpreted on
+# the console, so it costs no more than hand-written C.
+#
+# What you get: var, func, if/elif/else, while, for..in range(), arithmetic,
+# comparisons, and/or/not, and the engine calls below.
+#
+# What you cannot use, and why:
+#   float      there is no FPU. Use ints. For fractions use fixed point,
+#              where 4096 means 1.0
+#   arrays     they would need dynamic allocation
+#   classes    there is no object model on the console
+#
+# Objects are addressed by their index in the scene, counting from 0 in the
+# order they appear in scene.json.
+
+
+var player = 0          # which object the player controls, in scene 1
+var speed = 24
+var pulse = 0
+
+
+# Called once when a scene starts -- including after goto_scene().
+func _ready():
+    if scene() == 0:
+        print("main menu -- press START")
+    else:
+        print("level 1 -- SELECT to go back")
+
+
+# Called every frame, 60 times a second.
+func _update():
+    if scene() == 0:
+        update_menu()
+    else:
+        update_level()
+
+
+func update_menu():
+    pulse = pulse + 1
+
+    # sin() returns fixed point: -4096..4096 means -1.0..1.0. Dividing scales
+    # it down to a gentle bob of about +/- 170 units.
+    var bob = sin(pulse * 16) / 24
+    set_pos(0, 0, bob, 900)
+
+    if btn_pressed(BTN_START):
+        goto_scene(1)
+
+
+func update_level():
+    if btn_held(BTN_LEFT):
+        move(player, -speed, 0, 0)
+    if btn_held(BTN_RIGHT):
+        move(player, speed, 0, 0)
+    if btn_held(BTN_UP):
+        move(player, 0, 0, speed)
+    if btn_held(BTN_DOWN):
+        move(player, 0, 0, -speed)
+
+    # Keep the player inside a box so it cannot wander off screen forever.
+    set_pos(player,
+            clamp(get_x(player), -600, 600),
+            get_y(player),
+            clamp(get_z(player), 400, 1600))
+
+    if btn_pressed(BTN_SELECT):
+        goto_scene(0)

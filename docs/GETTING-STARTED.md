@@ -77,7 +77,7 @@ On Windows `ncc.cmd` takes the same arguments as `./ncc`.
 | `blank`  | Empty game loop. Graphics and input set up, nothing drawn.        |
 | `cube`   | One lit, Gouraud-shaded cube on the D-pad. **Default.**            |
 | `scene`  | Four objects, swinging camera, fixed-point circular motion.        |
-| `data`   | **Scene comes from data. Ships a Godot project. No C.**             |
+| `game`   | **Menu + level, Godot scenes, and a script. No C.** Start here.     |
 
 Every template gets the same engine files; only `src/main.c` differs. They live in
 `tools/ncc/ncc/templates/`, with the shared engine in `_common/`. To add one, drop
@@ -97,15 +97,30 @@ mygame/
   src/nc_input.c      engine: controller
 ```
 
-## 3a. The Godot flow (no C at all)
+## 3a. The Godot + script flow (no C at all)
 
 This is the one to use if you would rather not write C.
 
 ```bash
-./ncc new mygame -t data
+./ncc new mygame -t game
 ```
 
-That project has a `godot/` folder inside it. In NC Studio, select the project and
+You get three files that matter, and none of them is C:
+
+| | |
+|---|---|
+| `godot/` | A Godot 4 project. **What exists** -- meshes, objects, cameras, scenes. |
+| `script.ncs` | **What happens** -- your game logic. See `docs/SCRIPTING.md`. |
+| `scene.json` | Written by the Godot exporter, read by the build. |
+
+The script is not interpreted on the console: `ncc build` transpiles it to C and
+compiles it natively. GDScript itself cannot run on a PS1, but a GDScript-shaped
+language can be translated to something that does.
+
+The Godot project holds **both** scenes at once. Any direct child of the root
+named `Scene...` (or carrying metadata `nc_scene`) becomes its own game scene,
+with its own camera. Each is exported relative to itself, so moving a group
+around to keep them from overlapping in the viewport does not affect the game. In NC Studio, select the project and
 press **EDIT SCENE IN GODOT**, or open `mygame/godot/project.godot` by hand.
 
 1. Arrange `MeshInstance3D` nodes with **BoxMesh** in the 3D viewport. Move,
@@ -116,7 +131,8 @@ press **EDIT SCENE IN GODOT**, or open `mygame/godot/project.godot` by hand.
    to make it turn on its own. The units are PS1 angle-per-frame, where 4096 is a
    full turn -- so `12` is a slow spin.
 4. Press **Export to NC** in the toolbar. It writes `../scene.json`.
-5. Back in NC Studio, press **F5**.
+5. Edit `script.ncs` for the logic (Studio's **script** button opens it).
+6. Back in NC Studio, press **F5**.
 
 `ncc build` compiles `scene.json` into `scene.ncpkg`, embeds it in the executable,
 and the runtime draws whatever it finds. `src/main.c` never changes.

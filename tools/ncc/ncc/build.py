@@ -9,6 +9,7 @@ import sys
 import time
 
 from . import ncpkg
+from . import ncscript
 from . import toolchain as tc
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
@@ -188,13 +189,25 @@ def build(args):
     if os.path.isfile(scene):
         pkg_path = os.path.join(src, "scene.ncpkg")
         try:
-            size, n_mesh, n_inst = ncpkg.pack_file(scene, pkg_path)
+            size, n_mesh, n_inst, n_scene = ncpkg.pack_file(scene, pkg_path)
         except ncpkg.NcpkgError as exc:
             raise SystemExit(f"ncc: scene.json is not valid -- {exc}")
         except ValueError as exc:
             raise SystemExit(f"ncc: scene.json is not valid JSON -- {exc}")
-        print(f"  scene.json -> scene.ncpkg  "
-              f"({size} bytes, {n_mesh} mesh(es), {n_inst} instance(s))")
+        print(f"  scene.json -> scene.ncpkg  ({size} bytes, {n_mesh} mesh(es), "
+              f"{n_scene} scene(s), {n_inst} instance(s))")
+
+    # Transpile script.ncs -> C before configuring. The generated file lands in
+    # src/ so the existing glob picks it up; it is gitignored, because it is
+    # build output rather than something anyone should edit.
+    script = os.path.join(src, "script.ncs")
+    if os.path.isfile(script):
+        gen = os.path.join(src, "src", "nc_script_generated.c")
+        try:
+            lines = ncscript.compile_file(script, gen)
+        except ncscript.ScriptError as exc:
+            raise SystemExit(f"ncc: script.ncs -- {exc}")
+        print(f"  script.ncs -> C  ({lines} lines)")
 
     os.makedirs(build_dir, exist_ok=True)
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):

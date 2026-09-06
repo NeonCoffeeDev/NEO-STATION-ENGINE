@@ -219,9 +219,16 @@ class Studio:
 
         top = tk.Frame(body, bg=PANEL)
         top.pack(fill="x")
-        Button(top, "main.c", self.open_main, AMBER, width=8).pack(side="left")
-        Button(top, "FOLDER", self.open_folder, CYAN, width=8).pack(side="left", padx=4)
-        Button(top, "OUTPUT", self.open_output, DIM, width=8).pack(side="left")
+        Button(top, "script", self.open_script, AMBER, width=8).pack(side="left")
+        Button(top, "scene", self.open_scene_json, CYAN, width=8).pack(side="left",
+                                                                      padx=4)
+        Button(top, "main.c", self.open_main, DIM, width=8).pack(side="left")
+
+        row2 = tk.Frame(body, bg=PANEL)
+        row2.pack(fill="x", pady=(4, 0))
+        Button(row2, "FOLDER", self.open_folder, DIM, width=8).pack(side="left")
+        Button(row2, "OUTPUT", self.open_output, DIM, width=8).pack(side="left",
+                                                                   padx=4)
 
         self.b_godot = Button(body, "EDIT SCENE IN GODOT", self.open_godot, GREEN)
         self.b_godot.pack(fill="x", pady=(4, 0))
@@ -375,6 +382,32 @@ class Studio:
             self.set_status(os.path.relpath(p, self.repo))
 
     # ---- open buttons ---------------------------------------------------
+
+    def open_script(self):
+        """script.ncs -- the game logic, for projects that have one."""
+        p = self.selected_project()
+        if not p:
+            return
+        path = os.path.join(p, "script.ncs")
+        if not os.path.isfile(path):
+            self.log("this project has no script.ncs.", AMBER)
+            self.log("create one with:  ncc new <name> -t game", DIM)
+            return
+        if not reveal(path):
+            self.log("could not open %s" % path, RED)
+            self.log(".ncs has no file association; open it in any text editor.",
+                     DIM)
+
+    def open_scene_json(self):
+        p = self.selected_project()
+        if not p:
+            return
+        path = os.path.join(p, "scene.json")
+        if not os.path.isfile(path):
+            self.log("this project has no scene.json (its geometry is in C).",
+                     AMBER)
+            return
+        reveal(path)
 
     def open_main(self):
         p = self.selected_project()

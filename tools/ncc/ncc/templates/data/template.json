@@ -1,7 +1,0 @@
-{
-  "name": "data",
-  "title": "Data-driven / Godot",
-  "order": 4,
-  "description": "Scene comes from data. Includes a Godot 4 project to build it visually.",
-  "detail": "No geometry in C. Open godot/project.godot, arrange boxes, press Export to NC -- that writes scene.json, which ncc compiles into the .ncpkg the runtime renders."
-}

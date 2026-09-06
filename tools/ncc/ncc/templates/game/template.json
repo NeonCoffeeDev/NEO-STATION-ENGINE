@@ -1,0 +1,7 @@
+{
+  "name": "game",
+  "title": "Game (Godot + script)",
+  "order": 5,
+  "description": "Main menu + level, driven by a GDScript-like script. No C.",
+  "detail": "The full workflow: arrange scenes in Godot, write logic in script.ncs, and ncc transpiles it to C at build time. Start here if you want to make a game rather than study the engine."
+}

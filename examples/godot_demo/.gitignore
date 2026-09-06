@@ -1,9 +1,0 @@
-build/
-*.bin
-*.cue
-*.exe
-*.elf
-*.map
-
-# generated from scene.json by ncc build
-scene.ncpkg
