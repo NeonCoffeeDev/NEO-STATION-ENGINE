@@ -9,16 +9,13 @@ then PATH, then a few well-known install locations. Reporting which one won matt
 """
 
 import os
-import shutil
 import subprocess
 import sys
 
-# Well-known install dirs to check when a tool is not on PATH.
-EXTRA_DIRS = [
-    r"C:\Program Files\CMake\bin",
-    r"C:\Program Files (x86)\CMake\bin",
-]
+from .toolchain import (find_duckstation, find_openbios, locate,
+                        project_root)
 
+# Well-known install dirs to check when a tool is not on PATH.
 # (label, exe, required, why it matters, how to get it)
 CHECKS_COMMON = [
     ("git", "git", True, "Fetching and pinning the upstream SDKs.",
@@ -42,9 +39,9 @@ CHECKS_PS1 = [
      "Bundled in the PSn00bSDK release."),
     ("elf2x", "elf2x", True, "Converts the linked ELF into a PS-EXE.",
      "Bundled in the PSn00bSDK release."),
-    ("DuckStation", "duckstation-qt-x64-ReleaseLTCG", False,
+    ("DuckStation", "@duckstation", False,
      "Emulator, to run what you build.",
-     "https://github.com/stenzek/duckstation/releases"),
+     "winget install Stenzek.DuckStation"),
 ]
 
 CHECKS_PS2 = [
@@ -53,33 +50,6 @@ CHECKS_PS2 = [
     ("ee-gcc", "ee-gcc", False, "PS2 cross compiler, if installed natively. Deferred to M6.",
      "Use the ps2dev/ps2dev Docker image, or WSL2 + ps2dev."),
 ]
-
-
-def project_root():
-    """Repo root, from this file's location: tools/ncc/ncc/doctor.py -> up 3."""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-
-
-def local_bin():
-    return os.path.join(project_root(), "toolchain", "psn00bsdk", "bin")
-
-
-def locate(exe):
-    """Return (path, source) or (None, None)."""
-    lb = local_bin()
-    if os.path.isdir(lb):
-        hit = shutil.which(exe, path=lb)
-        if hit:
-            return hit, "local"
-    hit = shutil.which(exe)
-    if hit:
-        return hit, "PATH"
-    for d in EXTRA_DIRS:
-        if os.path.isdir(d):
-            hit = shutil.which(exe, path=d)
-            if hit:
-                return hit, "installed"
-    return None, None
 
 
 def version_of(path):
@@ -99,7 +69,10 @@ def section(title, checks, missing):
     print(f"\n  {title}")
     print("  " + "-" * len(title))
     for label, exe, required, why, how in checks:
-        path, source = locate(exe)
+        if exe == "@duckstation":
+            path, source = find_duckstation(), "installed"
+        else:
+            path, source = locate(exe)
         if path:
             tag = "" if source == "PATH" else f"  [{source}]"
             print(f"  [ok]      {label:<14} {version_of(path)}{tag}")
@@ -136,13 +109,22 @@ def run(args):
     else:
         print("  [ok]    Project path is space-free.")
 
+    if find_openbios():
+        print("  [ok]    OpenBIOS installed for DuckStation.")
+    else:
+        print("  [--]    No OpenBIOS in DuckStation's bios/ folder.")
+        print("          DuckStation cannot boot a disc without a BIOS image.")
+        print("          See docs/GETTING-STARTED.md to build the open-source one.")
+
     print("\n  Environment")
     print("  -----------")
     libs = os.environ.get("PSN00BSDK_LIBS")
     if libs:
         print(f"  [ok]    PSN00BSDK_LIBS   {libs}")
     else:
-        print("  [--]    PSN00BSDK_LIBS   unset -- run:  . ./env.ps1   (or source ./env.sh)")
+        print("  [--]    PSN00BSDK_LIBS   unset in this shell.")
+        print("          ncc build sets it itself, so this only matters if you")
+        print("          invoke cmake by hand. To set it:  . ./env.ps1")
 
     print()
     if missing:

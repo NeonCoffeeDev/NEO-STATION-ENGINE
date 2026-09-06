@@ -1,0 +1,9 @@
+#!/bin/sh
+# Neon Coffee CLI launcher. Usage:  ./ncc <command> [args]
+DIR=$(cd "$(dirname "$0")" && pwd)
+LIB="$DIR/tools/ncc"
+# Git Bash hands us /c/... paths; Windows Python needs C:\...
+if command -v cygpath >/dev/null 2>&1; then
+    LIB=$(cygpath -w "$LIB")
+fi
+PYTHONPATH="$LIB${PYTHONPATH:+;$PYTHONPATH}" exec python -m ncc "$@"

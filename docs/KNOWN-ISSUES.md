@@ -38,3 +38,31 @@ default preset will then fail.
 
 **Not fixed by** renaming the project folder, unless you also stop using the in-tree
 `build/` directory — though renaming does make the stock preset work again.
+
+## Spaces also break GNU Make (OpenBIOS build)
+
+**Symptom.** Building OpenBIOS from a path containing a space fails with a flood of
+missing-header errors (`openbios/patches/patches.h: No such file or directory`).
+
+**Cause.** Same class of bug as above, different tool. `common.mk` computes its root
+with `$(dir $(abspath $(lastword $(MAKEFILE_LIST))))`; make does not quote the result,
+so a space splits the `-I` flag. Building under `NC HOMEBREW` emits:
+
+```
+-IC:/Users/bates/Desktop/ HOMEBREW/toolchain/src/pcsx-redux/src/mips/
+```
+
+Note the `NC` has vanished and the path is now two arguments.
+
+**Workaround.** `tools/build-openbios.sh` builds in `%LOCALAPPDATA%\NeonCoffee\src`
+and refuses to run if that path contains a space.
+
+## Two tools now, so consider renaming the project folder
+
+CMake and make have both been bitten by the space in `NC HOMEBREW`. Each has a
+workaround and `ncc` applies them automatically, so nothing is broken -- but every new
+tool integrated is a fresh chance to hit this, usually with a misleading error.
+
+Renaming the folder to something like `NC-HOMEBREW` would remove the whole class of
+problem permanently and let projects build in-tree. This is a judgement call, not a
+requirement.

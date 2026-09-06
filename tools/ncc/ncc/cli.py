@@ -1,9 +1,9 @@
-"""ncc — the Neon Coffee orchestrator."""
+"""ncc -- the Neon Coffee orchestrator."""
 
 import argparse
 import sys
 
-from . import __version__, doctor
+from . import __version__, build as build_mod, doctor
 from .targets import TARGETS
 
 
@@ -18,6 +18,23 @@ def main(argv=None):
     d = sub.add_parser("doctor", help="check the toolchain environment")
     d.add_argument("--target", choices=["ps1", "ps2", "all"], default="all")
     d.set_defaults(func=doctor.run)
+
+    n = sub.add_parser("new", help="create a new project from the NC template")
+    n.add_argument("name")
+    n.add_argument("path", nargs="?", help="where to create it (default: ./<name>)")
+    n.set_defaults(func=build_mod.new)
+
+    b = sub.add_parser("build", help="build a project to .bin/.cue")
+    b.add_argument("path", nargs="?", default=".")
+    b.set_defaults(func=build_mod.build)
+
+    r = sub.add_parser("run", help="build, then launch it in DuckStation")
+    r.add_argument("path", nargs="?", default=".")
+    r.set_defaults(func=build_mod.run)
+
+    c = sub.add_parser("clean", help="delete a project's build directory")
+    c.add_argument("path", nargs="?", default=".")
+    c.set_defaults(func=build_mod.clean)
 
     t = sub.add_parser("targets", help="list hardware profiles")
     t.set_defaults(func=_targets)
