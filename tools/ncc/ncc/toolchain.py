@@ -140,3 +140,33 @@ def find_openbios():
         return None
     p = os.path.join(d, "bios", "openbios.bin")
     return p if os.path.isfile(p) else None
+
+
+GODOT_DIRS = [
+    os.path.expandvars(
+        r"%LOCALAPPDATA%\Microsoft\WinGet\Packages"
+        r"\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe"),
+    r"C:\Program Files\Godot",
+]
+
+
+def find_godot(console=False):
+    """The Godot 4 editor binary.
+
+    `console=True` returns the console variant, which prints to stdout -- useful
+    when driving Godot headlessly; the plain one is what a user should see.
+    """
+    import glob
+    want = "_console.exe" if console else ".exe"
+    for d in GODOT_DIRS:
+        if not os.path.isdir(d):
+            continue
+        hits = sorted(glob.glob(os.path.join(d, "Godot_v4*.exe")))
+        for h in hits:
+            is_console = h.endswith("_console.exe")
+            if is_console == bool(console):
+                return h
+    hit = shutil.which("godot")
+    if hit:
+        return hit
+    return None

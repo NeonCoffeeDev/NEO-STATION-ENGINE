@@ -77,6 +77,7 @@ On Windows `ncc.cmd` takes the same arguments as `./ncc`.
 | `blank`  | Empty game loop. Graphics and input set up, nothing drawn.        |
 | `cube`   | One lit, Gouraud-shaded cube on the D-pad. **Default.**            |
 | `scene`  | Four objects, swinging camera, fixed-point circular motion.        |
+| `data`   | **Scene comes from data. Ships a Godot project. No C.**             |
 
 Every template gets the same engine files; only `src/main.c` differs. They live in
 `tools/ncc/ncc/templates/`, with the shared engine in `_common/`. To add one, drop
@@ -95,6 +96,49 @@ mygame/
   src/nc_gfx.c        engine: double buffer, GTE transforms, ordering table
   src/nc_input.c      engine: controller
 ```
+
+## 3a. The Godot flow (no C at all)
+
+This is the one to use if you would rather not write C.
+
+```bash
+./ncc new mygame -t data
+```
+
+That project has a `godot/` folder inside it. In NC Studio, select the project and
+press **EDIT SCENE IN GODOT**, or open `mygame/godot/project.godot` by hand.
+
+1. Arrange `MeshInstance3D` nodes with **BoxMesh** in the 3D viewport. Move,
+   rotate and scale them normally.
+2. Frame the scene through the `Camera3D`. Positions are exported *relative to
+   the camera*, so roughly what you see is what the console shows.
+3. Optional: give a node metadata named `nc_spin` (a `Vector3`) in the inspector
+   to make it turn on its own. The units are PS1 angle-per-frame, where 4096 is a
+   full turn -- so `12` is a slow spin.
+4. Press **Export to NC** in the toolbar. It writes `../scene.json`.
+5. Back in NC Studio, press **F5**.
+
+`ncc build` compiles `scene.json` into `scene.ncpkg`, embeds it in the executable,
+and the runtime draws whatever it finds. `src/main.c` never changes.
+
+### What survives the trip, and what does not
+
+**Boxes are the good path.** A `BoxMesh` becomes six quads with correct winding
+and outward normals, which is exactly what the hardware wants.
+
+Anything else -- a sphere, an imported model -- is exported as triangles padded
+into degenerate quads. It draws, but it wastes GPU time and gets flat per-face
+lighting. Real triangle support is a known gap; see `docs/ROADMAP.md`.
+
+Also not yet supported, and worth knowing before you build something around them:
+
+- **No textures.** Everything is flat-lit Gouraud.
+- **No runtime camera.** The viewpoint is baked at export time and cannot move.
+- **Compound rotations are approximate.** Godot and the PS1's `RotMatrix` use
+  different Euler orders. A rotation about one axis is exact; combining two drifts.
+- **Watch the budget.** The exporter warns past ~256 vertices per mesh or ~900
+  quads total. Those are where it stops being plausible on real hardware, not
+  hard limits.
 
 ## 4. The development loop
 

@@ -214,11 +214,17 @@ class Studio:
     def _build_tools(self, parent):
         g = group(parent, "open", CYAN)
         g.pack(fill="x", pady=(0, 6))
-        row = tk.Frame(g.body, bg=PANEL)
-        row.pack(fill="x", padx=6, pady=6)
-        Button(row, "main.c", self.open_main, AMBER, width=8).pack(side="left")
-        Button(row, "FOLDER", self.open_folder, CYAN, width=8).pack(side="left", padx=4)
-        Button(row, "OUTPUT", self.open_output, DIM, width=8).pack(side="left")
+        body = tk.Frame(g.body, bg=PANEL)
+        body.pack(fill="x", padx=6, pady=6)
+
+        top = tk.Frame(body, bg=PANEL)
+        top.pack(fill="x")
+        Button(top, "main.c", self.open_main, AMBER, width=8).pack(side="left")
+        Button(top, "FOLDER", self.open_folder, CYAN, width=8).pack(side="left", padx=4)
+        Button(top, "OUTPUT", self.open_output, DIM, width=8).pack(side="left")
+
+        self.b_godot = Button(body, "EDIT SCENE IN GODOT", self.open_godot, GREEN)
+        self.b_godot.pack(fill="x", pady=(4, 0))
 
     def _build_hardware(self, parent):
         g = group(parent, "hardware profile", CYAN)
@@ -392,6 +398,36 @@ class Studio:
             reveal(d)
         else:
             self.log("no build output yet -- build first.", AMBER)
+
+    def open_godot(self):
+        """Open this project's Godot frontend, if it has one."""
+        p = self.selected_project()
+        if not p:
+            self.log("no project selected.", RED)
+            return
+
+        proj = os.path.join(p, "godot", "project.godot")
+        if not os.path.isfile(proj):
+            self.log("this project has no Godot frontend.", AMBER)
+            self.log("create one with:  ncc new <name> -t data", DIM)
+            return
+
+        godot = tc.find_godot()
+        if not godot:
+            self.log("Godot not found. Install it with:", RED)
+            self.log("  winget install GodotEngine.GodotEngine", DIM)
+            return
+
+        self.log("opening %s in Godot" % os.path.relpath(proj, self.repo), CYAN)
+        self.log("arrange the scene, press 'Export to NC', then F5 here.", DIM)
+        try:
+            # cwd is the godot folder, never the project root, so the editor
+            # does not hold a lock on the project directory.
+            subprocess.Popen([godot, "--editor", "--path",
+                              os.path.join(p, "godot")],
+                             cwd=os.path.join(p, "godot"))
+        except OSError as exc:
+            self.log("could not launch Godot: %s" % exc, RED)
 
     # ---- console --------------------------------------------------------
 

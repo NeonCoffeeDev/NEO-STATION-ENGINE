@@ -12,7 +12,7 @@ import os
 import subprocess
 import sys
 
-from .toolchain import (find_duckstation, find_openbios, locate,
+from .toolchain import (find_duckstation, find_godot, find_openbios, locate,
                         project_root)
 
 # Well-known install dirs to check when a tool is not on PATH.
@@ -20,8 +20,9 @@ from .toolchain import (find_duckstation, find_openbios, locate,
 CHECKS_COMMON = [
     ("git", "git", True, "Fetching and pinning the upstream SDKs.",
      "https://git-scm.com/download/win"),
-    ("Godot 4.x", "godot", False, "Authoring frontend. Not needed until M3.",
-     "https://godotengine.org/download (expose the binary on PATH as 'godot')"),
+    ("Godot 4.x", "@godot", False,
+     "Visual scene frontend for the data-driven template.",
+     "winget install GodotEngine.GodotEngine"),
     ("Blender", "blender", False, "Mesh authoring/export.",
      "https://www.blender.org/download/"),
     ("ffmpeg", "ffmpeg", False, "Audio normalization before psxavenc.",
@@ -71,6 +72,8 @@ def section(title, checks, missing):
     for label, exe, required, why, how in checks:
         if exe == "@duckstation":
             path, source = find_duckstation(), "installed"
+        elif exe == "@godot":
+            path, source = find_godot(), "installed"
         else:
             path, source = locate(exe)
         if path:

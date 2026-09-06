@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 
+from . import ncpkg
 from . import toolchain as tc
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
@@ -15,7 +16,8 @@ COMMON_DIR = os.path.join(TEMPLATES_DIR, "_common")
 DEFAULT_TEMPLATE = "cube"
 
 # Files that get @NAME@ / @VOLUME@ substituted.
-SUBST_EXTS = {".c", ".h", ".txt", ".xml", ".cnf", ".md"}
+SUBST_EXTS = {".c", ".h", ".txt", ".xml", ".cnf", ".md",
+              ".gd", ".tscn", ".godot", ".cfg", ".json"}
 
 
 # ---- templates ----------------------------------------------------------
@@ -122,11 +124,23 @@ def new(args):
     # Shared engine + build files first, then the template's own main.c on top.
     shutil.copytree(COMMON_DIR, dest, dirs_exist_ok=True)
 
-    src_main = os.path.join(TEMPLATES_DIR, template, "main.c")
-    if not os.path.isfile(src_main):
+    tpl_dir = os.path.join(TEMPLATES_DIR, template)
+    if not os.path.isfile(os.path.join(tpl_dir, "main.c")):
         raise SystemExit(f"ncc: template '{template}' has no main.c")
-    os.makedirs(os.path.join(dest, "src"), exist_ok=True)
-    shutil.copy2(src_main, os.path.join(dest, "src", "main.c"))
+
+    # Copy everything the template provides, not just main.c -- a template may
+    # also ship data files such as scene.json. main.c lands in src/; anything
+    # else keeps its relative path.
+    for base, _, files in os.walk(tpl_dir):
+        for f in files:
+            if f == "template.json":
+                continue                    # metadata, not project content
+            abs_src = os.path.join(base, f)
+            rel = os.path.relpath(abs_src, tpl_dir)
+            rel = os.path.join("src", "main.c") if rel == "main.c" else rel
+            abs_dst = os.path.join(dest, rel)
+            os.makedirs(os.path.dirname(abs_dst), exist_ok=True)
+            shutil.copy2(abs_src, abs_dst)
 
     _substitute(dest, name)
 
@@ -167,6 +181,20 @@ def build(args):
     if redirected:
         print("  note: project path contains a space, so the build directory is")
         print("        redirected out of tree (docs/KNOWN-ISSUES.md)")
+
+    # Compile scene.json -> scene.ncpkg before configuring, so CMake sees the
+    # package and links it in. Projects with geometry in C have no scene.json.
+    scene = os.path.join(src, "scene.json")
+    if os.path.isfile(scene):
+        pkg_path = os.path.join(src, "scene.ncpkg")
+        try:
+            size, n_mesh, n_inst = ncpkg.pack_file(scene, pkg_path)
+        except ncpkg.NcpkgError as exc:
+            raise SystemExit(f"ncc: scene.json is not valid -- {exc}")
+        except ValueError as exc:
+            raise SystemExit(f"ncc: scene.json is not valid JSON -- {exc}")
+        print(f"  scene.json -> scene.ncpkg  "
+              f"({size} bytes, {n_mesh} mesh(es), {n_inst} instance(s))")
 
     os.makedirs(build_dir, exist_ok=True)
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):

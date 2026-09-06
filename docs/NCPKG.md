@@ -3,8 +3,17 @@
 The contract between `ncc` and the runtimes. This is the one piece worth designing
 carefully, because both sides depend on it and changing it later is expensive.
 
-Status: **draft**. Expect churn until the PS1 hello-cube milestone ships; the runtime
-is the authority on what this needs to contain.
+Status: **v1 shipped and in use.** The writer is `tools/ncc/ncc/ncpkg.py`, the
+reader is `nc_pkg.c` in every generated project. They must change together; the
+version field exists so a stale package fails loudly instead of drawing garbage.
+
+Two things changed from the draft once the runtime was real:
+
+- **Chunks align to 8, not 2048.** The 2048 figure was for reading whole CD
+  sectors. The package is currently *embedded in the executable* rather than
+  streamed off the disc, so sector alignment only wasted RAM. 8 is what the GTE's
+  32-bit loads need. When streaming arrives, this goes back up.
+- **Normals are computed by the writer**, not authored, from quad winding order.
 
 ## Principles
 
