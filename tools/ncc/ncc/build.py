@@ -136,8 +136,11 @@ def run(args):
         print(f"     {cue}")
         return 1
 
-    print(f"  launching DuckStation")
-    subprocess.Popen([duck, cue])
+    print("  launching DuckStation")
+    # Launch with the build dir as cwd, never the project. A child process
+    # inheriting the project directory holds a lock on it, which blocks
+    # renaming or moving the project while the emulator is open.
+    subprocess.Popen([duck, cue], cwd=build_dir)
     return 0
 
 

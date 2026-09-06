@@ -36,6 +36,9 @@ def main(argv=None):
     c.add_argument("path", nargs="?", default=".")
     c.set_defaults(func=build_mod.clean)
 
+    st = sub.add_parser("studio", help="open the NC Studio GUI")
+    st.set_defaults(func=_studio)
+
     t = sub.add_parser("targets", help="list hardware profiles")
     t.set_defaults(func=_targets)
 
@@ -44,6 +47,14 @@ def main(argv=None):
         p.print_help()
         return 0
     return args.func(args)
+
+
+def _studio(args):
+    import os
+    import subprocess
+    from . import toolchain as tc
+    script = os.path.join(tc.project_root(), "tools", "ncstudio", "studio.py")
+    return subprocess.call([sys.executable, script])
 
 
 def _targets(args):
