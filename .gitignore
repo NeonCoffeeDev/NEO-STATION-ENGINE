@@ -29,3 +29,7 @@ desktop.ini
 
 # Downloaded toolchains (see docs/ROADMAP.md M0)
 toolchain/
+
+# Godot generated script UIDs and import cache
+*.uid
+.godot/
