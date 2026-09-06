@@ -27,17 +27,21 @@ against a restricted, hardware-aware node set from the start.
 | `runtime/common/`           | Target-independent headers (`.ncpkg` structs, math)      |
 | `tools/ncc/`                | `ncc` — the Python asset compiler + build orchestrator   |
 | `godot/addons/neoncoffee/`  | Godot editor plugin (NC nodes, budgets, export)          |
+| `tools/ncstudio/`           | NC Studio -- the GUI front end for `ncc`                  |
 | `examples/hello_cube/`      | Smallest end-to-end project                              |
 | `docs/`                     | Architecture, `.ncpkg` format spec, roadmap              |
 
 ## Start here
 
 ```bash
-python tools/ncc/ncc doctor
+./ncc doctor       # is the toolchain healthy?
+./ncc studio       # open the GUI
+./ncc new mygame   # create a project (see: ncc templates)
+./ncc run mygame   # build it and boot it in DuckStation
 ```
 
-`doctor` reports which parts of the toolchain are installed and what is missing.
-Nothing else will work until it is clean for at least one target.
+On Windows, `ncc.cmd` and `studio.cmd` are equivalent. Full walkthrough in
+`docs/GETTING-STARTED.md`.
 
 ## Scope honesty
 

@@ -1,0 +1,7 @@
+{
+  "name": "scene",
+  "title": "Orbiting scene",
+  "order": 3,
+  "description": "Four objects, a swinging camera, and fixed-point circular motion.",
+  "detail": "Shows reusing one mesh at many transforms and doing trigonometry with isin/icos on a machine with no FPU."
+}

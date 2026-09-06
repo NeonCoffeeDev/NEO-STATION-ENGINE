@@ -1,0 +1,7 @@
+{
+  "name": "cube",
+  "title": "Spinning cube",
+  "order": 2,
+  "description": "One lit, Gouraud-shaded cube you can rotate with the D-pad.",
+  "detail": "The default. Smallest complete example of the render path: mesh data, GTE transform, lighting, depth sorting."
+}

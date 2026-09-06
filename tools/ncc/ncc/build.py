@@ -1,16 +1,67 @@
 """ncc new / build / run / clean -- the PS1 development loop."""
 
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import time
 
 from . import toolchain as tc
 
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "template")
+TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
+COMMON_DIR = os.path.join(TEMPLATES_DIR, "_common")
+DEFAULT_TEMPLATE = "cube"
+
+# Files that get @NAME@ / @VOLUME@ substituted.
 SUBST_EXTS = {".c", ".h", ".txt", ".xml", ".cnf", ".md"}
 
+
+# ---- templates ----------------------------------------------------------
+
+def list_templates():
+    """Every template except the shared _common overlay, in display order."""
+    out = []
+    if not os.path.isdir(TEMPLATES_DIR):
+        return out
+    for name in sorted(os.listdir(TEMPLATES_DIR)):
+        path = os.path.join(TEMPLATES_DIR, name)
+        if name.startswith("_") or not os.path.isdir(path):
+            continue
+        meta = {"name": name, "title": name, "description": "", "detail": "",
+                "order": 99}
+        meta_path = os.path.join(path, "template.json")
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, encoding="utf-8") as fh:
+                    meta.update(json.load(fh))
+            except (OSError, ValueError):
+                pass          # a broken template.json should not hide the template
+        meta["path"] = path
+        out.append(meta)
+    out.sort(key=lambda m: (m.get("order", 99), m["name"]))
+    return out
+
+
+def template_names():
+    return [t["name"] for t in list_templates()]
+
+
+def templates(args):
+    for t in list_templates():
+        mark = " (default)" if t["name"] == DEFAULT_TEMPLATE else ""
+        print(f"\n  {t['name']}{mark}")
+        print(f"    {t['title']}")
+        if t.get("description"):
+            print(f"    {t['description']}")
+        if t.get("detail"):
+            print(f"    {t['detail']}")
+    print()
+    return 0
+
+
+# ---- helpers ------------------------------------------------------------
 
 def _volume_name(name):
     """ISO9660 volume id: uppercase, alnum + underscore, 32 chars max."""
@@ -32,31 +83,55 @@ def _resolve(path):
     return path
 
 
-# ---- new ----------------------------------------------------------------
-
-def new(args):
-    name = args.name
-    dest = os.path.abspath(args.path or name)
-
-    if os.path.exists(dest) and os.listdir(dest):
-        raise SystemExit(f"ncc: {dest} already exists and is not empty.")
-
-    shutil.copytree(TEMPLATE_DIR, dest, dirs_exist_ok=True)
-
+def _substitute(root, name):
     volume = _volume_name(name)
-    for root, _, files in os.walk(dest):
+    for base, _, files in os.walk(root):
         for f in files:
-            p = os.path.join(root, f)
+            p = os.path.join(base, f)
             if os.path.splitext(f)[1].lower() not in SUBST_EXTS:
                 continue
-            with open(p, encoding="utf-8") as fh:
-                text = fh.read()
+            try:
+                with open(p, encoding="utf-8") as fh:
+                    text = fh.read()
+            except (OSError, UnicodeDecodeError):
+                continue
             new_text = text.replace("@NAME@", name).replace("@VOLUME@", volume)
             if new_text != text:
                 with open(p, "w", encoding="utf-8") as fh:
                     fh.write(new_text)
 
+
+# ---- new ----------------------------------------------------------------
+
+def new(args):
+    name = args.name
+    template = getattr(args, "template", None) or DEFAULT_TEMPLATE
+    available = template_names()
+
+    if template not in available:
+        raise SystemExit(
+            f"ncc: unknown template '{template}'.\n"
+            f"     Available: {', '.join(available)}\n"
+            f"     See them with:  ncc templates"
+        )
+
+    dest = os.path.abspath(args.path or name)
+    if os.path.exists(dest) and os.listdir(dest):
+        raise SystemExit(f"ncc: {dest} already exists and is not empty.")
+
+    # Shared engine + build files first, then the template's own main.c on top.
+    shutil.copytree(COMMON_DIR, dest, dirs_exist_ok=True)
+
+    src_main = os.path.join(TEMPLATES_DIR, template, "main.c")
+    if not os.path.isfile(src_main):
+        raise SystemExit(f"ncc: template '{template}' has no main.c")
+    os.makedirs(os.path.join(dest, "src"), exist_ok=True)
+    shutil.copy2(src_main, os.path.join(dest, "src", "main.c"))
+
+    _substitute(dest, name)
+
     print(f"Created {dest}")
+    print(f"  template: {template}")
     print("\n  Next:")
     print(f"    ncc run {os.path.relpath(dest)}")
     print("\n  Edit src/main.c to change the game; nc_gfx.c and nc_input.c are the")
@@ -86,11 +161,12 @@ def build(args):
     src = _resolve(getattr(args, "path", None))
     build_dir, redirected = tc.build_dir_for(src)
     env = tc.build_env()
+    started = time.time()
 
     print(f"Building {os.path.basename(src)}")
     if redirected:
         print("  note: project path contains a space, so the build directory is")
-        print(f"        redirected out of tree (docs/KNOWN-ISSUES.md)")
+        print("        redirected out of tree (docs/KNOWN-ISSUES.md)")
 
     os.makedirs(build_dir, exist_ok=True)
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):
@@ -108,6 +184,11 @@ def build(args):
                   "     See docs/KNOWN-ISSUES.md.", file=sys.stderr)
         raise SystemExit("ncc: build failed.")
 
+    # Surface compiler warnings even on success -- they are easy to miss.
+    for line in (r.stdout or "").splitlines():
+        if "warning:" in line.lower():
+            print(f"  {line.strip()}")
+
     cue = os.path.join(build_dir, "game.cue")
     binf = os.path.join(build_dir, "game.bin")
     if not os.path.isfile(cue):
@@ -115,7 +196,7 @@ def build(args):
         raise SystemExit("ncc: build reported success but produced no game.cue.")
 
     size = os.path.getsize(binf) if os.path.isfile(binf) else 0
-    print(f"  ok  {cue}  ({size / 1048576:.1f} MB)")
+    print(f"  ok  {cue}  ({size / 1048576:.1f} MB, {time.time() - started:.1f}s)")
     return 0
 
 
@@ -135,6 +216,10 @@ def run(args):
         print("\nncc: DuckStation not found. Build output is at:")
         print(f"     {cue}")
         return 1
+
+    if not tc.find_openbios():
+        print("\nncc: warning -- no BIOS found in DuckStation's bios/ folder.")
+        print("     It will refuse to boot. Build one with tools/build-openbios.sh")
 
     print("  launching DuckStation")
     # Launch with the build dir as cwd, never the project. A child process

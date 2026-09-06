@@ -57,12 +57,18 @@ Note the `NC` has vanished and the path is now two arguments.
 **Workaround.** `tools/build-openbios.sh` builds in `%LOCALAPPDATA%\NeonCoffee\src`
 and refuses to run if that path contains a space.
 
-## Two tools now, so consider renaming the project folder
+## RESOLVED: the project folder was renamed
 
-CMake and make have both been bitten by the space in `NC HOMEBREW`. Each has a
-workaround and `ncc` applies them automatically, so nothing is broken -- but every new
-tool integrated is a fresh chance to hit this, usually with a misleading error.
+CMake and GNU Make were both bitten by the space in `NC HOMEBREW`, each with a
+different and misleading error. On 2026-09-05 the folder was renamed to
+`NC-HOMEBREW`, which removes the whole class of problem: projects now build
+in-tree and neither workaround is exercised.
 
-Renaming the folder to something like `NC-HOMEBREW` would remove the whole class of
-problem permanently and let projects build in-tree. This is a judgement call, not a
-requirement.
+The workarounds above stay in place, because they still apply if a project is
+created somewhere else with a space in its path. `ncc doctor` still warns, and
+`ncc build` still redirects the build directory when it has to.
+
+One footnote from the rename itself: the folder could not be renamed while
+DuckStation was running, because `ncc run` spawned it without setting `cwd` and
+the emulator inherited the project directory, holding a lock on it. Fixed -- it
+now launches with the build directory as its working directory.

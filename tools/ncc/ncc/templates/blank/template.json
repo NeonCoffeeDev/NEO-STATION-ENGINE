@@ -1,0 +1,7 @@
+{
+  "name": "blank",
+  "title": "Blank",
+  "order": 1,
+  "description": "Empty game loop. Graphics and input are set up; nothing is drawn.",
+  "detail": "Start here to build something from scratch. Commented placeholders show where update and draw code goes."
+}

@@ -1,12 +1,14 @@
 """NC Studio -- the Neon Coffee build environment.
 
 A front end for `ncc`. Everything it does is also available from the command line;
-this exists so the edit/build/run loop and the hardware budgets are visible at once.
+this exists so the edit/build/run loop, the console, the PS1's TTY output and the
+hardware budgets are all visible at once.
 
 Tkinter, deliberately: it ships with Python, so the GUI adds no dependency to a
 project whose whole premise is a self-contained toolchain.
 """
 
+import json
 import os
 import queue
 import subprocess
@@ -22,11 +24,41 @@ from theme import (AMBER, BG, BORDER, CYAN, DIM, FG, GREEN, MONO, MONO_SM, PANEL
                    PANEL_HI, RED, SUNKEN, UI, UI_BOLD, Button, field, group)
 
 from ncc import toolchain as tc
+from ncc.build import DEFAULT_TEMPLATE, list_templates
 from ncc.targets import TARGETS
 
 
 BANNER_TITLE = "NEON COFFEE ENGINE  ::  NC STUDIO"
 BANNER_SUB = "PlayStation 1 / PlayStation 2 homebrew build environment"
+
+# The console is a debugging tool, not an archive. Without a cap a long session
+# of rebuilds grows the Text widget until redraws crawl.
+MAX_LOG_LINES = 4000
+
+# Drain at most this many queued lines per tick, so a noisy build cannot starve
+# the event loop and freeze the window.
+DRAIN_BUDGET = 300
+
+SETTINGS_PATH = os.path.join(
+    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+    "NeonCoffee", "studio.json")
+
+
+def load_settings():
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(data):
+    try:
+        os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
+        with open(SETTINGS_PATH, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+    except OSError:
+        pass          # settings are a convenience; never let them break startup
 
 
 def find_projects(root):
@@ -35,11 +67,24 @@ def find_projects(root):
     for base in (root, os.path.join(root, "examples")):
         if not os.path.isdir(base):
             continue
-        for name in sorted(os.listdir(base)):
+        try:
+            names = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for name in names:
             p = os.path.join(base, name)
             if os.path.isdir(p) and os.path.isfile(os.path.join(p, "CMakeLists.txt")):
                 found.append(p)
     return found
+
+
+def reveal(path):
+    """Open a file or folder with whatever Windows associates with it."""
+    try:
+        os.startfile(path)  # noqa: S606 - intentional shell-open on Windows
+        return True
+    except (OSError, AttributeError):
+        return False
 
 
 class Studio:
@@ -48,36 +93,44 @@ class Studio:
         self.repo = tc.project_root()
         self.q = queue.Queue()
         self.running = False
+        self.proc = None
         self.projects = []
+        self.settings = load_settings()
+        self.autoscroll = tk.BooleanVar(value=self.settings.get("autoscroll", True))
 
         root.title("NC Studio")
         root.configure(bg=BG)
-        root.geometry("1040x660")
-        root.minsize(880, 560)
+        root.geometry(self.settings.get("geometry", "1120x720"))
+        root.minsize(940, 580)
+        root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self._build_titlebar()
 
         main = tk.Frame(root, bg=BG)
         main.pack(fill="both", expand=True, padx=8, pady=(0, 6))
 
-        left = tk.Frame(main, bg=BG, width=290)
+        left = tk.Frame(main, bg=BG, width=296)
         left.pack(side="left", fill="y", padx=(0, 8))
         left.pack_propagate(False)
 
         self._build_projects(left)
         self._build_target(left)
         self._build_actions(left)
+        self._build_tools(left)
         self._build_hardware(left)
-        self._build_console(main)
+        self._build_output(main)
         self._build_statusbar()
+        self._bind_keys()
 
         self.refresh_projects()
-        self.set_target("ps1")
+        self.set_target(self.settings.get("target", "ps1"))
         self.log(f"repo   {self.repo}", CYAN)
-        self.log("ready. select a project and press BUILD + RUN.", DIM)
+        self.log("F5 build+run   F7 build   F9 doctor   Ctrl+L clear", DIM)
         self.check_toolchain()
 
+        self._tty_pos = 0
         self.root.after(60, self._drain)
+        self.root.after(1000, self._poll_tty)
 
     # ---- chrome ---------------------------------------------------------
 
@@ -111,9 +164,10 @@ class Studio:
         self.plist = tk.Listbox(
             wrap, height=6, bg=SUNKEN, fg=FG, font=MONO_SM,
             selectbackground=AMBER, selectforeground=BG,
-            highlightthickness=0, bd=0, activestyle="none")
+            highlightthickness=0, bd=0, activestyle="none", exportselection=False)
         self.plist.pack(fill="x", padx=1, pady=1)
         self.plist.bind("<<ListboxSelect>>", lambda _: self.on_select())
+        self.plist.bind("<Double-Button-1>", lambda _: self.run_ncc("run"))
 
         row = tk.Frame(g.body, bg=PANEL)
         row.pack(fill="x", padx=6, pady=(0, 6))
@@ -138,7 +192,8 @@ class Studio:
         body = tk.Frame(g.body, bg=PANEL)
         body.pack(fill="x", padx=6, pady=6)
 
-        self.b_run = Button(body, "BUILD  +  RUN", lambda: self.run_ncc("run"), GREEN)
+        self.b_run = Button(body, "BUILD  +  RUN     F5",
+                            lambda: self.run_ncc("run"), GREEN)
         self.b_run.pack(fill="x", pady=(0, 4))
 
         row = tk.Frame(body, bg=PANEL)
@@ -152,32 +207,76 @@ class Studio:
         self.b_doc = Button(row, "DOCTOR", self.check_toolchain, CYAN, width=9)
         self.b_doc.pack(side="left")
 
+        self.b_stop = Button(body, "STOP", self.stop_running, RED)
+        self.b_stop.pack(fill="x", pady=(4, 0))
+        self.b_stop.set_enabled(False)
+
+    def _build_tools(self, parent):
+        g = group(parent, "open", CYAN)
+        g.pack(fill="x", pady=(0, 6))
+        row = tk.Frame(g.body, bg=PANEL)
+        row.pack(fill="x", padx=6, pady=6)
+        Button(row, "main.c", self.open_main, AMBER, width=8).pack(side="left")
+        Button(row, "FOLDER", self.open_folder, CYAN, width=8).pack(side="left", padx=4)
+        Button(row, "OUTPUT", self.open_output, DIM, width=8).pack(side="left")
+
     def _build_hardware(self, parent):
         g = group(parent, "hardware profile", CYAN)
         g.pack(fill="both", expand=True)
         self.hw = tk.Frame(g.body, bg=PANEL)
         self.hw.pack(fill="both", expand=True, pady=6)
 
-    def _build_console(self, parent):
-        g = group(parent, "console", CYAN)
-        g.pack(side="left", fill="both", expand=True)
+    def _build_output(self, parent):
+        outer = tk.Frame(parent, bg=BG)
+        outer.pack(side="left", fill="both", expand=True)
 
+        # Custom tab strip. ttk.Notebook cannot be themed convincingly on Windows.
+        strip = tk.Frame(outer, bg=BG)
+        strip.pack(fill="x")
+        self.tabs = {}
+        for key, label in (("console", "CONSOLE"), ("tty", "PS1 TTY")):
+            lb = tk.Label(strip, text=f"  {label}  ", bg=PANEL, fg=DIM,
+                          font=UI_BOLD, pady=4, cursor="hand2")
+            lb.pack(side="left", padx=(0, 2))
+            lb.bind("<Button-1>", lambda _e, k=key: self.show_tab(k))
+            self.tabs[key] = lb
+
+        ctl = tk.Frame(strip, bg=BG)
+        ctl.pack(side="right")
+        self.cb_scroll = tk.Checkbutton(
+            ctl, text="autoscroll", variable=self.autoscroll, bg=BG, fg=DIM,
+            selectcolor=SUNKEN, activebackground=BG, activeforeground=FG,
+            font=UI, bd=0, highlightthickness=0)
+        self.cb_scroll.pack(side="right", padx=(0, 6))
+        Button(ctl, "CLEAR", self.clear_log, DIM).pack(side="right", padx=(0, 6))
+
+        self.panes = tk.Frame(outer, bg=BG)
+        self.panes.pack(fill="both", expand=True)
+
+        self.text = self._make_pane()
+        self.tty = self._make_pane()
+        self.show_tab("console")
+
+    def _make_pane(self):
+        g = group(self.panes, "output", CYAN)
         wrap = tk.Frame(g.body, bg=BORDER)
         wrap.pack(fill="both", expand=True, padx=6, pady=6)
 
-        self.text = tk.Text(wrap, bg=SUNKEN, fg=FG, font=MONO, wrap="none",
-                            highlightthickness=0, bd=0, padx=8, pady=6,
-                            insertbackground=AMBER)
-        sb = tk.Scrollbar(wrap, command=self.text.yview, bg=PANEL,
-                          troughcolor=SUNKEN, bd=0, highlightthickness=0, width=12)
-        self.text.configure(yscrollcommand=sb.set)
+        txt = tk.Text(wrap, bg=SUNKEN, fg=FG, font=MONO, wrap="none",
+                      highlightthickness=0, bd=0, padx=8, pady=6,
+                      insertbackground=AMBER)
+        sb = tk.Scrollbar(wrap, command=txt.yview, bg=PANEL, troughcolor=SUNKEN,
+                          bd=0, highlightthickness=0, width=12)
+        txt.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y", padx=(0, 1), pady=1)
-        self.text.pack(side="left", fill="both", expand=True, padx=(1, 0), pady=1)
+        txt.pack(side="left", fill="both", expand=True, padx=(1, 0), pady=1)
 
         for name, color in (("fg", FG), ("dim", DIM), ("amber", AMBER),
                             ("green", GREEN), ("red", RED), ("cyan", CYAN)):
-            self.text.tag_configure(name, foreground=color)
-        self.text.configure(state="disabled")
+            txt.tag_configure(name, foreground=color)
+        txt.configure(state="disabled")
+        txt.group = g
+        return txt
 
     def _build_statusbar(self):
         bar = tk.Frame(self.root, bg=PANEL_HI, height=22)
@@ -189,12 +288,36 @@ class Studio:
                                font=MONO_SM, anchor="e", padx=8)
         self.tcstat.pack(side="right")
 
+    def _bind_keys(self):
+        self.root.bind("<F5>", lambda _: self.run_ncc("run"))
+        self.root.bind("<F7>", lambda _: self.run_ncc("build"))
+        self.root.bind("<Shift-F7>", lambda _: self.run_ncc("clean"))
+        self.root.bind("<F9>", lambda _: self.check_toolchain())
+        self.root.bind("<Control-l>", lambda _: self.clear_log())
+        self.root.bind("<Control-n>", lambda _: self.new_project())
+        self.root.bind("<Escape>", lambda _: self.stop_running())
+
+    # ---- tabs -----------------------------------------------------------
+
+    def show_tab(self, key):
+        self.active_tab = key
+        for k, lb in self.tabs.items():
+            on = k == key
+            lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
+        for k, w in (("console", self.text), ("tty", self.tty)):
+            if k == key:
+                w.group.pack(fill="both", expand=True)
+            else:
+                w.group.pack_forget()
+
     # ---- state ----------------------------------------------------------
 
     def set_status(self, msg, color=DIM):
         self.status.configure(text=msg, fg=color)
 
     def set_target(self, key):
+        if key not in TARGETS:
+            key = "ps1"
         self.target.set(key)
         for k, b in self.tbuttons.items():
             b.label.configure(fg=BG if k == key else AMBER,
@@ -220,19 +343,23 @@ class Studio:
             field(self.hw, k, v, FG if key == "ps1" else DIM)
 
     def refresh_projects(self):
+        want = self.selected_project() or self.settings.get("project")
         self.projects = find_projects(self.repo)
         self.plist.delete(0, "end")
         for p in self.projects:
             self.plist.insert("end", "  " + os.path.relpath(p, self.repo))
-        if self.projects:
-            self.plist.selection_set(0)
-            self.on_select()
-        else:
+        if not self.projects:
             self.set_status("no projects found -- press NEW...", AMBER)
+            return
+        idx = self.projects.index(want) if want in self.projects else 0
+        self.plist.selection_clear(0, "end")
+        self.plist.selection_set(idx)
+        self.plist.see(idx)
+        self.on_select()
 
     def selected_project(self):
         sel = self.plist.curselection()
-        if not sel:
+        if not sel or sel[0] >= len(self.projects):
             return None
         return self.projects[sel[0]]
 
@@ -241,15 +368,67 @@ class Studio:
         if p:
             self.set_status(os.path.relpath(p, self.repo))
 
+    # ---- open buttons ---------------------------------------------------
+
+    def open_main(self):
+        p = self.selected_project()
+        if not p:
+            return
+        main_c = os.path.join(p, "src", "main.c")
+        if not reveal(main_c):
+            self.log(f"could not open {main_c}", RED)
+
+    def open_folder(self):
+        p = self.selected_project()
+        if p:
+            reveal(p)
+
+    def open_output(self):
+        p = self.selected_project()
+        if not p:
+            return
+        d, _ = tc.build_dir_for(p)
+        if os.path.isdir(d):
+            reveal(d)
+        else:
+            self.log("no build output yet -- build first.", AMBER)
+
     # ---- console --------------------------------------------------------
 
-    def log(self, line, color=None):
-        tag = {AMBER: "amber", GREEN: "green", RED: "red",
-               CYAN: "cyan", DIM: "dim"}.get(color, "fg")
-        self.text.configure(state="normal")
-        self.text.insert("end", line.rstrip() + "\n", tag)
-        self.text.see("end")
-        self.text.configure(state="disabled")
+    def _target_pane(self):
+        return self.tty if self.active_tab == "tty" else self.text
+
+    def clear_log(self):
+        w = self._target_pane()
+        w.configure(state="normal")
+        w.delete("1.0", "end")
+        w.configure(state="disabled")
+
+    def log(self, line, color=None, widget=None):
+        self._write(widget or self.text, [(line, color)])
+
+    def _write(self, widget, items):
+        """Append many lines in one pass.
+
+        Toggling widget state and calling see() per line is what makes a Tk
+        console crawl during a noisy build, so both happen once per batch.
+        """
+        if not items:
+            return
+        widget.configure(state="normal")
+        for line, color in items:
+            tag = {AMBER: "amber", GREEN: "green", RED: "red",
+                   CYAN: "cyan", DIM: "dim"}.get(color, "fg")
+            widget.insert("end", line.rstrip() + "\n", tag)
+
+        # Trim from the top so the widget cannot grow without bound.
+        excess = int(widget.index("end-1c").split(".")[0]) - MAX_LOG_LINES
+        if excess > 0:
+            widget.delete("1.0", "%d.0" % (excess + 1))
+
+        if self.autoscroll.get():
+            widget.see("end")
+        widget.configure(state="disabled")
 
     def _classify(self, line):
         low = line.lower()
@@ -264,26 +443,66 @@ class Studio:
         return None
 
     def _drain(self):
-        """Pump subprocess output from the worker thread into the Text widget."""
+        """Pump subprocess output from the worker thread into the console."""
+        batch = []
         try:
-            while True:
+            for _ in range(DRAIN_BUDGET):
                 item = self.q.get_nowait()
                 if item is None:
                     self.running = False
+                    self.proc = None
                     self.set_buttons(True)
                 elif isinstance(item, tuple):
                     self.set_status(item[0], item[1])
                 else:
-                    self.log(item, self._classify(item))
+                    batch.append((item, self._classify(item)))
         except queue.Empty:
             pass
+        if batch:
+            self._write(self.text, batch)
         self.root.after(60, self._drain)
+
+    def _poll_tty(self):
+        """Tail DuckStation's log for the PS1's own printf output.
+
+        With no debugger on the console, TTY is the main way a homebrew program
+        can tell you anything, so it gets its own pane.
+        """
+        try:
+            d = tc.duckstation_data_dir()
+            path = os.path.join(d, "duckstation.log") if d else None
+            if path and os.path.isfile(path):
+                size = os.path.getsize(path)
+                if size < self._tty_pos:      # log was rotated or truncated
+                    self._tty_pos = 0
+                if size > self._tty_pos:
+                    with open(path, encoding="utf-8", errors="replace") as fh:
+                        fh.seek(self._tty_pos)
+                        chunk = fh.read()
+                        self._tty_pos = fh.tell()
+                    lines = [ln.split("I/TTY:", 1)[1].strip()
+                             for ln in chunk.splitlines() if "I/TTY:" in ln]
+                    if lines:
+                        self._write(self.tty, [(ln, GREEN) for ln in lines])
+        except OSError:
+            pass
+        self.root.after(1000, self._poll_tty)
 
     def set_buttons(self, on):
         for b in (self.b_run, self.b_build, self.b_clean, self.b_doc):
             b.set_enabled(on)
+        self.b_stop.set_enabled(not on)
 
     # ---- running ncc ----------------------------------------------------
+
+    def stop_running(self):
+        if not self.running or not self.proc:
+            return
+        self.log("stopping...", AMBER)
+        try:
+            self.proc.terminate()
+        except OSError:
+            pass
 
     def _spawn(self, args, done_msg):
         env = os.environ.copy()
@@ -299,6 +518,7 @@ class Studio:
                     cwd=self.repo, env=env, stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True, bufsize=1,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                self.proc = p
                 for line in p.stdout:
                     self.q.put(line)
                 code = p.wait()
@@ -306,6 +526,8 @@ class Studio:
                 self.q.put("ncc failed to start: %s" % exc)
             if code == 0:
                 self.q.put((done_msg, GREEN))
+            elif code < 0:
+                self.q.put(("%s -- stopped" % done_msg, AMBER))
             else:
                 self.q.put(("%s -- FAILED (exit %d)" % (done_msg, code), RED))
             self.q.put(None)
@@ -324,6 +546,7 @@ class Studio:
         if not p:
             self.log("no project selected.", RED)
             return
+        self.show_tab("console")
         rel = os.path.relpath(p, self.repo)
         self.log("")
         self.log("> ncc %s %s" % (cmd, rel), CYAN)
@@ -333,67 +556,151 @@ class Studio:
     def check_toolchain(self):
         if self.running:
             return
+        self.show_tab("console")
         self.log("")
         self.log("> ncc doctor", CYAN)
         self._spawn(["doctor", "--target", self.target.get()], "doctor")
         self.tcstat.configure(text="toolchain: checking", fg=AMBER)
+        self.root.after(300, self._update_toolchain_badge)
 
-        def later():
-            if self.running:
-                self.root.after(300, later)
-                return
-            ok = tc.locate("mipsel-none-elf-gcc")[0] and tc.locate("cmake")[0]
-            bios = tc.find_openbios()
-            if ok and bios:
-                self.tcstat.configure(text="toolchain: OK", fg=GREEN)
-            elif ok:
-                self.tcstat.configure(text="toolchain: OK / no BIOS", fg=AMBER)
-            else:
-                self.tcstat.configure(text="toolchain: INCOMPLETE", fg=RED)
+    def _update_toolchain_badge(self):
+        if self.running:
+            self.root.after(300, self._update_toolchain_badge)
+            return
+        ok = tc.locate("mipsel-none-elf-gcc")[0] and tc.locate("cmake")[0]
+        if ok and tc.find_openbios():
+            self.tcstat.configure(text="toolchain: OK", fg=GREEN)
+        elif ok:
+            self.tcstat.configure(text="toolchain: OK / no BIOS", fg=AMBER)
+        else:
+            self.tcstat.configure(text="toolchain: INCOMPLETE", fg=RED)
 
-        self.root.after(300, later)
+    # ---- new project ----------------------------------------------------
 
     def new_project(self):
         if self.running:
             return
+        templates = list_templates()
+        if not templates:
+            self.log("no templates found.", RED)
+            return
+
         win = tk.Toplevel(self.root)
         win.title("New project")
         win.configure(bg=BG)
         win.transient(self.root)
         win.resizable(False, False)
+        win.grab_set()
 
         g = group(win, "new project", GREEN)
         g.pack(padx=10, pady=10)
+
         tk.Label(g.body, text="name", bg=PANEL, fg=DIM, font=MONO_SM,
                  anchor="w").pack(fill="x", padx=8, pady=(8, 2))
         wrap = tk.Frame(g.body, bg=BORDER)
         wrap.pack(fill="x", padx=8)
         entry = tk.Entry(wrap, bg=SUNKEN, fg=FG, font=MONO, bd=0,
-                         highlightthickness=0, insertbackground=AMBER, width=30)
+                         highlightthickness=0, insertbackground=AMBER, width=42)
         entry.pack(fill="x", padx=1, pady=1, ipady=4, ipadx=4)
         entry.insert(0, "mygame")
         entry.focus_set()
         entry.select_range(0, "end")
 
+        tk.Label(g.body, text="template", bg=PANEL, fg=DIM, font=MONO_SM,
+                 anchor="w").pack(fill="x", padx=8, pady=(10, 2))
+
+        chosen = tk.StringVar(value=DEFAULT_TEMPLATE)
+        detail = tk.Label(g.body, text="", bg=PANEL, fg=DIM, font=MONO_SM,
+                          anchor="w", justify="left", wraplength=380)
+
+        rows = {}
+
+        def select(name):
+            chosen.set(name)
+            for n, (frame, title, desc) in rows.items():
+                on = n == name
+                frame.configure(bg=PANEL_HI if on else PANEL)
+                title.configure(bg=PANEL_HI if on else PANEL,
+                                fg=AMBER if on else FG)
+                desc.configure(bg=PANEL_HI if on else PANEL,
+                               fg=FG if on else DIM)
+            meta = next(t for t in templates if t["name"] == name)
+            detail.configure(text=meta.get("detail", ""))
+
+        for t in templates:
+            f = tk.Frame(g.body, bg=PANEL, cursor="hand2")
+            f.pack(fill="x", padx=8, pady=1)
+            title = tk.Label(f, text=" %-9s %s" % (t["name"], t["title"]),
+                             bg=PANEL, fg=FG, font=MONO_SM, anchor="w")
+            title.pack(fill="x")
+            desc = tk.Label(f, text="   " + t.get("description", ""), bg=PANEL,
+                            fg=DIM, font=MONO_SM, anchor="w")
+            desc.pack(fill="x")
+            rows[t["name"]] = (f, title, desc)
+            for w in (f, title, desc):
+                w.bind("<Button-1>", lambda _e, n=t["name"]: select(n))
+
+        detail.pack(fill="x", padx=8, pady=(8, 0))
         tk.Label(g.body, text="created under examples/", bg=PANEL, fg=DIM,
-                 font=MONO_SM, anchor="w").pack(fill="x", padx=8, pady=(4, 0))
+                 font=MONO_SM, anchor="w").pack(fill="x", padx=8, pady=(8, 0))
+
+        select(DEFAULT_TEMPLATE)
 
         def create():
             name = entry.get().strip()
             if not name:
                 return
             dest = os.path.join(self.repo, "examples", name)
+            if os.path.exists(dest) and os.listdir(dest):
+                self.log("examples/%s already exists and is not empty." % name, RED)
+                win.destroy()
+                return
             win.destroy()
+            self.show_tab("console")
             self.log("")
-            self.log("> ncc new %s" % name, CYAN)
-            self._spawn(["new", name, dest], "new %s" % name)
-            self.root.after(1500, self.refresh_projects)
+            self.log("> ncc new %s -t %s" % (name, chosen.get()), CYAN)
+            self._spawn(["new", name, dest, "-t", chosen.get()], "new %s" % name)
+            self._pending_select = dest
+            self.root.after(400, self._refresh_when_idle)
 
         row = tk.Frame(g.body, bg=PANEL)
         row.pack(fill="x", padx=8, pady=8)
         Button(row, "CREATE", create, GREEN, width=10).pack(side="left")
         Button(row, "CANCEL", win.destroy, DIM, width=10).pack(side="left", padx=4)
         entry.bind("<Return>", lambda _: create())
+        win.bind("<Escape>", lambda _: win.destroy())
+
+    def _refresh_when_idle(self):
+        """Rescan once `ncc new` has actually finished, rather than on a timer."""
+        if self.running:
+            self.root.after(200, self._refresh_when_idle)
+            return
+        dest = getattr(self, "_pending_select", None)
+        self.refresh_projects()
+        if dest and dest in self.projects:
+            i = self.projects.index(dest)
+            self.plist.selection_clear(0, "end")
+            self.plist.selection_set(i)
+            self.plist.see(i)
+            self.on_select()
+        self._pending_select = None
+
+    # ---- shutdown -------------------------------------------------------
+
+    def on_close(self):
+        if self.running and self.proc:
+            try:
+                self.proc.terminate()
+            except OSError:
+                pass
+        self.settings.update({
+            "geometry": self.root.geometry(),
+            "target": self.target.get(),
+            "project": self.selected_project() or "",
+            "autoscroll": bool(self.autoscroll.get()),
+        })
+        save_settings(self.settings)
+        self.root.destroy()
 
 
 def main():

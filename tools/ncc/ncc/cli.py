@@ -1,6 +1,8 @@
 """ncc -- the Neon Coffee orchestrator."""
 
 import argparse
+import os
+import subprocess
 import sys
 
 from . import __version__, build as build_mod, doctor
@@ -19,10 +21,15 @@ def main(argv=None):
     d.add_argument("--target", choices=["ps1", "ps2", "all"], default="all")
     d.set_defaults(func=doctor.run)
 
-    n = sub.add_parser("new", help="create a new project from the NC template")
+    n = sub.add_parser("new", help="create a new project from a template")
     n.add_argument("name")
     n.add_argument("path", nargs="?", help="where to create it (default: ./<name>)")
+    n.add_argument("-t", "--template", default=build_mod.DEFAULT_TEMPLATE,
+                   help="which template to use (see: ncc templates)")
     n.set_defaults(func=build_mod.new)
+
+    tl = sub.add_parser("templates", help="list available project templates")
+    tl.set_defaults(func=build_mod.templates)
 
     b = sub.add_parser("build", help="build a project to .bin/.cue")
     b.add_argument("path", nargs="?", default=".")
@@ -50,10 +57,10 @@ def main(argv=None):
 
 
 def _studio(args):
-    import os
-    import subprocess
     from . import toolchain as tc
     script = os.path.join(tc.project_root(), "tools", "ncstudio", "studio.py")
+    if not os.path.isfile(script):
+        raise SystemExit(f"ncc: NC Studio not found at {script}")
     return subprocess.call([sys.executable, script])
 
 
