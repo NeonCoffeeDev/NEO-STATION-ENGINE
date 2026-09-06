@@ -39,9 +39,18 @@ void  nc_gfx_flip(void);                /* wait for vblank, swap, draw          
  * Screen coordinates, 0,0 top-left. Call between frames like any draw call. */
 void  nc_text(int x, int y, const char *text);
 
+/* Draw a textured quad in SCREEN space -- no GTE, no transform, no depth sort.
+ * This is the 2D path: sprites are just quads the GPU draws where you say. */
+void  nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
+                     int u, int v);
+
 /* Room reserved per nc_text() call before the unused tail is handed back. One
  * sprite per character, so this caps a single line at roughly 120 characters. */
 #define NC_TEXT_BUDGET 3072
+
+/* Where sprites land in the ordering table. Text sits at 0 and the 3D pass uses
+ * 2 upward, so 1 puts sprites over the world but under the HUD text. */
+#define NC_SPRITE_DEPTH 1
 
 /* ---- meshes ------------------------------------------------------------ */
 
@@ -103,9 +112,19 @@ typedef struct {
     int16_t  pad0, pad1;
 } NC_Instance;
 
+/* A sprite as it appears in the package. 16 bytes; the writer must agree. */
+typedef struct {
+    uint16_t tex_slot;
+    uint16_t flags;
+    int16_t  x, y, w, h;
+    uint16_t u, v;
+} NC_SpriteDef;
+
 typedef struct {
     const NC_Instance *instances;
     int instance_count;
+    const NC_SpriteDef *sprites;
+    int sprite_count;
     int clear_r, clear_g, clear_b;
     VECTOR  cam_pos;
     SVECTOR cam_rot;
@@ -144,6 +163,7 @@ int nc_pkg_load(const void *data, NC_Package *pkg);
  */
 
 #define NC_MAX_OBJECTS 128
+#define NC_MAX_SPRITES 64
 
 typedef struct {
     int mesh_id;
@@ -153,12 +173,24 @@ typedef struct {
     int visible;
 } NC_Object;
 
+/* A sprite in the live scene. Screen coordinates, so 0,0 is the top-left of the
+ * 320x240 display and there is no camera involved. */
+typedef struct {
+    uint16_t tpage, clut;
+    int x, y;
+    int w, h;
+    int u, v;                 /* which part of the texture to show           */
+    int visible;
+} NC_Sprite;
+
 int  nc_scene_load(const NC_Package *pkg, int index);
 void nc_scene_advance(void);      /* apply per-object spin, once per frame  */
 void nc_scene_draw(void);         /* set the camera, then draw everything   */
 
 int  nc_scene_object_count(void);
 NC_Object *nc_scene_object(int i);   /* NULL if i is out of range           */
+int  nc_scene_sprite_count(void);
+NC_Sprite *nc_scene_sprite(int i);   /* NULL if i is out of range           */
 int  nc_scene_index(void);
 int  nc_scene_total(void);
 

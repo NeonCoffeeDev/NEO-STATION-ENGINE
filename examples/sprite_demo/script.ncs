@@ -1,0 +1,57 @@
+# @NAME@ - a 2D game
+#
+# Sprites are flat textured quads drawn in screen space: no camera, no GTE, no
+# depth sorting. Coordinates are pixels on the 320x240 display, 0,0 top-left.
+#
+# Sprite 0 is the player. The others are scenery, in the order they appear in
+# scene.json.
+
+
+var speed = 2
+var anim = 0
+var facing = 0
+var steps = 0
+
+
+func _ready():
+    print("2D demo -- D-pad to move")
+
+
+func _update():
+    var dx = 0
+    var dy = 0
+
+    if btn_held(BTN_LEFT):
+        dx = 0 - speed
+    if btn_held(BTN_RIGHT):
+        dx = speed
+    if btn_held(BTN_UP):
+        dy = 0 - speed
+    if btn_held(BTN_DOWN):
+        dy = speed
+
+    sprite_move(0, dx, dy)
+
+    # Keep the player on screen. The sprite is 32 wide, so the right edge is
+    # 320 - 32.
+    sprite_set_pos(0,
+                   clamp(sprite_x(0), 0, 288),
+                   clamp(sprite_y(0), 0, 208))
+
+    # Animate only while moving. The four frames sit side by side in the sheet,
+    # so stepping the UV window across by 32 picks the next one.
+    if dx == 0 and dy == 0:
+        anim = 0
+    else:
+        steps = steps + 1
+        if steps > 5:
+            steps = 0
+            anim = anim + 1
+            if anim > 3:
+                anim = 0
+
+    sprite_frame(0, anim * 32, 0)
+
+    draw_text(8, 8, "2D SPRITES")
+    draw_text(8, 222, "D-PAD TO MOVE")
+    draw_num(280, 8, sprite_x(0))

@@ -14,7 +14,7 @@
 
 #include "nc.h"
 
-#define NC_PKG_VERSION 4
+#define NC_PKG_VERSION 5
 
 /* Mirrors the writer's layout exactly. Both sides must change together, which
  * is what the version field is for. */
@@ -53,7 +53,7 @@ typedef struct {
 
 typedef struct {
     uint16_t instance_count;
-    uint16_t flags;
+    uint16_t sprite_count;
     uint8_t  clear_r, clear_g, clear_b, pad0;
     int32_t  cam_px, cam_py, cam_pz;
     int16_t  cam_rx, cam_ry, cam_rz, pad1;
@@ -187,6 +187,12 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
             sc = &pkg->scenes[pkg->scene_count++];
             sc->instances = (const NC_Instance *)(p + sizeof(SceneHeader));
             sc->instance_count = sh->instance_count;
+
+            /* Sprites follow the instances in the same chunk. */
+            sc->sprites = (const NC_SpriteDef *)
+                ((const uint8_t *)sc->instances
+                 + (size_t)sh->instance_count * sizeof(NC_Instance));
+            sc->sprite_count = sh->sprite_count;
             sc->clear_r = sh->clear_r;
             sc->clear_g = sh->clear_g;
             sc->clear_b = sh->clear_b;

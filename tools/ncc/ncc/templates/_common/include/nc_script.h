@@ -40,6 +40,16 @@ int  nc_s_spin(int id, int x, int y, int z);
 int  nc_s_show(int id);
 int  nc_s_hide(int id);
 
+/* --- sprites --- */
+int  nc_s_sprite_count(void);
+int  nc_s_sprite_x(int id);
+int  nc_s_sprite_y(int id);
+int  nc_s_sprite_set_pos(int id, int x, int y);
+int  nc_s_sprite_move(int id, int dx, int dy);
+int  nc_s_sprite_frame(int id, int u, int v);
+int  nc_s_sprite_show(int id);
+int  nc_s_sprite_hide(int id);
+
 /* --- camera --- */
 int  nc_s_camera_set(int x, int y, int z, int rx, int ry, int rz);
 int  nc_s_camera_move(int dx, int dy, int dz);

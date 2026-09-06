@@ -184,6 +184,37 @@ void nc_gfx_flip(void)
     DrawOTag(db[1 - db_active].ot + (NC_OT_LEN - 1));
 }
 
+void nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
+                    int u, int v)
+{
+    POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
+    if (!poly)
+        return;
+
+    setPolyFT4(poly);
+
+    /* 128 is neutral for texture modulation on this hardware -- anything less
+     * darkens the sprite, more brightens it. */
+    setRGB0(poly, 128, 128, 128);
+
+    poly->x0 = (short)x;         poly->y0 = (short)y;
+    poly->x1 = (short)(x + w);   poly->y1 = (short)y;
+    poly->x2 = (short)x;         poly->y2 = (short)(y + h);
+    poly->x3 = (short)(x + w);   poly->y3 = (short)(y + h);
+
+    setUV4(poly,
+           u,             v,
+           u + w - 1,     v,
+           u,             v + h - 1,
+           u + w - 1,     v + h - 1);
+    poly->tpage = tpage;
+    poly->clut = clut;
+
+    /* Depth 1: in front of everything the 3D pass sorts, behind text at 0. */
+    nc_gfx_sort(NC_SPRITE_DEPTH, poly);
+}
+
+
 void nc_mesh_draw(const NC_Mesh *mesh, const SVECTOR *rot, const VECTOR *pos)
 {
     MATRIX world, modelview, lmtx;

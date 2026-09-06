@@ -1,0 +1,7 @@
+{
+  "name": "sprite2d",
+  "title": "2D sprites",
+  "order": 6,
+  "description": "A 2D game: sprite sheet, animation, screen-space movement. No 3D.",
+  "detail": "Sprites are textured quads drawn straight in screen space, skipping the GTE entirely -- which is why 2D runs so comfortably on this hardware. Frames come from one sheet by moving the UV window."
+}

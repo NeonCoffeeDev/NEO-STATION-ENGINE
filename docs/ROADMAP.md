@@ -107,3 +107,25 @@ Still open, in order:
 3. **Collision.**
 4. **Audio.**
 5. **Per-object scripts**, and 4-bit textures for twice the VRAM budget.
+
+
+## Update, 2026-09-06 (2D)
+
+- **Sprites.** Screen-space textured quads, drawn after the 3D pass and under the
+  text. No GTE, no depth sort -- which is why 2D is comfortable here. Scripts get
+  sprite_move / sprite_frame / sprite_show, and animation is a moving UV window
+  over one sheet.
+- **2D-only packages.** A game with no meshes is valid; the `sprite2d` template
+  is one.
+- **Release builds.** `--release` is -O2 and inlines the script wrappers.
+
+Still open:
+
+1. **Godot texture and 2D export.** Textures and sprites are declared in
+   scene.json by hand. The exporter should pull textures from material albedo,
+   and Sprite2D nodes from a Godot 2D scene.
+2. **Collision.** Scripts compare positions by hand today.
+3. **Audio.** Nothing at all yet -- probably the biggest remaining hole.
+4. **Transparency.** Sprites are opaque; no alpha or semi-transparency blending.
+5. **4-bit textures** for twice the VRAM budget, and LTO so the nc_s_* wrappers
+   inline too.

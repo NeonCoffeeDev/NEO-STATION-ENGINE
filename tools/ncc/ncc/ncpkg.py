@@ -26,7 +26,7 @@ import struct
 from . import textures as tex_mod
 
 MAGIC = b"NCPK"
-VERSION = 4
+VERSION = 5
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -154,7 +154,7 @@ def build_mesh(mesh, tex_slots=None):
     return bytes(out)
 
 
-def build_scene(scene, mesh_ids):
+def build_scene(scene, mesh_ids, tex_slots=None):
     """SCN0: clear color, the starting camera, then a flat list of instances."""
     clear = scene.get("clear", [24, 16, 48])
     instances = scene.get("instances", [])
@@ -165,11 +165,18 @@ def build_scene(scene, mesh_ids):
     cam_pos = cam.get("pos", [0, 0, 0])
     cam_rot = cam.get("rot", [0, 0, 0])
 
+    tex_slots = tex_slots or {}
+    sprites = scene.get("sprites", [])
+    if len(sprites) > 65535:
+        raise NcpkgError("more than 65535 sprites")
+
     # 28 bytes, and instances follow on a 4-byte boundary so their int32
     # positions stay naturally aligned.
     out = bytearray()
+    # The second field used to be unused flags; it now carries the sprite count,
+    # which keeps the header at 28 bytes and the instances 4-aligned.
     out += struct.pack(
-        "<HHBBBB3i4h", len(instances), 0,
+        "<HHBBBB3i4h", len(instances), len(sprites),
         int(clear[0]) & 0xFF, int(clear[1]) & 0xFF, int(clear[2]) & 0xFF, 0,
         int(cam_pos[0]), int(cam_pos[1]), int(cam_pos[2]),
         _clamp_short(int(cam_rot[0]), "camera rotation x"),
@@ -200,6 +207,36 @@ def build_scene(scene, mesh_ids):
             _clamp_short(int(spin[1]), "spin y"),
             _clamp_short(int(spin[2]), "spin z"),
             0, 0)
+
+    # Sprites: flat 2D quads in screen space, drawn after the 3D pass. They skip
+    # the GTE entirely, which is why 2D is cheap on this hardware.
+    for n, sp in enumerate(sprites):
+        tex_name = sp.get("texture")
+        if tex_name is None:
+            raise NcpkgError(f"sprite {n} has no 'texture'")
+        if tex_name not in tex_slots:
+            raise NcpkgError(
+                f"sprite {n} uses texture '{tex_name}', which is not in the "
+                f"'textures' list. Known: {', '.join(sorted(tex_slots)) or 'none'}")
+        info = tex_slots[tex_name]
+
+        w = int(sp.get("w", info["w"]))
+        h = int(sp.get("h", info["h"]))
+        u = int(sp.get("u", 0))
+        v = int(sp.get("v", 0))
+        if u + w > 256 or v + h > 256:
+            raise NcpkgError(
+                f"sprite {n} samples u{u}+{w}, v{v}+{h}, past the 256x256 "
+                f"texture page. UVs are page-relative.")
+
+        out += struct.pack(
+            "<HHhhhhHH", info["slot"], 0,
+            _clamp_short(int(sp.get("x", 0)), "sprite x"),
+            _clamp_short(int(sp.get("y", 0)), "sprite y"),
+            _clamp_short(w, "sprite width"),
+            _clamp_short(h, "sprite height"),
+            u & 0xFF, v & 0xFF)
+
     return bytes(out)
 
 
@@ -213,8 +250,12 @@ def pack(doc, base_dir="."):
     and a level that use the same props should not ship the geometry twice.
     """
     meshes = doc.get("meshes", [])
-    if not meshes:
-        raise NcpkgError("no meshes -- add at least one to 'meshes'")
+    scenes_probe = doc.get("scenes") or [doc]
+    has_sprites = any(sc.get("sprites") for sc in scenes_probe)
+    if not meshes and not has_sprites:
+        raise NcpkgError(
+            "nothing to draw -- add a mesh to 'meshes', or a sprite to a "
+            "scene's 'sprites'")
 
     scenes = doc.get("scenes")
     if scenes is None:
@@ -241,7 +282,7 @@ def pack(doc, base_dir="."):
     for i, sc in enumerate(scenes):
         if "clear" not in sc:
             sc = dict(sc, clear=doc.get("clear", [24, 16, 48]))
-        chunks.append((b"SCN0", i, build_scene(sc, lookup)))
+        chunks.append((b"SCN0", i, build_scene(sc, lookup, tex_slots)))
 
     # Header, then the table, then payloads -- so offsets need the table size first.
     table_size = ENTRY.size * len(chunks)
@@ -275,5 +316,6 @@ def pack_file(scene_path, out_path):
         fh.write(data)
     scenes = doc.get("scenes", [doc])
     instances = sum(len(s.get("instances", [])) for s in scenes)
+    instances += sum(len(s.get("sprites", [])) for s in scenes)
     return (len(data), len(doc.get("meshes", [])), instances, len(scenes),
             len(doc.get("textures", [])))

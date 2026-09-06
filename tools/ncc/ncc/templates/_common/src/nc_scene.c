@@ -17,6 +17,9 @@ static const NC_Package *loaded;
 static NC_Object objects[NC_MAX_OBJECTS];
 static int object_count;
 
+static NC_Sprite sprites[NC_MAX_SPRITES];
+static int sprite_count;
+
 static int scene_index;
 static int pending_scene = -1;
 
@@ -57,6 +60,28 @@ int nc_scene_load(const NC_Package *pkg, int index)
         o->visible = 1;
     }
     object_count = n;
+
+    n = sc->sprite_count;
+    if (n > NC_MAX_SPRITES) {
+        printf("nc_scene: scene %d has %d sprites, capping at %d\n",
+               index, n, NC_MAX_SPRITES);
+        n = NC_MAX_SPRITES;
+    }
+    for (i = 0; i < n; i++) {
+        const NC_SpriteDef *sd = &sc->sprites[i];
+        NC_Sprite *sp = &sprites[i];
+        sp->x = sd->x;  sp->y = sd->y;
+        sp->w = sd->w;  sp->h = sd->h;
+        sp->u = sd->u;  sp->v = sd->v;
+        sp->visible = 1;
+        if (sd->tex_slot < NC_MAX_TEXTURES) {
+            sp->tpage = pkg->textures[sd->tex_slot].tpage;
+            sp->clut = pkg->textures[sd->tex_slot].clut;
+        } else {
+            sp->visible = 0;      /* references a texture that is not there */
+        }
+    }
+    sprite_count = n;
 
     cam_pos = sc->cam_pos;
     cam_rot = sc->cam_rot;
@@ -107,6 +132,30 @@ void nc_scene_draw(void)
 
         nc_mesh_draw(&loaded->meshes[o->mesh_id], &rot, &pos);
     }
+
+    /* Sprites last: they are screen-space, so they need no camera and simply
+     * sit in front of whatever the 3D pass produced. */
+    for (i = 0; i < sprite_count; i++) {
+        const NC_Sprite *sp = &sprites[i];
+        if (!sp->visible)
+            continue;
+        nc_sprite_draw(sp->tpage, sp->clut, sp->x, sp->y, sp->w, sp->h,
+                       sp->u, sp->v);
+    }
+}
+
+
+int nc_scene_sprite_count(void)
+{
+    return sprite_count;
+}
+
+
+NC_Sprite *nc_scene_sprite(int i)
+{
+    if (i < 0 || i >= sprite_count)
+        return 0;
+    return &sprites[i];
 }
 
 

@@ -165,6 +165,81 @@ int nc_s_hide(int id)
 }
 
 
+/* --- sprites --- */
+
+int nc_s_sprite_count(void)
+{
+    return nc_scene_sprite_count();
+}
+
+
+int nc_s_sprite_x(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return sp ? sp->x : 0;
+}
+
+
+int nc_s_sprite_y(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return sp ? sp->y : 0;
+}
+
+
+int nc_s_sprite_set_pos(int id, int x, int y)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp) {
+        sp->x = x;
+        sp->y = y;
+    }
+    return 0;
+}
+
+
+int nc_s_sprite_move(int id, int dx, int dy)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp) {
+        sp->x += dx;
+        sp->y += dy;
+    }
+    return 0;
+}
+
+
+int nc_s_sprite_frame(int id, int u, int v)
+{
+    /* Move the window into the texture. This is how animation works: lay the
+     * frames out in one image and step u across them. */
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp) {
+        sp->u = u & 0xFF;
+        sp->v = v & 0xFF;
+    }
+    return 0;
+}
+
+
+int nc_s_sprite_show(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp)
+        sp->visible = 1;
+    return 0;
+}
+
+
+int nc_s_sprite_hide(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp)
+        sp->visible = 0;
+    return 0;
+}
+
+
 /* --- camera --- */
 
 int nc_s_camera_set(int x, int y, int z, int rx, int ry, int rz)

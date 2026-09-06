@@ -37,6 +37,16 @@ FUNCTIONS = {
     "show":          {"c": "nc_s_show",         "args": 1},
     "hide":          {"c": "nc_s_hide",         "args": 1},
 
+    # --- sprites: flat 2D quads in screen space, drawn over the 3D pass ---
+    "sprite_count":   {"c": "nc_s_sprite_count",   "args": 0},
+    "sprite_x":       {"c": "nc_s_sprite_x",       "args": 1},
+    "sprite_y":       {"c": "nc_s_sprite_y",       "args": 1},
+    "sprite_set_pos": {"c": "nc_s_sprite_set_pos", "args": 3},
+    "sprite_move":    {"c": "nc_s_sprite_move",    "args": 3},
+    "sprite_frame":   {"c": "nc_s_sprite_frame",   "args": 3},
+    "sprite_show":    {"c": "nc_s_sprite_show",    "args": 1},
+    "sprite_hide":    {"c": "nc_s_sprite_hide",    "args": 1},
+
     # --- camera ---
     "camera_set":    {"c": "nc_s_camera_set",   "args": 6},
     "camera_move":   {"c": "nc_s_camera_move",  "args": 3},

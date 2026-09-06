@@ -89,6 +89,30 @@ Buttons: `BTN_UP` `BTN_DOWN` `BTN_LEFT` `BTN_RIGHT` `BTN_CROSS` `BTN_CIRCLE`
 | `spin(id, x, y, z)` | Rotation added per frame; `0, 12, 0` turns slowly. |
 | `show(id)` / `hide(id)` | Visibility. |
 
+### Sprites (2D)
+
+Sprites are flat textured quads in **screen space** -- pixels on the 320x240
+display, 0,0 top-left. No camera, no depth sorting, no GTE. They draw over the 3D
+pass and under the text.
+
+| | |
+|---|---|
+| `sprite_count()` | How many sprites in this scene. |
+| `sprite_x(id)` `sprite_y(id)` | Read a position. |
+| `sprite_set_pos(id, x, y)` | Place it. |
+| `sprite_move(id, dx, dy)` | Nudge it. |
+| `sprite_frame(id, u, v)` | Move the window into the texture -- this is animation. |
+| `sprite_show(id)` / `sprite_hide(id)` | Visibility. |
+
+Animation is one sheet plus a moving UV window. With four 32x32 frames side by
+side:
+
+```gdscript
+sprite_frame(0, anim * 32, 0)
+```
+
+A game can be entirely 2D: a package with no meshes at all is fine.
+
 ### Camera
 | | |
 |---|---|

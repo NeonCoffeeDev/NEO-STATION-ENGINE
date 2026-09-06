@@ -78,6 +78,7 @@ On Windows `ncc.cmd` takes the same arguments as `./ncc`.
 | `cube`   | One lit, Gouraud-shaded cube on the D-pad. **Default.**            |
 | `scene`  | Four objects, swinging camera, fixed-point circular motion.        |
 | `game`   | **Menu + level, Godot scenes, and a script. No C.** Start here.     |
+| `sprite2d` | **A 2D game.** Sprite sheet, animation, screen-space movement.     |
 
 Every template gets the same engine files; only `src/main.c` differs. They live in
 `tools/ncc/ncc/templates/`, with the shared engine in `_common/`. To add one, drop
@@ -200,6 +201,36 @@ draw_num(24, 20, score)
 ```
 
 Screen coordinates, 0,0 top-left, 320x240. It is drawn over everything else.
+
+### Sprites (2D)
+
+2D is the cheap path on this hardware: a sprite is a textured quad drawn straight
+in screen space, skipping the GTE entirely. Add them per scene:
+
+```json
+"sprites": [
+  { "texture": "sheet", "x": 144, "y": 100, "w": 32, "h": 32, "u": 0, "v": 0 }
+]
+```
+
+`u`/`v` pick which part of the texture to show, so one sheet holds every frame
+and animation is just moving that window. A package with no meshes at all is
+valid -- see the `sprite2d` template.
+
+```bash
+./ncc new mygame -t sprite2d
+```
+
+### Debug and release
+
+```bash
+./ncc run mygame --release
+```
+
+Debug (the default) is `-Og` and keeps every function separate, which is what you
+want while iterating. Release is `-O2` and inlines your script's functions away
+entirely. NC Studio has a DEBUG/RELEASE toggle; the two use separate build
+directories so switching costs nothing.
 
 ## 4. The development loop
 
