@@ -156,14 +156,14 @@ def new(args):
 
 # ---- build --------------------------------------------------------------
 
-def _configure(src, build_dir, env):
+def _configure(src, build_dir, env, config):
     cmake = tc.require("cmake")
     print(f"  configuring -> {build_dir}")
     r = subprocess.run(
         [cmake, "-G", "Ninja", "-S", src, "-B", build_dir,
          f"-DCMAKE_TOOLCHAIN_FILE={os.path.join(tc.sdk_libs(), 'cmake', 'sdk.cmake')}",
          "-DPSN00BSDK_TARGET=mipsel-none-elf",
-         "-DCMAKE_BUILD_TYPE=Debug"],
+         f"-DCMAKE_BUILD_TYPE={config}"],
         env=env, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -172,13 +172,19 @@ def _configure(src, build_dir, env):
         raise SystemExit("ncc: cmake configure failed.")
 
 
+def _config_of(args):
+    """Release is -O2 and inlines the thin script wrappers; Debug is -Og."""
+    return "Release" if getattr(args, "release", False) else "Debug"
+
+
 def build(args):
     src = _resolve(getattr(args, "path", None))
-    build_dir, redirected = tc.build_dir_for(src)
+    config = _config_of(args)
+    build_dir, redirected = tc.build_dir_for(src, config)
     env = tc.build_env()
     started = time.time()
 
-    print(f"Building {os.path.basename(src)}")
+    print(f"Building {os.path.basename(src)}  [{config}]")
     if redirected:
         print("  note: project path contains a space, so the build directory is")
         print("        redirected out of tree (docs/KNOWN-ISSUES.md)")
@@ -212,7 +218,7 @@ def build(args):
 
     os.makedirs(build_dir, exist_ok=True)
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):
-        _configure(src, build_dir, env)
+        _configure(src, build_dir, env, config)
 
     cmake = tc.require("cmake")
     r = subprocess.run([cmake, "--build", build_dir], env=env,
@@ -250,7 +256,7 @@ def run(args):
         return rc
 
     src = _resolve(getattr(args, "path", None))
-    build_dir, _ = tc.build_dir_for(src)
+    build_dir, _ = tc.build_dir_for(src, _config_of(args))
     cue = os.path.join(build_dir, "game.cue")
 
     duck = tc.find_duckstation()
@@ -274,11 +280,15 @@ def run(args):
 # ---- clean --------------------------------------------------------------
 
 def clean(args):
+    """Remove both configurations -- 'clean' should mean clean."""
     src = _resolve(getattr(args, "path", None))
-    build_dir, _ = tc.build_dir_for(src)
-    if os.path.isdir(build_dir):
-        shutil.rmtree(build_dir)
-        print(f"Removed {build_dir}")
-    else:
+    removed = False
+    for config in ("Debug", "Release"):
+        build_dir, _ = tc.build_dir_for(src, config)
+        if os.path.isdir(build_dir):
+            shutil.rmtree(build_dir)
+            print(f"Removed {build_dir}")
+            removed = True
+    if not removed:
         print("Nothing to clean.")
     return 0

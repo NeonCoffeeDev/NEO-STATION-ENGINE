@@ -33,10 +33,14 @@ def main(argv=None):
 
     b = sub.add_parser("build", help="build a project to .bin/.cue")
     b.add_argument("path", nargs="?", default=".")
+    b.add_argument("-r", "--release", action="store_true",
+                   help="optimise (-O2) instead of the default debug build (-Og)")
     b.set_defaults(func=build_mod.build)
 
     r = sub.add_parser("run", help="build, then launch it in DuckStation")
     r.add_argument("path", nargs="?", default=".")
+    r.add_argument("-r", "--release", action="store_true",
+                   help="optimise (-O2) instead of the default debug build (-Og)")
     r.set_defaults(func=build_mod.run)
 
     c = sub.add_parser("clean", help="delete a project's build directory")

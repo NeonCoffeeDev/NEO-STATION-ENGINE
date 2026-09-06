@@ -1,0 +1,18 @@
+# ninja log v5
+32	298	8104119324438831	CMakeFiles/game.dir/src/nc_input.c.obj	2506be68252f0fe9
+41	342	8104119324983783	CMakeFiles/game.dir/src/nc_scene.c.obj	dfa822255e5dd605
+21	350	8104119324833690	CMakeFiles/game.dir/src/main.c.obj	f78b13ad65b5cb18
+37	350	8104119325003737	CMakeFiles/game.dir/src/nc_pkg.c.obj	8774468986e6fc21
+46	357	8104119325113725	CMakeFiles/game.dir/src/nc_script.c.obj	9d2dbe050935134f
+26	359	8104119325123707	CMakeFiles/game.dir/src/nc_gfx.c.obj	fd5588b041594cfb
+343	388	8104119325713472	CMakeFiles/game.dir/incbin_49d26a736e800a46060dff353447a270aee79fe4.s.obj	89a11f042114fe05
+299	434	8104119326178018	CMakeFiles/game.dir/src/nc_script_generated.c.obj	38cd50fd8b85516
+435	640	8104119328272415	game.elf	21bc2ce5ebf668cb
+435	640	8104119328272415	game.exe	21bc2ce5ebf668cb
+435	640	8104119328272415	game.map	21bc2ce5ebf668cb
+435	640	8104119328272415	C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/game.exe	21bc2ce5ebf668cb
+435	640	8104119328272415	C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/game.map	21bc2ce5ebf668cb
+640	690	8104119328761134	game.bin	ee9adb181ddd997a
+640	690	8104119328761134	game.cue	ee9adb181ddd997a
+640	690	8104119328761134	C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/game.bin	ee9adb181ddd997a
+640	690	8104119328761134	C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/game.cue	ee9adb181ddd997a

@@ -1,0 +1,4 @@
+C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/CMakeFiles/game.dir
+C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/CMakeFiles/iso.dir
+C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/CMakeFiles/edit_cache.dir
+C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/build-release/CMakeFiles/rebuild_cache.dir

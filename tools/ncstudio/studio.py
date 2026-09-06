@@ -97,6 +97,7 @@ class Studio:
         self.projects = []
         self.settings = load_settings()
         self.autoscroll = tk.BooleanVar(value=self.settings.get("autoscroll", True))
+        self.release = bool(self.settings.get("release", False))
 
         root.title("NC Studio")
         root.configure(bg=BG)
@@ -123,6 +124,7 @@ class Studio:
         self._bind_keys()
 
         self.refresh_projects()
+        self._sync_config_button()
         self.set_target(self.settings.get("target", "ps1"))
         self.log(f"repo   {self.repo}", CYAN)
         self.log("F5 build+run   F7 build   F9 doctor   Ctrl+L clear", DIM)
@@ -185,6 +187,11 @@ class Studio:
             b = Button(row, label, lambda k=key: self.set_target(k), AMBER, width=8)
             b.pack(side="left", padx=(0, 4))
             self.tbuttons[key] = b
+
+        # Debug is -Og and keeps every function separate, which is what you want
+        # while iterating. Release is -O2 and inlines the script away.
+        self.b_cfg = Button(row, "DEBUG", self.toggle_config, DIM, width=9)
+        self.b_cfg.pack(side="right")
 
     def _build_actions(self, parent):
         g = group(parent, "actions", CYAN)
@@ -339,6 +346,22 @@ class Studio:
         if key == "ps2":
             self.log("PS2 backend is not implemented yet -- roadmap M6.", AMBER)
 
+    def toggle_config(self):
+        if self.running:
+            return
+        self.release = not self.release
+        self._sync_config_button()
+        self.log("build configuration: %s"
+                 % ("Release (-O2)" if self.release else "Debug (-Og)"), CYAN)
+
+    def _sync_config_button(self):
+        if self.release:
+            self.b_cfg.label.configure(text="RELEASE", fg=BG, bg=GREEN)
+            self.b_cfg.accent = GREEN
+        else:
+            self.b_cfg.label.configure(text="DEBUG", fg=DIM, bg=PANEL_HI)
+            self.b_cfg.accent = DIM
+
     def show_hardware(self, key):
         for w in self.hw.winfo_children():
             w.destroy()
@@ -426,7 +449,7 @@ class Studio:
         p = self.selected_project()
         if not p:
             return
-        d, _ = tc.build_dir_for(p)
+        d, _ = tc.build_dir_for(p, "Release" if self.release else "Debug")
         if os.path.isdir(d):
             reveal(d)
         else:
@@ -617,10 +640,14 @@ class Studio:
             return
         self.show_tab("console")
         rel = os.path.relpath(p, self.repo)
+        argv = [cmd, p]
+        if self.release and cmd in ("build", "run"):
+            argv.append("--release")
+        shown = " ".join(["ncc", cmd, rel] + (["--release"] if len(argv) > 2 else []))
         self.log("")
-        self.log("> ncc %s %s" % (cmd, rel), CYAN)
+        self.log("> " + shown, CYAN)
         self.set_status("%s %s ..." % (cmd, rel), AMBER)
-        self._spawn([cmd, p], "%s %s" % (cmd, rel))
+        self._spawn(argv, "%s %s" % (cmd, rel))
 
     def check_toolchain(self):
         if self.running:
@@ -767,6 +794,7 @@ class Studio:
             "target": self.target.get(),
             "project": self.selected_project() or "",
             "autoscroll": bool(self.autoscroll.get()),
+            "release": self.release,
         })
         save_settings(self.settings)
         self.root.destroy()

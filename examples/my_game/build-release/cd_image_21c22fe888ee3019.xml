@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Disc layout for my_game, consumed by mkpsxiso.
+
+	Paths are relative to the BUILD directory. To pull a file from the source tree,
+	prefix it with C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game. Names on disc must be 8.3 and the root
+	directory holds at most 30 entries.
+-->
+<iso_project>
+	<track type="data">
+		<identifiers
+			system        ="PLAYSTATION"
+			volume        ="MY_GAME"
+			volume_set    ="MY_GAME"
+			publisher     ="NEON COFFEE"
+			data_preparer ="NEON COFFEE / PSN00BSDK 0.24"
+			application   ="PLAYSTATION"
+		/>
+
+		<!--
+			Real consoles in some regions want a region license file here. Emulators
+			and US consoles generally do not. License data is not redistributable,
+			so it is not shipped with PSn00bSDK.
+		-->
+		<!--<license file="C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/license.dat" />-->
+
+		<directory_tree>
+			<file name="SYSTEM.CNF" type="data" source="C:/Users/bates/Desktop/NC-HOMEBREW/examples/my_game/system.cnf" />
+			<file name="GAME.EXE"   type="data" source="game.exe" />
+
+			<!-- Pad the image out so seek times resemble a real pressed disc. -->
+			<dummy sectors="1024"/>
+		</directory_tree>
+	</track>
+</iso_project>

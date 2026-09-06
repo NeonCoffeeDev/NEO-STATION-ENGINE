@@ -95,7 +95,7 @@ def build_env():
     return env
 
 
-def build_dir_for(source_dir):
+def build_dir_for(source_dir, config="Debug"):
     """Pick a build directory that never contains a space.
 
     PSn00bSDK chains its post-link steps through a nested `cmd /C "... && cmd /C
@@ -107,7 +107,10 @@ def build_dir_for(source_dir):
     a hash of the source path when we cannot.
     """
     source_dir = os.path.abspath(source_dir)
-    in_tree = os.path.join(source_dir, "build")
+    # Debug and Release get separate directories so switching between them does
+    # not force a full rebuild every time.
+    suffix = "" if config == "Debug" else "-" + config.lower()
+    in_tree = os.path.join(source_dir, "build" + suffix)
     if " " not in in_tree:
         return in_tree, False
 
@@ -116,7 +119,8 @@ def build_dir_for(source_dir):
         base = os.environ.get("SystemDrive", "C:") + os.sep
     tag = hashlib.sha1(source_dir.encode("utf-8")).hexdigest()[:12]
     name = "".join(c for c in os.path.basename(source_dir) if c.isalnum()) or "project"
-    return os.path.join(base, "NeonCoffee", "build", f"{name}-{tag}"), True
+    return os.path.join(base, "NeonCoffee", "build",
+                        f"{name}-{tag}{suffix}"), True
 
 
 DUCKSTATION_DATA_DIRS = [

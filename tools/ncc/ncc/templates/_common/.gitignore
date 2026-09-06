@@ -10,3 +10,5 @@ scene.ncpkg
 
 # generated from script.ncs by ncc build
 src/nc_script_generated.c
+
+build-release/
