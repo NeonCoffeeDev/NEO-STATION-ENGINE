@@ -65,6 +65,8 @@ Godot). Object 0 in a level is conventionally the player.
 |---|---|
 | `print(text)` | Write a string to the PS1 TTY. Shows in NC Studio's **PS1 TTY** pane. |
 | `print_num(n)` | Write a number. |
+| `draw_text(x, y, "TEXT")` | Draw on the TV with the debug font. 0,0 top-left of 320x240. |
+| `draw_num(x, y, n)` | Same, for a number -- scores, timers, debug values. |
 
 ### Input
 | | |
@@ -171,8 +173,8 @@ Honest limits of the current version:
   is built in.
 - **No sound.**
 - **Integers only**, 32-bit.
-- **No text on screen.** `print()` goes to the TTY log, not the TV. Drawing text
-  needs the texture work that is not done yet.
+- **The debug font only.** `draw_text()` works, but it is PSn00bSDK's built-in
+  font -- fixed size, one colour. A custom font needs its own texture work.
 
 ## Seeing what it generated
 

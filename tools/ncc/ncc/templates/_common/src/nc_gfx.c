@@ -207,7 +207,6 @@ void nc_mesh_draw(const NC_Mesh *mesh, const SVECTOR *rot, const VECTOR *pos)
 
     for (i = 0; i < mesh->quad_count; i++) {
         const NC_Quad *q = &mesh->quads[i];
-        POLY_G4 *poly;
 
         /* Transform the first three vertices as a batch. */
         gte_ldv3(&mesh->verts[q->v0], &mesh->verts[q->v1], &mesh->verts[q->v2]);
@@ -227,34 +226,64 @@ void nc_mesh_draw(const NC_Mesh *mesh, const SVECTOR *rot, const VECTOR *pos)
         if (z <= 0 || z >= NC_OT_LEN)
             continue;
 
-        poly = (POLY_G4 *)nc_gfx_alloc(sizeof(POLY_G4));
-        if (!poly)
-            return;                              /* packet buffer exhausted */
+        if (mesh->uvs) {
+            /* Textured: a flat-shaded, textured quad. The lit colour modulates
+             * the texture, so lighting still applies. */
+            const uint8_t *uv = &mesh->uvs[i * 8];
+            POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
+            if (!poly)
+                return;                          /* packet buffer exhausted */
 
-        setPolyG4(poly);
+            setPolyFT4(poly);
 
-        gte_stsxy0(&poly->x0);
-        gte_stsxy1(&poly->x1);
-        gte_stsxy2(&poly->x2);
+            gte_stsxy0(&poly->x0);
+            gte_stsxy1(&poly->x1);
+            gte_stsxy2(&poly->x2);
+            gte_ldv0(&mesh->verts[q->v3]);
+            gte_rtps();
+            gte_stsxy(&poly->x3);
 
-        /* The fourth vertex has to go through on its own. */
-        gte_ldv0(&mesh->verts[q->v3]);
-        gte_rtps();
-        gte_stsxy(&poly->x3);
+            gte_ldrgb(&poly->r0);
+            gte_ldv0(&mesh->norms[i]);
+            gte_ncs();
+            gte_strgb(&poly->r0);
 
-        /* Light it. gte_ldrgb primes the GTE with the primitive code so the result
-         * comes back in the right format. */
-        gte_ldrgb(&poly->r0);
-        gte_ldv0(&mesh->norms[i]);
-        gte_ncs();
-        gte_strgb(&poly->r0);
+            setUV4(poly, uv[0], uv[1], uv[2], uv[3],
+                   uv[4], uv[5], uv[6], uv[7]);
+            poly->tpage = mesh->tpage;
+            poly->clut = mesh->clut;
 
-        /* POLY_G4 is Gouraud: give the other three corners the same lit color so the
-         * face reads as flat-shaded rather than uninitialized. */
-        poly->r1 = poly->r2 = poly->r3 = poly->r0;
-        poly->g1 = poly->g2 = poly->g3 = poly->g0;
-        poly->b1 = poly->b2 = poly->b3 = poly->b0;
+            nc_gfx_sort(z, poly);
+        } else {
+            POLY_G4 *poly = (POLY_G4 *)nc_gfx_alloc(sizeof(POLY_G4));
+            if (!poly)
+                return;
 
-        nc_gfx_sort(z, poly);
+            setPolyG4(poly);
+
+            gte_stsxy0(&poly->x0);
+            gte_stsxy1(&poly->x1);
+            gte_stsxy2(&poly->x2);
+
+            /* The fourth vertex has to go through on its own. */
+            gte_ldv0(&mesh->verts[q->v3]);
+            gte_rtps();
+            gte_stsxy(&poly->x3);
+
+            /* Light it. gte_ldrgb primes the GTE with the primitive code so the
+             * result comes back in the right format. */
+            gte_ldrgb(&poly->r0);
+            gte_ldv0(&mesh->norms[i]);
+            gte_ncs();
+            gte_strgb(&poly->r0);
+
+            /* POLY_G4 is Gouraud: give the other three corners the same lit
+             * colour so the face reads as flat-shaded, not uninitialised. */
+            poly->r1 = poly->r2 = poly->r3 = poly->r0;
+            poly->g1 = poly->g2 = poly->g3 = poly->g0;
+            poly->b1 = poly->b2 = poly->b3 = poly->b0;
+
+            nc_gfx_sort(z, poly);
+        }
     }
 }

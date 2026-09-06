@@ -74,11 +74,36 @@ Added since the last note:
 
 Still missing, in the order they hurt most:
 
-1. **Textures.** Everything is flat-lit Gouraud. This blocks 2D entirely and is
-   the biggest visual gap in 3D. Needs TIM plus VRAM allocation in the packer.
+1. ~~**Textures.**~~ **Done.** 8-bit CLUT, 8 slots, PNG in / VRAM out. Meshes
+   name a texture and get POLY_FT4 with lighting still applied.
 2. **2D.** Sprites and tilemaps in screen space. Cheap on this hardware once
    textures exist -- and arguably the faster route to a finished-looking game.
 3. **Collision.** Scripts can compare positions by hand; nothing is built in.
-4. **Text on screen.** `print()` reaches the TTY log, not the TV. Needs textures.
+4. ~~**Text on screen.**~~ **Done**, via the SDK debug font. A custom font is
+   still open.
 5. **Audio.**
 6. **Per-object scripts.** One script per project today; branch on `scene()`.
+
+
+## Update, 2026-09-06 (later)
+
+- **Textures.** PNG -> 8-bit CLUT -> VRAM, 8 slots of up to 256x240. Textured
+  faces use POLY_FT4 and are still lit, so the texture is modulated rather than
+  replacing the shading. VRAM layout is documented in one place, in
+  tools/ncc/ncc/textures.py, and shipped to the console rather than recomputed
+  there.
+- **Text on the TV**, via the SDK debug font: draw_text() and draw_num().
+
+That clears the prerequisite for 2D. Sprites are textured quads in screen space
+and skip the GTE entirely, so the remaining work is a screen-space primitive path
+plus a Godot 2D exporter -- not another VRAM problem.
+
+Still open, in order:
+
+1. **2D.** Sprites and tilemaps. The texture work above is the hard part; this is
+   mostly a second draw path.
+2. **Godot texture export.** Textures are referenced from scene.json by hand
+   today; the exporter should pull them from material albedo.
+3. **Collision.**
+4. **Audio.**
+5. **Per-object scripts**, and 4-bit textures for twice the VRAM budget.

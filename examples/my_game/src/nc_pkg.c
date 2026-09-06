@@ -14,7 +14,7 @@
 
 #include "nc.h"
 
-#define NC_PKG_VERSION 3
+#define NC_PKG_VERSION 4
 
 /* Mirrors the writer's layout exactly. Both sides must change together, which
  * is what the version field is for. */
@@ -36,9 +36,20 @@ typedef struct {
 typedef struct {
     uint16_t vert_count;
     uint16_t quad_count;
-    uint16_t flags;
-    uint16_t pad;
+    uint16_t flags;             /* bit 0: textured                        */
+    uint16_t tex_slot;
 } MeshHeader;
+
+#define MESH_TEXTURED 1
+
+/* Where a texture and its palette go in VRAM. The packer decides the layout and
+ * ships it here, so the placement rules live in exactly one place --
+ * tools/ncc/ncc/textures.py -- instead of being duplicated on both sides. */
+typedef struct {
+    uint16_t slot, w, h, pad;
+    RECT     tex_rect;
+    RECT     clut_rect;
+} TexHeader;
 
 typedef struct {
     uint16_t instance_count;
@@ -64,6 +75,7 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
 
     pkg->mesh_count = 0;
     pkg->scene_count = 0;
+    pkg->texture_count = 0;
 
     if (!fourcc_is(hdr->magic, "NCPK")) {
         printf("nc_pkg: bad magic -- not a .ncpkg\n");
@@ -81,7 +93,41 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
         const PkgEntry *e = &table[i];
         const uint8_t *p = base + e->offset;
 
-        if (fourcc_is(e->fourcc, "MESH")) {
+        if (fourcc_is(e->fourcc, "TEX0")) {
+            const TexHeader *th = (const TexHeader *)p;
+            const uint32_t *pixels;
+            const uint32_t *palette;
+            uint32_t pixel_bytes;
+            NC_Texture *t;
+
+            if (th->slot >= NC_MAX_TEXTURES) {
+                printf("nc_pkg: texture slot %d is out of range\n", th->slot);
+                continue;
+            }
+
+            pixels = (const uint32_t *)(p + sizeof(TexHeader));
+            pixel_bytes = (uint32_t)th->w * th->h;
+            pixel_bytes = (pixel_bytes + 3) & ~3u;      /* packer pads to 4 */
+            palette = (const uint32_t *)((const uint8_t *)pixels + pixel_bytes);
+
+            /* Upload both to VRAM. DrawSync waits for the GPU to be idle --
+             * uploading underneath an in-flight draw corrupts it. */
+            DrawSync(0);
+            LoadImage(&th->tex_rect, pixels);
+            DrawSync(0);
+            LoadImage(&th->clut_rect, palette);
+            DrawSync(0);
+
+            t = &pkg->textures[th->slot];
+            /* 1 = 8-bit CLUT, 0 = no semi-transparency blending. */
+            t->tpage = getTPage(1, 0, th->tex_rect.x, th->tex_rect.y);
+            t->clut = getClut(th->clut_rect.x, th->clut_rect.y);
+            t->w = th->w;
+            t->h = th->h;
+            if ((int)th->slot >= pkg->texture_count)
+                pkg->texture_count = th->slot + 1;
+
+        } else if (fourcc_is(e->fourcc, "MESH")) {
             const MeshHeader *mh = (const MeshHeader *)p;
             const uint8_t *cursor = p + sizeof(MeshHeader);
             NC_Mesh *m;
@@ -107,7 +153,26 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
             m->norms = (const SVECTOR *)cursor;
             cursor += (size_t)mh->quad_count * sizeof(SVECTOR);
             m->quads = (const NC_Quad *)cursor;
+            cursor += (size_t)mh->quad_count * sizeof(NC_Quad);
             m->quad_count = mh->quad_count;
+
+            if (mh->flags & MESH_TEXTURED) {
+                /* Textures are packed before meshes, so the slot is already
+                 * uploaded and its tpage/clut resolved. */
+                m->uvs = cursor;
+                if (mh->tex_slot < NC_MAX_TEXTURES) {
+                    m->tpage = pkg->textures[mh->tex_slot].tpage;
+                    m->clut = pkg->textures[mh->tex_slot].clut;
+                } else {
+                    printf("nc_pkg: mesh %d wants missing texture slot %d\n",
+                           pkg->mesh_count - 1, mh->tex_slot);
+                    m->uvs = 0;
+                }
+            } else {
+                m->uvs = 0;
+                m->tpage = 0;
+                m->clut = 0;
+            }
 
         } else if (fourcc_is(e->fourcc, "SCN0")) {
             const SceneHeader *sh = (const SceneHeader *)p;
@@ -146,7 +211,7 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
         return 0;
     }
 
-    printf("nc_pkg: %d mesh(es), %d scene(s)\n",
-           pkg->mesh_count, pkg->scene_count);
+    printf("nc_pkg: %d mesh(es), %d texture(s), %d scene(s)\n",
+           pkg->mesh_count, pkg->texture_count, pkg->scene_count);
     return 1;
 }

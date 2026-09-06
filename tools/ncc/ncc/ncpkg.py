@@ -20,10 +20,13 @@ Design notes, and where this departs from the original draft in docs/NCPKG.md:
 """
 
 import json
+import os
 import struct
 
+from . import textures as tex_mod
+
 MAGIC = b"NCPK"
-VERSION = 3
+VERSION = 4
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -35,6 +38,10 @@ ONE = 4096                                  # 1.0 in 20.12 fixed point
 
 class NcpkgError(Exception):
     pass
+
+
+# Texture problems are reported the same way as any other packing problem.
+TextureError = tex_mod.TextureError
 
 
 # ---- geometry helpers ---------------------------------------------------
@@ -72,11 +79,30 @@ def _clamp_short(v, what):
 
 # ---- chunk builders -----------------------------------------------------
 
-def build_mesh(mesh):
-    """MESH: vertex positions, one normal per quad, then the quad indices."""
+def build_mesh(mesh, tex_slots=None):
+    """MESH: positions, one normal per quad, the quad indices, then UVs.
+
+    A mesh either has a texture or it does not; the flag in the header says
+    which, and the runtime picks POLY_FT4 or POLY_G4 accordingly.
+    """
     verts = mesh["verts"]
     quads = mesh["quads"]
     name = mesh.get("name", "?")
+    tex_slots = tex_slots or {}
+
+    tex_name = mesh.get("texture")
+    tex_slot = 0
+    tex_w = tex_h = 256
+    flags = 0
+    if tex_name is not None:
+        if tex_name not in tex_slots:
+            raise NcpkgError(
+                f"mesh '{name}' uses texture '{tex_name}', which is not in the "
+                f"'textures' list. Known: {', '.join(sorted(tex_slots)) or 'none'}")
+        info = tex_slots[tex_name]
+        tex_slot = info["slot"]
+        tex_w, tex_h = info["w"], info["h"]
+        flags |= 1
 
     if not verts or not quads:
         raise NcpkgError(f"mesh '{name}' has no geometry")
@@ -93,7 +119,7 @@ def build_mesh(mesh):
                 raise NcpkgError(f"mesh '{name}': face index {i} out of range")
 
     out = bytearray()
-    out += struct.pack("<HHHH", len(verts), len(quads), 0, 0)
+    out += struct.pack("<HHHH", len(verts), len(quads), flags, tex_slot)
     for v in verts:
         out += struct.pack("<hhhh",
                            _clamp_short(int(v[0]), f"mesh '{name}' vertex x"),
@@ -104,6 +130,27 @@ def build_mesh(mesh):
         out += struct.pack("<hhhh", n[0], n[1], n[2], 0)
     for q in quads:
         out += struct.pack("<HHHH", *q)
+
+    if flags & 1:
+        # A PS1 quad is two triangles sharing an edge, laid out as
+        # v0 v1 / v2 v3 -- so the corners map to the texture the same way every
+        # time unless the mesh supplies its own UVs.
+        uvs = mesh.get("uvs")
+        for i, q in enumerate(quads):
+            if uvs is not None and i < len(uvs):
+                corner = uvs[i]
+                if len(corner) != 8:
+                    raise NcpkgError(
+                        f"mesh '{name}': uvs[{i}] needs 8 numbers "
+                        f"(u,v for each of 4 corners), got {len(corner)}")
+                vals = [max(0, min(255, int(c))) for c in corner]
+            else:
+                # Span the texture, not the whole page. UVs are page-relative,
+                # so overshooting samples neighbouring VRAM.
+                mu, mv = tex_w - 1, tex_h - 1
+                vals = [0, 0, mu, 0, 0, mv, mu, mv]
+            out += struct.pack("<8B", *vals)
+
     return bytes(out)
 
 
@@ -158,7 +205,7 @@ def build_scene(scene, mesh_ids):
 
 # ---- container ----------------------------------------------------------
 
-def pack(doc):
+def pack(doc, base_dir="."):
     """Turn a project document into .ncpkg bytes.
 
     Accepts either a single scene, or {"meshes": [...], "scenes": [...]} where
@@ -177,12 +224,18 @@ def pack(doc):
     if len(scenes) > 255:
         raise NcpkgError("more than 255 scenes")
 
-    mesh_ids = {}
     chunks = []
+
+    # Textures first, so meshes can be validated against the slot table.
+    tex_chunks, tex_slots = tex_mod.build(doc.get("textures", []), base_dir)
+    for i, data in enumerate(tex_chunks):
+        chunks.append((b"TEX0", i, data))
+
+    mesh_ids = {}
     for i, mesh in enumerate(meshes):
         if "name" in mesh:
             mesh_ids[mesh["name"]] = i
-        chunks.append((b"MESH", i, build_mesh(mesh)))
+        chunks.append((b"MESH", i, build_mesh(mesh, tex_slots)))
 
     lookup = mesh_ids or {i: i for i in range(len(meshes))}
     for i, sc in enumerate(scenes):
@@ -216,9 +269,11 @@ def pack(doc):
 def pack_file(scene_path, out_path):
     with open(scene_path, encoding="utf-8") as fh:
         doc = json.load(fh)
-    data = pack(doc)
+    # Texture paths in the document are relative to the document itself.
+    data = pack(doc, os.path.dirname(os.path.abspath(scene_path)))
     with open(out_path, "wb") as fh:
         fh.write(data)
     scenes = doc.get("scenes", [doc])
     instances = sum(len(s.get("instances", [])) for s in scenes)
-    return len(data), len(doc.get("meshes", [])), instances, len(scenes)
+    return (len(data), len(doc.get("meshes", [])), instances, len(scenes),
+            len(doc.get("textures", [])))

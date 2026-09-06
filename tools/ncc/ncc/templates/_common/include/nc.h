@@ -53,7 +53,10 @@ typedef struct {
     const SVECTOR *verts;   /* positions, 16-bit ints                       */
     const SVECTOR *norms;   /* one face normal per quad, for lighting       */
     const NC_Quad *quads;
+    const uint8_t *uvs;     /* 8 bytes per quad (u,v x4); 0 if untextured   */
     int            quad_count;
+    uint16_t       tpage;   /* resolved from the texture at load time       */
+    uint16_t       clut;
 } NC_Mesh;
 
 /* Transform, light, cull and sort a mesh into this frame's ordering table.
@@ -108,10 +111,20 @@ typedef struct {
     SVECTOR cam_rot;
 } NC_Scene;
 
+#define NC_MAX_TEXTURES 8
 #define NC_MAX_MESHES  64
 #define NC_MAX_SCENES  16
 
+/* A texture, once it is in VRAM. tpage and clut are the packed words the GPU
+ * wants; the runtime never needs the pixels again after uploading them. */
 typedef struct {
+    uint16_t tpage, clut;
+    int      w, h;
+} NC_Texture;
+
+typedef struct {
+    NC_Texture textures[NC_MAX_TEXTURES];
+    int      texture_count;
     NC_Mesh  meshes[NC_MAX_MESHES];
     int      mesh_count;
     NC_Scene scenes[NC_MAX_SCENES];

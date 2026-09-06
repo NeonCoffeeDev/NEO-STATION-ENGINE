@@ -156,6 +156,51 @@ Also not yet supported, and worth knowing before you build something around them
   quads total. Those are where it stops being plausible on real hardware, not
   hard limits.
 
+## 3b. Textures and text
+
+### Textures
+
+Drop a PNG in your project and name it in `scene.json`:
+
+```json
+{
+  "textures": [
+    { "name": "checker", "file": "textures/checker.png" }
+  ],
+  "meshes": [
+    { "name": "block", "texture": "checker", "verts": [...], "quads": [...] }
+  ]
+}
+```
+
+`ncc build` quantises it to a 256-colour palette, converts to the PS1's BGR555,
+and places it in VRAM. Faces get the whole texture unless the mesh supplies its
+own `uvs`.
+
+The limits are the hardware's, not arbitrary:
+
+| | |
+|---|---|
+| **8 textures** | Each needs its own VRAM slot. |
+| **256 x 240 max** | Bigger will not fit a texture page. |
+| **Even width** | Two 8-bit texels share one 16-bit VRAM cell. |
+| **256 colours** | 8-bit CLUT. Quantisation is automatic. |
+
+VRAM is 1024x512 and the framebuffers already occupy a third of it. The full map
+is documented at the top of `tools/ncc/ncc/textures.py`.
+
+### Text
+
+`print()` goes to the TTY log. To put words on the TV, use the built-in debug
+font:
+
+```gdscript
+draw_text(96, 40, "MY GAME")
+draw_num(24, 20, score)
+```
+
+Screen coordinates, 0,0 top-left, 320x240. It is drawn over everything else.
+
 ## 4. The development loop
 
 1. Edit `src/main.c` (the Studio's `main.c` button opens it).
