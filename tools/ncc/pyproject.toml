@@ -1,0 +1,13 @@
+[project]
+name = "ncc"
+version = "0.0.1"
+description = "Neon Coffee build orchestrator for PS1/PS2 homebrew"
+requires-python = ">=3.9"
+dependencies = ["Pillow>=10.0"]
+
+[project.scripts]
+ncc = "ncc.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

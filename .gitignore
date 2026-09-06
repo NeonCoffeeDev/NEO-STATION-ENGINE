@@ -1,0 +1,28 @@
+# Build output
+build/
+dist/
+out/
+*.elf
+*.psexe
+*.exe
+*.bin
+*.cue
+*.iso
+*.ncpkg
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+
+# Godot
+.godot/
+.import/
+export_presets.cfg
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
