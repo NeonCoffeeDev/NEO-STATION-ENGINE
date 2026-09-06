@@ -35,6 +35,14 @@ void *nc_gfx_alloc(int bytes);          /* NULL when the packet buffer is full *
 void  nc_gfx_sort(int otz, void *prim); /* bucket a primitive by depth          */
 void  nc_gfx_flip(void);                /* wait for vblank, swap, draw          */
 
+/* Draw a line of text over everything else, using the built-in debug font.
+ * Screen coordinates, 0,0 top-left. Call between frames like any draw call. */
+void  nc_text(int x, int y, const char *text);
+
+/* Room reserved per nc_text() call before the unused tail is handed back. One
+ * sprite per character, so this caps a single line at roughly 120 characters. */
+#define NC_TEXT_BUDGET 3072
+
 /* ---- meshes ------------------------------------------------------------ */
 
 /* A quad face, as four indices into the vertex array. Quads are native on PS1 and

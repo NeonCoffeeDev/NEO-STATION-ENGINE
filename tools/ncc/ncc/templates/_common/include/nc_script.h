@@ -21,6 +21,8 @@ void nc_script_update(void);
 /* --- output --- */
 void nc_s_print(const char *msg);
 void nc_s_print_num(int value);
+int  nc_s_draw_text(int x, int y, const char *msg);
+int  nc_s_draw_num(int x, int y, int value);
 
 /* --- input --- */
 int  nc_s_btn_held(int button);

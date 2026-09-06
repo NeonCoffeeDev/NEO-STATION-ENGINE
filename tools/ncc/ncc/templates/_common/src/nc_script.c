@@ -38,6 +38,24 @@ void nc_s_print_num(int value)
 }
 
 
+int nc_s_draw_text(int x, int y, const char *msg)
+{
+    nc_text(x, y, msg);
+    return 0;
+}
+
+
+int nc_s_draw_num(int x, int y, int value)
+{
+    /* A fixed buffer, because there is no allocator here and a 32-bit int
+     * never needs more than 11 characters plus a terminator. */
+    char buf[16];
+    sprintf(buf, "%d", value);
+    nc_text(x, y, buf);
+    return 0;
+}
+
+
 /* --- input --- */
 
 int nc_s_btn_held(int button)

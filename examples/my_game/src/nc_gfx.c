@@ -36,6 +36,11 @@ static MATRIX light_mtx = {
 
 static int clear_r = 24, clear_g = 16, clear_b = 48;
 
+/* Where the built-in debug font goes in VRAM. The two 320x240 framebuffers
+ * occupy x 0..639 of rows 0..239, so the right-hand strip is free. */
+#define FONT_VRAM_X 960
+#define FONT_VRAM_Y 0
+
 /* The view matrix: the inverse of the camera's transform. Identity means the
  * camera sits at the origin looking down +Z. */
 static MATRIX view;
@@ -79,7 +84,31 @@ void nc_gfx_init(void)
     gte_SetBackColor(63, 63, 63);                /* ambient */
     gte_SetColorMatrix(&color_mtx);
 
+    /* PSn00bSDK ships a small debug font. It is not pretty, but it puts text on
+     * the TV today rather than after the texture work. */
+    FntLoad(FONT_VRAM_X, FONT_VRAM_Y);
+
     nc_camera_reset();
+}
+
+
+void nc_text(int x, int y, const char *text)
+{
+    char *start, *end;
+
+    if (text == 0)
+        return;
+
+    /* FntSort writes one sprite per character and hands back where it stopped,
+     * so reserve a generous block and then hand the unused tail back. */
+    start = (char *)nc_gfx_alloc(NC_TEXT_BUDGET);
+    if (!start)
+        return;
+
+    end = (char *)FntSort(db[db_active].ot, start, x, y, text);
+
+    /* Rewind the bump allocator to what was actually used. */
+    db_next = end;
 }
 
 

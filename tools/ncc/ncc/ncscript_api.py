@@ -14,6 +14,11 @@ FUNCTIONS = {
     "print":         {"c": "nc_s_print",        "args": 1},
     "print_num":     {"c": "nc_s_print_num",    "args": 1},
 
+    # --- text on screen (built-in debug font) ---
+    # Screen coordinates, 0,0 top-left, 320x240.
+    "draw_text":     {"c": "nc_s_draw_text",    "args": 3},
+    "draw_num":      {"c": "nc_s_draw_num",     "args": 3},
+
     # --- input ---
     # held() is true every frame the button is down; pressed() only on the frame
     # it goes down, which is what you want for menus and jumps.

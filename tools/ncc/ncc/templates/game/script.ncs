@@ -41,6 +41,10 @@ func _update():
 func update_menu():
     pulse = pulse + 1
 
+    # Text uses the built-in debug font. Screen space, 0,0 is top-left of 320x240.
+    draw_text(96, 40, "@NAME@")
+    draw_text(84, 170, "PRESS START")
+
     # sin() returns fixed point: -4096..4096 means -1.0..1.0. Dividing scales
     # it down to a gentle bob of about +/- 170 units.
     var bob = sin(pulse * 16) / 24
@@ -51,6 +55,11 @@ func update_menu():
 
 
 func update_level():
+    draw_text(8, 8, "LEVEL 1")
+    draw_text(8, 20, "X")
+    draw_num(24, 20, get_x(player))
+    draw_text(8, 220, "SELECT = MENU")
+
     if btn_held(BTN_LEFT):
         move(player, -speed, 0, 0)
     if btn_held(BTN_RIGHT):
