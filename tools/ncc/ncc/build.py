@@ -163,6 +163,60 @@ def new(args):
     return 0
 
 
+MUSIC_BEGIN = "<!-- NC:MUSIC -->"
+MUSIC_END = "<!-- /NC:MUSIC -->"
+
+
+def _sync_music_tracks(src):
+    """Rewrite iso.xml's music region from scene.json's "music" list.
+
+    Music is a CD-DA track rather than an SPU sample -- a song is far larger
+    than the SPU's 512 KB -- and mkpsxiso needs each one declared in the disc
+    layout. Keeping that in step by hand is exactly the sort of thing that
+    silently produces a game with no music.
+    """
+    iso = os.path.join(src, "iso.xml")
+    scene = os.path.join(src, "scene.json")
+    if not (os.path.isfile(iso) and os.path.isfile(scene)):
+        return
+
+    with open(scene, encoding="utf-8") as fh:
+        try:
+            tracks = json.load(fh).get("music", [])
+        except ValueError:
+            return                      # the scene check reports this properly
+
+    with open(iso, encoding="utf-8") as fh:
+        text = fh.read()
+    if MUSIC_BEGIN not in text or MUSIC_END not in text:
+        if tracks:
+            print("  note: iso.xml has no NC:MUSIC markers, so music tracks "
+                  "were not added")
+        return
+
+    lines = []
+    for n, rel in enumerate(tracks):
+        path = rel if os.path.isabs(rel) else os.path.join(src, rel)
+        if not os.path.isfile(path):
+            raise SystemExit(
+                "ncc: music track %d not found: %s\n"
+                "     'music' in scene.json lists files relative to the "
+                "project." % (n + 2, path))
+        lines.append(
+            '\t<track type="audio" source="${PROJECT_SOURCE_DIR}/%s" />'
+            % rel.replace("\\", "/"))
+
+    head = text.split(MUSIC_BEGIN)[0]
+    tail = text.split(MUSIC_END, 1)[1]
+    body = ("\n" + "\n".join(lines) + "\n\t") if lines else "\n\t"
+    new = head + MUSIC_BEGIN + body + MUSIC_END + tail
+    if new != text:
+        with open(iso, "w", encoding="utf-8") as fh:
+            fh.write(new)
+    if tracks:
+        print(f"  music: {len(tracks)} CD track(s) -> tracks 2..{len(tracks) + 1}")
+
+
 # ---- build --------------------------------------------------------------
 
 def _configure(src, build_dir, env, config):
@@ -226,6 +280,8 @@ def build(args):
         except ncscript.ScriptError as exc:
             raise SystemExit(f"ncc: script.ncs -- {exc}")
         print(f"  script.ncs -> C  ({lines} lines)")
+
+    _sync_music_tracks(src)
 
     os.makedirs(build_dir, exist_ok=True)
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):

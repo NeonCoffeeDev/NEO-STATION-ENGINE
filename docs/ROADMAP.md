@@ -175,3 +175,29 @@ Still open:
 2. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
 3. **Per-object scripts**, 4-bit textures, LTO.
 4. **PS2.** Untouched -- see M6.
+
+
+## Update, 2026-09-06 (music, and the shooter goes vertical)
+
+- **Music via CD audio.** Red Book tracks on the disc, streamed by the drive
+  into the SPU mixer: no main RAM, no SPU RAM, no CPU. `ncc build` keeps the
+  marked region of iso.xml in step with the "music" list in scene.json, because
+  forgetting that produces a game that silently has no music. Verified on the
+  emulator by the drive reporting CDDA sectors from track 2.
+- **Screen shake.** A decaying random offset, strongest-wins rather than
+  additive so several explosions do not compound into a screen that never
+  settles. Sprites marked `"fixed"` ignore it, which is what lets the panels and
+  HUD stay still while the playfield jolts.
+- **The shooter is now vertical**, Galaga-style, with a narrow playfield framed
+  by PC-98/Konami-style side panels. That framing is not decoration: 320x240 is
+  far wider than a vertical shmup wants, and arcade boards solved it the same way.
+  Adds explosions on a ring buffer, enemies that bounce off the panel edges,
+  drifting descent, and a HUD that sits inside the panel windows.
+
+Still open:
+
+1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+2. **CD streaming for data**, which would let levels exceed RAM -- and would have
+   to share the drive with music.
+3. **Per-object scripts**, 4-bit textures, LTO.
+4. **PS2.** Untouched -- see M6.

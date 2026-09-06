@@ -32,4 +32,12 @@
 			<dummy sectors="1024"/>
 		</directory_tree>
 	</track>
+	<!--
+		Music tracks. Everything between these markers is rewritten by
+		`ncc build` from the "music" list in scene.json -- edit that, not this.
+		Track 1 is the data track above, so the first song is track 2.
+	-->
+	<!-- NC:MUSIC -->
+	<track type="audio" source="${PROJECT_SOURCE_DIR}/music/theme.wav" />
+	<!-- /NC:MUSIC -->
 </iso_project>

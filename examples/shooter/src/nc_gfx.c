@@ -45,6 +45,12 @@ static int clear_r = 24, clear_g = 16, clear_b = 48;
  * camera sits at the origin looking down +Z. */
 static MATRIX view;
 
+/* Screen shake. Magnitude decays a little each frame and the offset is
+ * re-rolled, which looks like a jolt settling rather than a vibration. */
+static int shake_mag;
+static int shake_ox, shake_oy;
+static unsigned long shake_rng = 0x2545F491;
+
 static void setup_buffer(int i, int x)
 {
     SetDefDispEnv(&db[i].disp, x, 0, NC_SCREEN_W, NC_SCREEN_H);
@@ -184,12 +190,51 @@ void nc_gfx_flip(void)
     DrawOTag(db[1 - db_active].ot + (NC_OT_LEN - 1));
 }
 
+void nc_shake_add(int amount)
+{
+    /* Strongest wins rather than accumulating: three explosions at once should
+     * not multiply into a screen that never settles. */
+    if (amount > shake_mag)
+        shake_mag = amount;
+    if (shake_mag > 16)
+        shake_mag = 16;
+}
+
+
+void nc_shake_update(void)
+{
+    if (shake_mag <= 0) {
+        shake_mag = 0;
+        shake_ox = shake_oy = 0;
+        return;
+    }
+
+    shake_rng = shake_rng * 1103515245UL + 12345UL;
+    shake_ox = (int)((shake_rng >> 16) % (unsigned long)(shake_mag * 2 + 1))
+               - shake_mag;
+    shake_rng = shake_rng * 1103515245UL + 12345UL;
+    shake_oy = (int)((shake_rng >> 16) % (unsigned long)(shake_mag * 2 + 1))
+               - shake_mag;
+
+    shake_mag--;
+}
+
+
+int nc_shake_x(void) { return shake_ox; }
+int nc_shake_y(void) { return shake_oy; }
+
+
 void nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
-                    int u, int v)
+                    int u, int v, int fixed)
 {
     POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
     if (!poly)
         return;
+
+    if (!fixed) {
+        x += shake_ox;
+        y += shake_oy;
+    }
 
     setPolyFT4(poly);
 

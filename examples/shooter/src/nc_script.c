@@ -71,6 +71,27 @@ int nc_s_sound_count(void)
 }
 
 
+int nc_s_play_music(int track)
+{
+    nc_music_play(track);
+    return 0;
+}
+
+
+int nc_s_stop_music(void)
+{
+    nc_music_stop();
+    return 0;
+}
+
+
+int nc_s_shake(int amount)
+{
+    nc_shake_add(amount);
+    return 0;
+}
+
+
 /* --- input --- */
 
 int nc_s_btn_held(int button)

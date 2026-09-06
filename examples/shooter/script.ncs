@@ -1,51 +1,62 @@
-# @NAME@ - a side-scrolling space shooter
+# @NAME@ - a vertical shooter
 #
-# A complete small game in NCScript. Read this top to bottom and you have most of
-# what you need to write your own.
+# Galaga-style: you sit at the bottom, everything comes down at you, and the
+# playfield is a narrow column with decorative panels either side. That framing
+# is not decoration for its own sake -- a 320x240 screen is far wider than a
+# vertical shmup wants, and arcade boards solved it exactly this way.
 #
-#   D-pad    fly
+#   D-pad    move
 #   X        shoot
 #   START    restart after a game over
 #
-# Sprite indices are the contract with scene.json. They are laid out in fixed
-# blocks -- one player, then bullets, then enemies, then the starfield -- because
-# there is no way to create a sprite at run time. Everything that will ever be on
-# screen exists from the start and is moved, shown and hidden.
+# Sprite indices are the contract with scene.json, and they are also the draw
+# order: sprite 0 is drawn last, so it ends up on top. Panels are 0 and 1 so
+# they cover anything that strays out of the playfield.
 #
-# That is not a limitation of this engine so much as how games on this hardware
-# were written: no allocator, so you decide your budget up front.
+# Nothing can be created at run time -- there is no allocator -- so every bullet,
+# enemy and explosion exists from the start and is shown, hidden and moved.
 
 
-# ---- the sprite layout, matching scene.json --------------------------------
+# ---- sprite layout, matching scene.json ------------------------------------
 
-var PLAYER    = 0
-var BULLET0   = 1
+var PANEL_L   = 0
+var PANEL_R   = 1
+var PLAYER    = 2
+var BULLET0   = 3
 var N_BULLETS = 8
-var ENEMY0    = 9
+var ENEMY0    = 11
 var N_ENEMIES = 6
-var STAR0     = 15
+var BOOM0     = 17
+var N_BOOMS   = 4
+var STAR0     = 21
 var N_STARS   = 16
+
+# ---- the playfield ---------------------------------------------------------
+# The panels are 64 wide on each side of a 320 screen.
+
+var FIELD_L = 64
+var FIELD_R = 256
+var SCREEN_H = 240
 
 # ---- tuning ----------------------------------------------------------------
 
 var PLAYER_SPEED = 2
-var BULLET_SPEED = 6
-var FIRE_DELAY   = 8        # frames between shots
-var SCREEN_W     = 320
-var SCREEN_H     = 240
+var BULLET_SPEED = 5
+var FIRE_DELAY   = 7
 
 # ---- state -----------------------------------------------------------------
-# Arrays are fixed size and live for the whole program. Index 0 of bullet_on
-# describes the sprite at BULLET0, and so on.
 
 var bullet_on: array[8]
 var enemy_speed: array[6]
+var enemy_drift: array[6]
+var boom_timer: array[4]
 var star_speed: array[16]
 
 var score = 0
 var lives = 3
 var cooldown = 0
 var dead_timer = 0
+var next_boom = 0
 
 
 func _ready():
@@ -53,8 +64,9 @@ func _ready():
     lives = 3
     cooldown = 0
     dead_timer = 0
+    next_boom = 0
 
-    sprite_set_pos(PLAYER, 24, 112)
+    sprite_set_pos(PLAYER, 152, 190)
     sprite_show(PLAYER)
 
     for i in range(N_BULLETS):
@@ -64,12 +76,17 @@ func _ready():
     for i in range(N_ENEMIES):
         reset_enemy(i)
 
+    for i in range(N_BOOMS):
+        boom_timer[i] = 0
+        sprite_hide(BOOM0 + i)
+
     # Three depths of starfield. The slow ones read as distant, which is the
     # whole trick to making a flat scroll look like space.
     for i in range(N_STARS):
         star_speed[i] = 1 + (i % 3)
 
-    print("shooter ready")
+    play_music(2)          # track 1 is the game data, so the song is track 2
+    print("vertical shooter ready")
 
 
 func _update():
@@ -82,6 +99,7 @@ func _update():
 
     update_bullets()
     update_enemies()
+    update_booms()
     draw_hud()
 
 
@@ -90,14 +108,13 @@ func _update():
 func scroll_stars():
     for i in range(N_STARS):
         var s = STAR0 + i
-        var x = sprite_x(s) - star_speed[i]
-        if x < 0:
-            # Wrap to the right edge at a new height so the field never repeats
-            # a visible pattern.
-            x = SCREEN_W
-            sprite_set_pos(s, x, rand(SCREEN_H))
+        var y = sprite_y(s) + star_speed[i]
+        if y > SCREEN_H:
+            # Reappear at the top somewhere else across the playfield, so the
+            # field never settles into a visible pattern.
+            sprite_set_pos(s, FIELD_L + rand(FIELD_R - FIELD_L - 2), 0)
         else:
-            sprite_set_pos(s, x, sprite_y(s))
+            sprite_set_pos(s, sprite_x(s), y)
 
 
 # ---- player -----------------------------------------------------------------
@@ -115,7 +132,9 @@ func update_player():
     if btn_held(BTN_DOWN):
         y = y + PLAYER_SPEED
 
-    sprite_set_pos(PLAYER, clamp(x, 0, 200), clamp(y, 0, SCREEN_H - 16))
+    sprite_set_pos(PLAYER,
+                   clamp(x, FIELD_L, FIELD_R - 16),
+                   clamp(y, 100, SCREEN_H - 20))
 
     if cooldown > 0:
         cooldown = cooldown - 1
@@ -125,14 +144,14 @@ func update_player():
 
 
 func fire():
-    # Find a bullet that is not in flight. With none free the shot is simply
-    # dropped, which is what caps how much can be on screen at once.
+    # Find a bullet that is not in flight. With none free the shot is dropped,
+    # which is what caps how much can be on screen at once.
     for i in range(N_BULLETS):
         if bullet_on[i] == 0:
             bullet_on[i] = 1
             sprite_set_pos(BULLET0 + i,
-                           sprite_x(PLAYER) + 22,
-                           sprite_y(PLAYER) + 6)
+                           sprite_x(PLAYER) + 6,
+                           sprite_y(PLAYER) - 6)
             sprite_show(BULLET0 + i)
             play_sound(0)
             cooldown = FIRE_DELAY
@@ -142,7 +161,7 @@ func fire():
 
 func update_game_over():
     dead_timer = dead_timer + 1
-    if btn_pressed(BTN_START) and dead_timer > 30:
+    if btn_pressed(BTN_START) and dead_timer > 40:
         _ready()
 
 
@@ -152,12 +171,12 @@ func update_bullets():
     for i in range(N_BULLETS):
         if bullet_on[i] == 1:
             var s = BULLET0 + i
-            var x = sprite_x(s) + BULLET_SPEED
-            if x > SCREEN_W:
+            var y = sprite_y(s) - BULLET_SPEED
+            if y < 0 - 8:
                 kill_bullet(i)
             else:
-                sprite_set_pos(s, x, sprite_y(s))
-                check_bullet_hits(i, x, sprite_y(s))
+                sprite_set_pos(s, sprite_x(s), y)
+                check_bullet_hits(i, sprite_x(s), y)
 
 
 func kill_bullet(i):
@@ -170,11 +189,13 @@ func kill_bullet(i):
 func check_bullet_hits(i, bx, by):
     for e in range(N_ENEMIES):
         var s = ENEMY0 + e
-        if overlap(bx, by, 8, 4, sprite_x(s), sprite_y(s), 24, 16) == 1:
+        if overlap(bx, by, 4, 8, sprite_x(s), sprite_y(s), 16, 16) == 1:
             kill_bullet(i)
+            spawn_boom(sprite_x(s), sprite_y(s))
             reset_enemy(e)
             score = score + 10
             play_sound(1)
+            shake(3)
             return 0
     return 0
 
@@ -182,9 +203,13 @@ func check_bullet_hits(i, bx, by):
 # ---- enemies ----------------------------------------------------------------
 
 func reset_enemy(e):
-    # Off the right edge at a random height and speed, ready to come back in.
-    enemy_speed[e] = 1 + rand(3)
-    sprite_set_pos(ENEMY0 + e, SCREEN_W + rand(200), rand(SCREEN_H - 16))
+    # Above the top of the screen, somewhere across the playfield, ready to
+    # come down. The stagger keeps them from arriving in a rank.
+    enemy_speed[e] = 1 + rand(2)
+    enemy_drift[e] = rand(3) - 1
+    sprite_set_pos(ENEMY0 + e,
+                   FIELD_L + 4 + rand(FIELD_R - FIELD_L - 24),
+                   0 - 16 - rand(220))
     sprite_show(ENEMY0 + e)
     return 0
 
@@ -192,28 +217,62 @@ func reset_enemy(e):
 func update_enemies():
     for e in range(N_ENEMIES):
         var s = ENEMY0 + e
-        var x = sprite_x(s) - enemy_speed[e]
+        var y = sprite_y(s) + enemy_speed[e]
+        var x = sprite_x(s) + enemy_drift[e]
 
-        if x < 0 - 24:
+        # Bounce off the panels rather than sliding under them.
+        if x < FIELD_L:
+            x = FIELD_L
+            enemy_drift[e] = 1
+        if x > FIELD_R - 16:
+            x = FIELD_R - 16
+            enemy_drift[e] = 0 - 1
+
+        if y > SCREEN_H:
             reset_enemy(e)
         else:
-            sprite_set_pos(s, x, sprite_y(s))
+            sprite_set_pos(s, x, y)
 
             if lives > 0:
-                if overlap(x, sprite_y(s), 24, 16,
-                           sprite_x(PLAYER), sprite_y(PLAYER), 24, 16) == 1:
+                if overlap(x, y, 16, 16,
+                           sprite_x(PLAYER), sprite_y(PLAYER), 16, 16) == 1:
                     hit_player()
+                    spawn_boom(x, y)
                     reset_enemy(e)
 
 
 func hit_player():
     lives = lives - 1
-    play_sound(1)
-    sprite_set_pos(PLAYER, 24, 112)
+    play_sound(2)
+    shake(9)
+    sprite_set_pos(PLAYER, 152, 190)
     if lives <= 0:
         dead_timer = 0
         sprite_hide(PLAYER)
+        stop_music()
     return 0
+
+
+# ---- explosions -------------------------------------------------------------
+
+func spawn_boom(x, y):
+    # A tiny ring buffer: the oldest explosion is reused, so four can overlap
+    # before one is cut short.
+    sprite_set_pos(BOOM0 + next_boom, x, y)
+    sprite_show(BOOM0 + next_boom)
+    boom_timer[next_boom] = 12
+    next_boom = next_boom + 1
+    if next_boom >= N_BOOMS:
+        next_boom = 0
+    return 0
+
+
+func update_booms():
+    for i in range(N_BOOMS):
+        if boom_timer[i] > 0:
+            boom_timer[i] = boom_timer[i] - 1
+            if boom_timer[i] == 0:
+                sprite_hide(BOOM0 + i)
 
 
 # ---- helpers ----------------------------------------------------------------
@@ -233,12 +292,13 @@ func overlap(ax, ay, aw, ah, bx, by, bw, bh):
 
 
 func draw_hud():
-    draw_text(8, 8, "SCORE")
-    draw_num(56, 8, score)
-    draw_text(8, 20, "LIVES")
-    draw_num(56, 20, lives)
+    # The panels have a framed window near the top; the text sits inside it.
+    draw_text(14, 22, "SCORE")
+    draw_num(14, 34, score)
+    draw_text(270, 22, "LIFE")
+    draw_num(270, 34, lives)
 
     if lives <= 0:
-        draw_text(116, 108, "GAME OVER")
-        if dead_timer > 30:
-            draw_text(96, 124, "START TO RETRY")
+        draw_text(122, 112, "GAME OVER")
+        if dead_timer > 40:
+            draw_text(106, 130, "START TO RETRY")

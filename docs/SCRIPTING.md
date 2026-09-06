@@ -94,6 +94,21 @@ Buttons: `BTN_UP` `BTN_DOWN` `BTN_LEFT` `BTN_RIGHT` `BTN_CROSS` `BTN_CIRCLE`
 |---|---|
 | `play_sound(id)` | Play a sample. `id` is its index in `scene.json`'s `sounds`. |
 | `sound_count()` | How many are loaded. |
+| `play_music(2)` | Start a looping CD audio track. Track 1 is the game, so music starts at 2. |
+| `stop_music()` | Stop it. |
+
+Music is a CD-DA track on the disc, not an SPU sample -- a song is far larger
+than the SPU's 512 KB. The drive streams it straight into the mixer, so it costs
+no RAM and no CPU. List the files under `"music"` in `scene.json` and `ncc build`
+adds them to the disc layout.
+
+### Feel
+| | |
+|---|---|
+| `shake(n)` | Screen shake, decaying. 3 is a hit, 9 is taking damage, 16 is the cap. |
+
+Sprites marked `"fixed": true` in `scene.json` ignore the shake -- that is how
+side panels and the HUD stay still while the playfield jolts.
 
 ### Arrays
 
@@ -124,6 +139,9 @@ pass and under the text.
 | `sprite_move(id, dx, dy)` | Nudge it. |
 | `sprite_frame(id, u, v)` | Move the window into the texture -- this is animation. |
 | `sprite_show(id)` / `sprite_hide(id)` | Visibility. |
+
+Sprite order is also **draw order, back to front reversed**: sprite 0 ends up on
+top. Put panels and overlays first, background last.
 
 Animation is one sheet plus a moving UV window. With four 32x32 frames side by
 side:

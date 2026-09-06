@@ -231,8 +231,10 @@ def build_scene(scene, mesh_ids, tex_slots=None):
                 f"sprite {n} samples u{u}+{w}, v{v}+{h}, past the 256x256 "
                 f"texture page. UVs are page-relative.")
 
+        # "fixed" sprites ignore screen shake -- panels and HUD.
+        flags = 1 if sp.get("fixed") else 0
         out += struct.pack(
-            "<HHhhhhHH", info["slot"], 0,
+            "<HHhhhhHH", info["slot"], flags,
             _clamp_short(int(sp.get("x", 0)), "sprite x"),
             _clamp_short(int(sp.get("y", 0)), "sprite y"),
             _clamp_short(w, "sprite width"),

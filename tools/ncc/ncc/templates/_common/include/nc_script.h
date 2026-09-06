@@ -47,6 +47,9 @@ int  nc_s_draw_num(int x, int y, int value);
 /* --- sound --- */
 int  nc_s_play_sound(int id);
 int  nc_s_sound_count(void);
+int  nc_s_play_music(int track);
+int  nc_s_stop_music(void);
+int  nc_s_shake(int amount);
 
 /* --- input --- */
 int  nc_s_btn_held(int button);

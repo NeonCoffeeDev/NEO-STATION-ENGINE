@@ -80,7 +80,7 @@ On Windows `ncc.cmd` takes the same arguments as `./ncc`.
 | `scene`  | Four objects, swinging camera, fixed-point circular motion.        |
 | `game`   | **Menu + level, Godot scenes, and a script. No C.** Start here.     |
 | `sprite2d` | **A 2D game.** Sprite sheet, animation, screen-space movement.     |
-| `shooter` | **A whole game.** Scrolling shmup: shooting, enemies, collision, score, sound. |
+| `shooter` | **A whole game.** Vertical shmup with arcade side panels, CD music and screen shake. |
 
 Every template gets the same engine files; only `src/main.c` differs. They live in
 `tools/ncc/ncc/templates/`, with the shared engine in `_common/`. To add one, drop
@@ -277,6 +277,19 @@ play_sound(0)
 Mono PCM WAV in, SPU-ADPCM out (about 3.5:1). Samples live in the SPU's own
 512 KB, so playing one costs the CPU almost nothing. 22050 Hz is the sweet spot;
 keep effects short.
+
+**Music** is different -- a song will not fit in 512 KB, so it goes on the disc as
+a CD audio track and the drive streams it:
+
+```json
+"music": [ "music/theme.wav" ]
+```
+
+```gdscript
+play_music(2)      # track 1 is the game data, so the first song is track 2
+```
+
+44100 Hz 16-bit stereo WAV. `ncc build` adds it to the disc layout for you.
 
 ## 4. The development loop
 

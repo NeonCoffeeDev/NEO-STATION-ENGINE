@@ -29,6 +29,7 @@ int main(void)
     nc_gfx_init();
     nc_input_init();
     nc_audio_init();     /* before loading: the package uploads its samples */
+    nc_music_init();
 
     if (!nc_pkg_load(nc_package, &pkg)) {
         /* A red screen means the data did not load. The reason is on TTY --
@@ -61,6 +62,7 @@ int main(void)
             }
         }
 
+        nc_shake_update();
         nc_scene_advance();
         nc_scene_draw();
         nc_gfx_flip();

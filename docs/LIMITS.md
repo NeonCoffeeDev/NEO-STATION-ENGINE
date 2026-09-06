@@ -58,6 +58,22 @@ sound effects, and long music will exhaust it. `ncc check` warns past 4 seconds.
 WAV is compressed to SPU-ADPCM at about 3.5:1 during the build, so the file on
 disk is not what it costs.
 
+## Music
+
+Music is a **CD audio track**, not an SPU sample. Songs do not fit in 512 KB, so
+they go on the disc as Red Book audio and the drive streams them into the mixer:
+no main RAM, no SPU RAM, no CPU.
+
+| Rule | Why |
+|---|---|
+| **44100 Hz, 16-bit stereo WAV** | Red Book is a fixed format. |
+| **Track 1 is the game** | Music starts at track 2. |
+| Costs disc space, not memory | A 14-second loop adds about 2.5 MB to the image. |
+| The drive is busy while it plays | Nothing here streams data during play, but a game that did would have to share. |
+
+List them under `"music"` in `scene.json`; `ncc build` rewrites the marked region
+of `iso.xml` so the disc layout stays in step.
+
 ## Geometry (3D)
 
 | Rule | Why |

@@ -23,6 +23,13 @@ FUNCTIONS = {
     # Samples live in the SPU's own RAM, so playing one costs almost nothing.
     "play_sound":    {"c": "nc_s_play_sound",   "args": 1},
     "sound_count":   {"c": "nc_s_sound_count",  "args": 0},
+    # Music is a CD track, streamed by the drive. Track 1 is the game data, so
+    # the first song is track 2.
+    "play_music":    {"c": "nc_s_play_music",   "args": 1},
+    "stop_music":    {"c": "nc_s_stop_music",   "args": 0},
+
+    # --- feel ---
+    "shake":         {"c": "nc_s_shake",        "args": 1},
 
     # --- input ---
     # held() is true every frame the button is down; pressed() only on the frame

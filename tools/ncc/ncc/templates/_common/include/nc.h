@@ -43,7 +43,18 @@ void  nc_text(int x, int y, const char *text);
 /* Draw a textured quad in SCREEN space -- no GTE, no transform, no depth sort.
  * This is the 2D path: sprites are just quads the GPU draws where you say. */
 void  nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
-                     int u, int v);
+                     int u, int v, int fixed);
+
+/* ---- screen shake -------------------------------------------------------
+ *
+ * A decaying random offset applied to everything that is not marked fixed.
+ * Panels and HUD stay put while the playfield jolts, which reads as impact
+ * rather than as the television being kicked.
+ */
+void  nc_shake_add(int amount);   /* strongest wins; they do not stack     */
+void  nc_shake_update(void);      /* decay, once per frame                 */
+int   nc_shake_x(void);
+int   nc_shake_y(void);
 
 /* Room reserved per nc_text() call before the unused tail is handed back. One
  * sprite per character, so this caps a single line at roughly 120 characters. */
@@ -114,6 +125,8 @@ typedef struct {
 } NC_Instance;
 
 /* A sprite as it appears in the package. 16 bytes; the writer must agree. */
+#define NC_SPRITE_FIXED 1        /* ignore screen shake: panels, HUD */
+
 typedef struct {
     uint16_t tex_slot;
     uint16_t flags;
@@ -162,6 +175,13 @@ int nc_pkg_load(const void *data, NC_Package *pkg);
  * Samples are uploaded to the SPU's own 512 KB of RAM once, at load. Playing one
  * is then just pointing a voice at an address -- the CPU does no mixing.
  */
+/* Music is a CD audio track, not an SPU sample: songs are far too large for
+ * the SPU's 512 KB. Track 1 holds the game, so music starts at 2. */
+void nc_music_init(void);
+void nc_music_play(int track);
+void nc_music_stop(void);
+int  nc_music_track(void);
+
 void nc_audio_init(void);
 int  nc_audio_add(const void *adpcm, int size, int rate);  /* -> id, or -1   */
 void nc_audio_play(int id);
@@ -194,6 +214,7 @@ typedef struct {
     int w, h;
     int u, v;                 /* which part of the texture to show           */
     int visible;
+    int fixed;                /* immune to screen shake                      */
 } NC_Sprite;
 
 int  nc_scene_load(const NC_Package *pkg, int index);
