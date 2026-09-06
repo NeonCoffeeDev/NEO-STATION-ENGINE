@@ -129,3 +129,25 @@ Still open:
 4. **Transparency.** Sprites are opaque; no alpha or semi-transparency blending.
 5. **4-bit textures** for twice the VRAM budget, and LTO so the nc_s_* wrappers
    inline too.
+
+
+## Update, 2026-09-06 (transparency and Godot export)
+
+- **Transparency.** Images with alpha reserve palette entry 0 as the hardware's
+  one transparent value (0x0000) and quantise the rest to 255 colours. Sprites
+  are no longer opaque rectangles.
+- **Godot texture export.** A material's albedo texture is written to textures/
+  as a PNG and referenced automatically. No more declaring them by hand.
+- **Godot 2D export.** Sprite2D nodes become sprites; region_rect picks the
+  frame. The sprite2d template ships a 320x240 Godot 2D project, so the editor
+  viewport matches the console pixel for pixel.
+- **One shared editor plugin** in templates/_godot_addon, copied into any
+  template that has a godot/ folder -- two copies of a 475-line exporter would
+  have drifted within a week.
+
+Still open:
+
+1. **Audio.** Nothing at all. The biggest remaining hole.
+2. **Collision.** Scripts compare positions by hand.
+3. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+4. **Per-object scripts**, 4-bit textures, LTO.

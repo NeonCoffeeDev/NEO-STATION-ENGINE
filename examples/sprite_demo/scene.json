@@ -1,26 +1,89 @@
 {
-  "name": "sprite_demo",
-
-  "textures": [
-    { "name": "sheet", "file": "textures/sheet.png" }
-  ],
-
   "meshes": [],
-
+  "name": "Game",
   "scenes": [
     {
-      "_comment": "Sprite 0 is the player. The rest are scenery.",
-      "clear": [14, 12, 28],
+      "camera": {
+        "pos": [
+          0,
+          0,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ]
+      },
+      "clear": [
+        18,
+        14,
+        34
+      ],
+      "instances": [],
+      "name": "Game",
       "sprites": [
-        { "texture": "sheet", "x": 144, "y": 100, "w": 32, "h": 32, "u": 0,  "v": 0 },
-
-        { "texture": "sheet", "x": 32,  "y": 190, "w": 32, "h": 32, "u": 0,  "v": 32 },
-        { "texture": "sheet", "x": 64,  "y": 190, "w": 32, "h": 32, "u": 32, "v": 32 },
-        { "texture": "sheet", "x": 96,  "y": 190, "w": 32, "h": 32, "u": 0,  "v": 32 },
-        { "texture": "sheet", "x": 192, "y": 190, "w": 32, "h": 32, "u": 32, "v": 32 },
-        { "texture": "sheet", "x": 224, "y": 190, "w": 32, "h": 32, "u": 0,  "v": 32 },
-        { "texture": "sheet", "x": 128, "y": 60,  "w": 32, "h": 32, "u": 32, "v": 32 }
+        {
+          "h": 32,
+          "texture": "tex0",
+          "u": 0,
+          "v": 0,
+          "w": 32,
+          "x": 144,
+          "y": 100
+        },
+        {
+          "h": 32,
+          "texture": "tex0",
+          "u": 0,
+          "v": 32,
+          "w": 32,
+          "x": 32,
+          "y": 190
+        },
+        {
+          "h": 32,
+          "texture": "tex0",
+          "u": 32,
+          "v": 32,
+          "w": 32,
+          "x": 64,
+          "y": 190
+        },
+        {
+          "h": 32,
+          "texture": "tex0",
+          "u": 0,
+          "v": 32,
+          "w": 32,
+          "x": 96,
+          "y": 190
+        },
+        {
+          "h": 32,
+          "texture": "tex0",
+          "u": 32,
+          "v": 32,
+          "w": 32,
+          "x": 192,
+          "y": 190
+        },
+        {
+          "h": 32,
+          "texture": "tex0",
+          "u": 32,
+          "v": 32,
+          "w": 32,
+          "x": 128,
+          "y": 60
+        }
       ]
+    }
+  ],
+  "textures": [
+    {
+      "file": "textures/tex0.png",
+      "name": "tex0"
     }
   ]
 }

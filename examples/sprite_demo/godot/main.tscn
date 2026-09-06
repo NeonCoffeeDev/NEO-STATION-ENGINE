@@ -1,0 +1,41 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Texture2D" path="res://art/sheet.png" id="1_sheet"]
+
+[node name="Game" type="Node2D"]
+
+[node name="Player" type="Sprite2D" parent="."]
+position = Vector2(160, 116)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 0, 32, 32)
+
+[node name="Floor1" type="Sprite2D" parent="."]
+position = Vector2(48, 206)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+
+[node name="Floor2" type="Sprite2D" parent="."]
+position = Vector2(80, 206)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+
+[node name="Floor3" type="Sprite2D" parent="."]
+position = Vector2(112, 206)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+
+[node name="Floor4" type="Sprite2D" parent="."]
+position = Vector2(208, 206)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+
+[node name="Ledge" type="Sprite2D" parent="."]
+position = Vector2(144, 76)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)

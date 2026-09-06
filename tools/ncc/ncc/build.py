@@ -14,6 +14,9 @@ from . import toolchain as tc
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 COMMON_DIR = os.path.join(TEMPLATES_DIR, "_common")
+# The Godot editor plugin is shared by every template that ships a Godot project.
+# Keeping one copy avoids the two drifting apart.
+GODOT_ADDON_DIR = os.path.join(TEMPLATES_DIR, "_godot_addon")
 DEFAULT_TEMPLATE = "cube"
 
 # Files that get @NAME@ / @VOLUME@ substituted.
@@ -142,6 +145,12 @@ def new(args):
             abs_dst = os.path.join(dest, rel)
             os.makedirs(os.path.dirname(abs_dst), exist_ok=True)
             shutil.copy2(abs_src, abs_dst)
+
+    # Any template with a godot/ folder gets the shared editor plugin.
+    godot_dir = os.path.join(dest, "godot")
+    if os.path.isdir(godot_dir) and os.path.isdir(GODOT_ADDON_DIR):
+        shutil.copytree(GODOT_ADDON_DIR, os.path.join(godot_dir, "addons"),
+                        dirs_exist_ok=True)
 
     _substitute(dest, name)
 

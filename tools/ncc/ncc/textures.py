@@ -22,6 +22,18 @@ Format
 holds two texels and a 256-wide texture is 128 cells wide. 4-bit would be more
 authentic and half the size again, but 8-bit avoids nibble packing and still
 looks period-correct. Colours are BGR555.
+
+Transparency
+------------
+The GPU skips any texel whose 16-bit value is exactly 0x0000. There is no alpha
+channel -- transparency is that one reserved value, and nothing else.
+
+So an image with alpha gets quantised to 255 colours instead of 256, every index
+shifted up by one, palette entry 0 set to 0x0000, and transparent pixels pointed
+at index 0. Opaque images use all 256 and have no transparent entry at all.
+
+That is also why an opaque pure black has to be nudged: black is 0x0000, which
+the hardware would read as a hole. Setting the top bit keeps it black and opaque.
 """
 
 import os
@@ -53,6 +65,9 @@ def to_bgr555(r, g, b):
     return v
 
 
+ALPHA_THRESHOLD = 128          # below this a pixel becomes fully transparent
+
+
 def convert(path, name):
     """Load an image and return (indices, palette, width, height)."""
     try:
@@ -79,28 +94,41 @@ def convert(path, name):
     if w == 0 or h == 0:
         raise TextureError(f"texture '{name}' is empty")
 
-    # Quantise to 256 colours. MEDIANCUT keeps flat, poster-like regions, which
-    # is closer to how period art was authored than dithering everything.
-    flat = img.convert("RGB")
-    pal_img = flat.quantize(colors=256, method=Image.MEDIANCUT)
+    alpha = img.getchannel("A")
+    has_alpha = alpha.getextrema()[0] < ALPHA_THRESHOLD
 
-    indices = bytes(pal_img.tobytes())
+    # Quantise with MEDIANCUT: it keeps flat, poster-like regions, which is
+    # closer to how period art was authored than dithering everything.
+    flat = img.convert("RGB")
+    colors = 255 if has_alpha else 256
+    pal_img = flat.quantize(colors=colors, method=Image.MEDIANCUT)
+
+    indices = bytearray(pal_img.tobytes())
     raw_pal = pal_img.getpalette() or []
 
     palette = []
-    for i in range(256):
+    if has_alpha:
+        # Index 0 is the hole. Everything else shifts up to make room.
+        palette.append(0x0000)
+        alpha_bytes = alpha.tobytes()
+        for i in range(len(indices)):
+            indices[i] = 0 if alpha_bytes[i] < ALPHA_THRESHOLD else indices[i] + 1
+
+    for i in range(colors):
         if i * 3 + 2 < len(raw_pal):
             palette.append(to_bgr555(raw_pal[i * 3], raw_pal[i * 3 + 1],
                                      raw_pal[i * 3 + 2]))
         else:
             palette.append(0x8000)
+    while len(palette) < 256:
+        palette.append(0x8000)
 
     if len(indices) != w * h:
         raise TextureError(
             f"texture '{name}': expected {w * h} bytes of index data, got "
             f"{len(indices)}")
 
-    return indices, palette, w, h
+    return bytes(indices), palette, w, h
 
 
 def build_chunk(slot, indices, palette, w, h):

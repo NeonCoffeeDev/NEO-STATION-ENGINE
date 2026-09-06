@@ -178,6 +178,15 @@ Drop a PNG in your project and name it in `scene.json`:
 and places it in VRAM. Faces get the whole texture unless the mesh supplies its
 own `uvs`.
 
+Or skip the JSON: give a Godot material an **albedo texture** and the exporter
+writes the PNG to `textures/` and wires it up for you.
+
+**Transparency** is one reserved colour, not an alpha channel -- the GPU skips
+any texel whose value is exactly `0x0000`. Give a PNG an alpha channel and the
+packer reserves palette entry 0 for it automatically, quantising the rest to 255
+colours. (Which is also why opaque pure black gets nudged: black *is* `0x0000`,
+and would otherwise punch holes in your texture.)
+
 The limits are the hardware's, not arbitrary:
 
 | | |
@@ -220,6 +229,12 @@ valid -- see the `sprite2d` template.
 ```bash
 ./ncc new mygame -t sprite2d
 ```
+
+That template ships a **Godot 2D project** too. Its viewport is 320x240 to match
+the console exactly, and Godot's 2D origin is the top-left with +Y down -- the
+same as the PS1 screen -- so positions map across with no conversion. Lay out
+`Sprite2D` nodes, use **region** to pick a frame from the sheet, and press
+Export to NC.
 
 ### Debug and release
 
