@@ -48,8 +48,21 @@ typedef struct {
     int            quad_count;
 } NC_Mesh;
 
-/* Transform, light, cull and sort a mesh into this frame's ordering table. */
+/* Transform, light, cull and sort a mesh into this frame's ordering table.
+ * Positions are in world space; the camera set by nc_camera_set() is applied. */
 void nc_mesh_draw(const NC_Mesh *mesh, const SVECTOR *rot, const VECTOR *pos);
+
+/* ---- camera -------------------------------------------------------------
+ *
+ * There is no camera in hardware -- "moving the camera" means transforming every
+ * object by the inverse of where the camera is. nc_camera_set() builds that
+ * inverse once per frame; nc_mesh_draw() then composes it with each object.
+ *
+ * Call it before drawing anything. The default is the identity: sitting at the
+ * origin looking down +Z.
+ */
+void nc_camera_set(const VECTOR *pos, const SVECTOR *rot);
+void nc_camera_reset(void);
 
 /* ---- input ------------------------------------------------------------- */
 
@@ -82,6 +95,8 @@ typedef struct {
     const NC_Instance *instances;
     int instance_count;
     int clear_r, clear_g, clear_b;
+    VECTOR  cam_pos;          /* where the exported camera started */
+    SVECTOR cam_rot;
 } NC_Scene;
 
 #define NC_MAX_MESHES 64

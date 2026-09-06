@@ -10,9 +10,10 @@ extends RefCounted
 ## units. Flipping two axes is a rotation, not a mirror, so winding order -- and
 ## therefore which faces survive backface culling -- is preserved.
 ##
-## Positions are exported RELATIVE TO THE CAMERA, so what you frame in the Godot
-## viewport is roughly what appears on the console. Without a camera the scene is
-## exported in world space, which usually means everything sits behind you.
+## Positions are exported in WORLD SPACE, and the Camera3D is exported alongside
+## them. The runtime has a real camera now, so it applies the inverse transform
+## itself -- which means the viewpoint can move at run time instead of being
+## baked in at export.
 
 const SCALE := 100.0          ## PS1 units per Godot metre
 const OUT_PATH := "res://../scene.json"
@@ -34,12 +35,9 @@ static func export_scene(root: Node) -> Dictionary:
 
 	var cam := _find_camera(root)
 	if cam == null:
-		warnings.append("No Camera3D in the scene. Exported in world space, so "
-			+ "objects may be behind the PS1 camera. Add a Camera3D and frame "
-			+ "the scene through it.")
-	var to_view := Transform3D.IDENTITY
-	if cam != null:
-		to_view = cam.global_transform.affine_inverse()
+		warnings.append("No Camera3D in the scene, so the PS1 camera starts at "
+			+ "the world origin looking down +Z. Add one and frame the scene "
+			+ "through it.")
 
 	var nodes: Array[MeshInstance3D] = []
 	_collect(root, nodes)
@@ -53,8 +51,8 @@ static func export_scene(root: Node) -> Dictionary:
 		if node.mesh == null:
 			continue
 
-		var local := to_view * node.global_transform
-		var scale_v := node.global_transform.basis.get_scale()
+		var world := node.global_transform
+		var scale_v := world.basis.get_scale()
 
 		var key := "%s|%.4f,%.4f,%.4f" % [node.mesh.get_rid(),
 			scale_v.x, scale_v.y, scale_v.z]
@@ -76,8 +74,8 @@ static func export_scene(root: Node) -> Dictionary:
 
 		instances.append({
 			"mesh": idx,
-			"pos": _to_ps1_pos(local.origin),
-			"rot": _to_ps1_rot(local.basis),
+			"pos": _to_ps1_pos(world.origin),
+			"rot": _to_ps1_rot(world.basis),
 			"spin": _read_spin(node),
 		})
 
@@ -92,9 +90,16 @@ static func export_scene(root: Node) -> Dictionary:
 		warnings.append("%d quads total. The PS1 will struggle past roughly %d."
 			% [total_quads, WARN_TOTAL_QUADS])
 
+	var cam_pos := [0, 0, 0]
+	var cam_rot := [0, 0, 0]
+	if cam != null:
+		cam_pos = _to_ps1_pos(cam.global_transform.origin)
+		cam_rot = _to_ps1_rot(cam.global_transform.basis)
+
 	var scene := {
 		"name": root.name,
 		"clear": _find_clear_color(root),
+		"camera": {"pos": cam_pos, "rot": cam_rot},
 		"meshes": meshes,
 		"instances": instances,
 	}

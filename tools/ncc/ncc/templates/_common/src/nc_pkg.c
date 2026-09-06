@@ -14,7 +14,7 @@
 
 #include "nc.h"
 
-#define NC_PKG_VERSION 1
+#define NC_PKG_VERSION 2
 
 /* Mirrors the writer's layout exactly. Both sides must change together. */
 typedef struct {
@@ -41,9 +41,11 @@ typedef struct {
 
 typedef struct {
     uint16_t instance_count;
-    uint16_t pad;
-    uint8_t  clear_r, clear_g, clear_b, pad2;
-} SceneHeader;
+    uint16_t flags;
+    uint8_t  clear_r, clear_g, clear_b, pad0;
+    int32_t  cam_px, cam_py, cam_pz;
+    int16_t  cam_rx, cam_ry, cam_rz, pad1;
+} SceneHeader;                              /* 28 bytes */
 
 
 static int fourcc_is(const char *a, const char *b)
@@ -65,6 +67,9 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
     pkg->scene.clear_r = 24;
     pkg->scene.clear_g = 16;
     pkg->scene.clear_b = 48;
+    pkg->scene.cam_pos.vx = pkg->scene.cam_pos.vy = pkg->scene.cam_pos.vz = 0;
+    pkg->scene.cam_rot.vx = pkg->scene.cam_rot.vy = pkg->scene.cam_rot.vz = 0;
+    pkg->scene.cam_rot.pad = 0;
 
     if (!fourcc_is(hdr->magic, "NCPK")) {
         printf("nc_pkg: bad magic -- not a .ncpkg\n");
@@ -118,6 +123,13 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
             pkg->scene.clear_r = sh->clear_r;
             pkg->scene.clear_g = sh->clear_g;
             pkg->scene.clear_b = sh->clear_b;
+            pkg->scene.cam_pos.vx = sh->cam_px;
+            pkg->scene.cam_pos.vy = sh->cam_py;
+            pkg->scene.cam_pos.vz = sh->cam_pz;
+            pkg->scene.cam_rot.vx = sh->cam_rx;
+            pkg->scene.cam_rot.vy = sh->cam_ry;
+            pkg->scene.cam_rot.vz = sh->cam_rz;
+            pkg->scene.cam_rot.pad = 0;
         }
         /* Unknown chunk types are skipped on purpose, so a newer package with
          * extra sections still loads on an older runtime. */

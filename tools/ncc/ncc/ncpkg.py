@@ -23,7 +23,7 @@ import json
 import struct
 
 MAGIC = b"NCPK"
-VERSION = 1
+VERSION = 2
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -108,16 +108,26 @@ def build_mesh(mesh):
 
 
 def build_scene(scene, mesh_ids):
-    """SCN0: clear color plus a flat list of instances."""
+    """SCN0: clear color, the starting camera, then a flat list of instances."""
     clear = scene.get("clear", [24, 16, 48])
     instances = scene.get("instances", [])
     if len(instances) > 65535:
         raise NcpkgError("more than 65535 instances")
 
+    cam = scene.get("camera", {})
+    cam_pos = cam.get("pos", [0, 0, 0])
+    cam_rot = cam.get("rot", [0, 0, 0])
+
+    # 28 bytes, and instances follow on a 4-byte boundary so their int32
+    # positions stay naturally aligned.
     out = bytearray()
-    out += struct.pack("<HHBBBB", len(instances), 0,
-                       int(clear[0]) & 0xFF, int(clear[1]) & 0xFF,
-                       int(clear[2]) & 0xFF, 0)
+    out += struct.pack(
+        "<HHBBBB3i4h", len(instances), 0,
+        int(clear[0]) & 0xFF, int(clear[1]) & 0xFF, int(clear[2]) & 0xFF, 0,
+        int(cam_pos[0]), int(cam_pos[1]), int(cam_pos[2]),
+        _clamp_short(int(cam_rot[0]), "camera rotation x"),
+        _clamp_short(int(cam_rot[1]), "camera rotation y"),
+        _clamp_short(int(cam_rot[2]), "camera rotation z"), 0)
 
     for n, inst in enumerate(instances):
         mesh = inst.get("mesh", 0)

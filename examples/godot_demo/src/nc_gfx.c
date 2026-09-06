@@ -36,6 +36,10 @@ static MATRIX light_mtx = {
 
 static int clear_r = 24, clear_g = 16, clear_b = 48;
 
+/* The view matrix: the inverse of the camera's transform. Identity means the
+ * camera sits at the origin looking down +Z. */
+static MATRIX view;
+
 static void setup_buffer(int i, int x)
 {
     SetDefDispEnv(&db[i].disp, x, 0, NC_SCREEN_W, NC_SCREEN_H);
@@ -74,6 +78,44 @@ void nc_gfx_init(void)
 
     gte_SetBackColor(63, 63, 63);                /* ambient */
     gte_SetColorMatrix(&color_mtx);
+
+    nc_camera_reset();
+}
+
+
+void nc_camera_reset(void)
+{
+    VECTOR  zero_p = { 0, 0, 0 };
+    SVECTOR zero_r = { 0, 0, 0, 0 };
+    nc_camera_set(&zero_p, &zero_r);
+}
+
+
+void nc_camera_set(const VECTOR *pos, const SVECTOR *rot)
+{
+    MATRIX cam;
+    VECTOR neg;
+    SVECTOR r = *rot;
+    int i, j;
+
+    /* Orientation of the camera itself. */
+    RotMatrix(&r, &cam);
+
+    /* A rotation matrix's inverse is its transpose, which is far cheaper than a
+     * general inverse and exact in fixed point. */
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            view.m[i][j] = cam.m[j][i];
+
+    /* ...and the translation becomes -(R^T * P), so the world shifts opposite
+     * to the camera. */
+    neg.vx = -pos->vx;
+    neg.vy = -pos->vy;
+    neg.vz = -pos->vz;
+    ApplyMatrixLV(&view, &neg, &neg);
+    view.t[0] = neg.vx;
+    view.t[1] = neg.vy;
+    view.t[2] = neg.vz;
 }
 
 void *nc_gfx_alloc(int bytes)
@@ -115,17 +157,23 @@ void nc_gfx_flip(void)
 
 void nc_mesh_draw(const NC_Mesh *mesh, const SVECTOR *rot, const VECTOR *pos)
 {
-    MATRIX mtx, lmtx;
+    MATRIX world, modelview, lmtx;
     int i, z;
 
-    /* Build the model matrix, then rotate the light directions by it so the lighting
-     * stays fixed in world space instead of turning with the model. */
-    RotMatrix((SVECTOR *)rot, &mtx);
-    TransMatrix(&mtx, (VECTOR *)pos);
-    MulMatrix0(&light_mtx, &mtx, &lmtx);
+    /* Model matrix: where this object sits in the world. */
+    RotMatrix((SVECTOR *)rot, &world);
+    TransMatrix(&world, (VECTOR *)pos);
 
-    gte_SetRotMatrix(&mtx);
-    gte_SetTransMatrix(&mtx);
+    /* Light directions are rotated by the MODEL matrix only, never the camera.
+     * That is what keeps lights fixed in the world -- fold the camera in here
+     * and every light turns with you, like a miner's lamp. */
+    MulMatrix0(&light_mtx, &world, &lmtx);
+
+    /* What the GTE actually transforms by is view * world. */
+    CompMatrixLV(&view, &world, &modelview);
+
+    gte_SetRotMatrix(&modelview);
+    gte_SetTransMatrix(&modelview);
     gte_SetLightMatrix(&lmtx);
 
     for (i = 0; i < mesh->quad_count; i++) {
