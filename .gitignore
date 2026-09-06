@@ -26,3 +26,6 @@ export_presets.cfg
 .idea/
 Thumbs.db
 desktop.ini
+
+# Downloaded toolchains (see docs/ROADMAP.md M0)
+toolchain/
