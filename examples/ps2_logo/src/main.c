@@ -1,25 +1,31 @@
 /*
- * ps2_logo - the smallest possible PS2 texture test
+ * @NAME@ - the smallest possible PS2 texture test
  *
  * This exists to bisect a black screen, not to be a game.
  *
- * NCPAD -- a coloured box moved with the pad -- runs on hardware. The visual
- * novel, which adds textures and text, does not. Everything between those two
- * is suspect, and guessing which part is wrong from a black screen is not
- * debugging. So this draws exactly one thing: the logo, as a texture, on a
- * cleared screen. No font, no menu, no state, no per-frame text.
+ * The first round told us a lot: NCPAD (an untextured box) runs, and this
+ * cleared to blue but drew no logo. So the GS comes up, the frame loop runs,
+ * DMA works, untextured rectangles work -- and only the textured quad shows
+ * nothing.
  *
- *   It draws the logo   -> the texture path works, and the fault is in what
- *                          the visual novel does with text or packets.
- *   Black screen        -> the texture path itself is wrong: the upload, the
- *                          alpha test, the buffer setup, or VRAM allocation.
- *   A coloured screen   -> the GS came up but the texture did not; the clear
- *                          proves the frame loop is running.
+ * Two things could cause exactly that, and rather than guess again this draws
+ * the same texture four times, differing only in those two:
  *
- * The background is deliberately NOT the near-black NC ground, because a black
- * screen and a very dark screen are indistinguishable on a television. It
- * clears to a mid blue, which no failure mode produces by accident.
- */
+ *   TOP LEFT      texel coordinates (0..128),   alpha test on
+ *   TOP RIGHT     normalised coordinates (0..1), alpha test on
+ *   BOTTOM LEFT   texel coordinates,             alpha test off
+ *   BOTTOM RIGHT  normalised coordinates,        alpha test off
+ *
+ * Whichever quadrant shows the logo is the answer. Each sits on its own dark
+ * plate -- an untextured rectangle, which is already known to work -- so an
+ * empty quadrant is visibly empty rather than merely blue.
+ *
+ * The leading suspect is the coordinate convention. texrect_t carries a union
+ * that is both s/t and u/v, and if draw_rect_textured emits normalised ST then
+ * feeding it 0..128 samples far off the edge of the texture; clamped, that is
+ * the transparent border, which the alpha test then discards -- producing
+ * precisely a clean blue screen.
+  */
 
 #include <kernel.h>
 #include <stdio.h>
@@ -59,7 +65,7 @@ int main(void)
     int height = 256;
     int width = nc_logo_used_w * height / nc_logo_used_h;
 
-    printf("ps2_logo: PS2 texture test starting\n");
+    printf("@NAME@: PS2 texture test starting\n");
 
     frame.width = SCREEN_W;
     frame.height = SCREEN_H;
@@ -83,14 +89,14 @@ int main(void)
     logo_tex.info.components = TEXTURE_COMPONENTS_RGBA;
     logo_tex.info.function = TEXTURE_FUNCTION_DECAL;
 
-    printf("ps2_logo: frame at 0x%x, texture at 0x%x (%dx%d)\n",
+    printf("@NAME@: frame at 0x%x, texture at 0x%x (%dx%d)\n",
            frame.address, logo_tex.address, nc_logo_width, nc_logo_height);
 
     graph_initialize(frame.address, frame.width, frame.height, frame.psm, 0, 0);
 
     packet = packet_init(2048, PACKET_NORMAL);
     if (packet == NULL) {
-        printf("ps2_logo: packet_init failed\n");
+        printf("@NAME@: packet_init failed\n");
         SleepThread();
     }
 
@@ -142,32 +148,81 @@ int main(void)
                            q - packet->data, 0, 0);
     dma_wait_fast();
 
-    printf("ps2_logo: texture uploaded, entering the loop\n");
+    printf("@NAME@: texture uploaded, entering the loop\n");
 
     while (1) {
         texrect_t r;
+        rect_t marker;
+        int qw = 256, qh = 176;
+        int col, row, variant;
 
         q = packet->data;
-
-        /* Mid blue: unmistakable, and impossible to confuse with a dead
-         * console the way the near-black NC ground would be. */
         q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, frame.height,
                        0x20, 0x38, 0x70);
 
-        r.v0.x = ftoi4(OFF_X + (SCREEN_W - width) / 2);
-        r.v0.y = ftoi4(OFF_Y + (SCREEN_H - height) / 2);
-        r.v0.z = 0;
-        r.t0.u = 0.0f;
-        r.t0.v = 0.0f;
-        r.v1.x = ftoi4(OFF_X + (SCREEN_W + width) / 2);
-        r.v1.y = ftoi4(OFF_Y + (SCREEN_H + height) / 2);
-        r.v1.z = 0;
-        r.t1.u = (float)nc_logo_used_w;
-        r.t1.v = (float)nc_logo_used_h;
-        r.color.r = r.color.g = r.color.b = 0x80;   /* 0x80 is neutral here */
-        r.color.a = 0x80;
-        r.color.q = 1.0f;
-        q = draw_rect_textured(q, 0, &r);
+        /* Four attempts at the same texture, differing only in the two things
+         * that could plausibly be wrong. Whichever quadrant shows the logo is
+         * the answer, and one boot settles it.
+         *
+         *   0  top left      texel coordinates,      alpha test on
+         *   1  top right     normalised coordinates, alpha test on
+         *   2  bottom left   texel coordinates,      alpha test off
+         *   3  bottom right  normalised coordinates, alpha test off
+         */
+        for (variant = 0; variant < 4; variant++) {
+            int normalised = variant & 1;
+            int no_atest = variant & 2;
+            int x, y;
+
+            col = variant & 1;
+            row = (variant >> 1) & 1;
+            x = 32 + col * (qw + 64);
+            y = 32 + row * (qh + 48);
+
+            atest.enable = no_atest ? DRAW_DISABLE : DRAW_ENABLE;
+            atest.method = ATEST_METHOD_GREATER;
+            atest.compval = 0x00;
+            atest.keep = ATEST_KEEP_FRAMEBUFFER;
+            q = draw_pixel_test(q, 0, &atest, &dtest, &ztest);
+
+            /* A dark plate behind each quadrant, so an empty one is obviously
+             * empty rather than just blue. This is an untextured rect, which
+             * NCPAD already proved works. */
+            marker.v0.x = ftoi4(OFF_X + x - 4);
+            marker.v0.y = ftoi4(OFF_Y + y - 4);
+            marker.v0.z = 0;
+            marker.v1.x = ftoi4(OFF_X + x + qw + 4);
+            marker.v1.y = ftoi4(OFF_Y + y + qh + 4);
+            marker.v1.z = 0;
+            marker.color.r = 0x10 + variant * 0x08;
+            marker.color.g = 0x10;
+            marker.color.b = 0x18;
+            marker.color.a = 0x80;
+            marker.color.q = 1.0f;
+            q = draw_rect_filled(q, 0, &marker);
+
+            r.v0.x = ftoi4(OFF_X + x);
+            r.v0.y = ftoi4(OFF_Y + y);
+            r.v0.z = 0;
+            r.v1.x = ftoi4(OFF_X + x + qw);
+            r.v1.y = ftoi4(OFF_Y + y + qh);
+            r.v1.z = 0;
+            if (normalised) {
+                r.t0.u = 0.0f;
+                r.t0.v = 0.0f;
+                r.t1.u = 1.0f;
+                r.t1.v = 1.0f;
+            } else {
+                r.t0.u = 0.0f;
+                r.t0.v = 0.0f;
+                r.t1.u = (float)nc_logo_used_w;
+                r.t1.v = (float)nc_logo_used_h;
+            }
+            r.color.r = r.color.g = r.color.b = 0x80;
+            r.color.a = 0x80;
+            r.color.q = 1.0f;
+            q = draw_rect_textured(q, 0, &r);
+        }
 
         q = draw_finish(q);
 
@@ -178,7 +233,7 @@ int main(void)
         graph_wait_vsync();
 
         if ((frames++ % 60) == 0)
-            printf("ps2_logo: frame %d\n", frames);
+            printf("@NAME@: frame %d\n", frames);
     }
 
     return 0;
