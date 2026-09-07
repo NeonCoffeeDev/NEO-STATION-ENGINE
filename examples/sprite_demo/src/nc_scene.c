@@ -74,6 +74,7 @@ int nc_scene_load(const NC_Package *pkg, int index)
         sp->w = sd->w;  sp->h = sd->h;
         sp->u = sd->u;  sp->v = sd->v;
         sp->visible = 1;
+        sp->fixed = (sd->flags & NC_SPRITE_FIXED) ? 1 : 0;
         if (sd->tex_slot < NC_MAX_TEXTURES) {
             sp->tpage = pkg->textures[sd->tex_slot].tpage;
             sp->clut = pkg->textures[sd->tex_slot].clut;
@@ -140,7 +141,7 @@ void nc_scene_draw(void)
         if (!sp->visible)
             continue;
         nc_sprite_draw(sp->tpage, sp->clut, sp->x, sp->y, sp->w, sp->h,
-                       sp->u, sp->v);
+                       sp->u, sp->v, sp->fixed);
     }
 }
 

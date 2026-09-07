@@ -13,6 +13,7 @@
 #include <psxgpu.h>
 #include <psxgte.h>
 #include <psxpad.h>
+#include <psxspu.h>
 #include <inline_c.h>
 
 #define NC_SCREEN_W   320
@@ -35,14 +36,44 @@ void *nc_gfx_alloc(int bytes);          /* NULL when the packet buffer is full *
 void  nc_gfx_sort(int otz, void *prim); /* bucket a primitive by depth          */
 void  nc_gfx_flip(void);                /* wait for vblank, swap, draw          */
 
-/* Draw a line of text over everything else, using the built-in debug font.
- * Screen coordinates, 0,0 top-left. Call between frames like any draw call. */
+/* Draw a line of text over everything else. Screen coordinates, 0,0 top-left.
+ * Call between frames like any draw call.
+ *
+ * Uses the package's font sheet, which every package carries. If a package has
+ * no font -- an old one, or a failed upload -- this falls back to the SDK debug
+ * font so text never simply vanishes. */
 void  nc_text(int x, int y, const char *text);
+
+/* The font sheet, as the package's FNT0 chunk describes it. Glyphs are a fixed
+ * grid: character `first` is the top-left cell, `columns` per row. Lowercase is
+ * folded to uppercase on the way out, because an 8x8 arcade font has one case. */
+typedef struct {
+    uint16_t tpage, clut;
+    short    u0, v0;        /* where the sheet starts inside the page      */
+    uint8_t  cell_w, cell_h;
+    uint8_t  first, columns;
+    uint8_t  rows;
+    uint8_t  ready;
+} NC_Font;
+
+void  nc_font_set(const NC_Font *font);
+int   nc_text_width(const char *text);   /* pixels, for centring            */
 
 /* Draw a textured quad in SCREEN space -- no GTE, no transform, no depth sort.
  * This is the 2D path: sprites are just quads the GPU draws where you say. */
 void  nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
-                     int u, int v);
+                     int u, int v, int fixed);
+
+/* ---- screen shake -------------------------------------------------------
+ *
+ * A decaying random offset applied to everything that is not marked fixed.
+ * Panels and HUD stay put while the playfield jolts, which reads as impact
+ * rather than as the television being kicked.
+ */
+void  nc_shake_add(int amount);   /* strongest wins; they do not stack     */
+void  nc_shake_update(void);      /* decay, once per frame                 */
+int   nc_shake_x(void);
+int   nc_shake_y(void);
 
 /* Room reserved per nc_text() call before the unused tail is handed back. One
  * sprite per character, so this caps a single line at roughly 120 characters. */
@@ -51,6 +82,9 @@ void  nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
 /* Where sprites land in the ordering table. Text sits at 0 and the 3D pass uses
  * 2 upward, so 1 puts sprites over the world but under the HUD text. */
 #define NC_SPRITE_DEPTH 1
+
+/* Text sits at the front of the ordering table, over sprites and the 3D pass. */
+#define NC_TEXT_DEPTH 0
 
 /* ---- meshes ------------------------------------------------------------ */
 
@@ -113,6 +147,8 @@ typedef struct {
 } NC_Instance;
 
 /* A sprite as it appears in the package. 16 bytes; the writer must agree. */
+#define NC_SPRITE_FIXED 1        /* ignore screen shake: panels, HUD */
+
 typedef struct {
     uint16_t tex_slot;
     uint16_t flags;
@@ -131,6 +167,7 @@ typedef struct {
 } NC_Scene;
 
 #define NC_MAX_TEXTURES 8
+#define NC_MAX_SOUNDS   16
 #define NC_MAX_MESHES  64
 #define NC_MAX_SCENES  16
 
@@ -153,6 +190,43 @@ typedef struct {
 /* Returns 1 on success, 0 if the blob is not a package this build understands.
  * On failure the reason is printed to TTY. */
 int nc_pkg_load(const void *data, NC_Package *pkg);
+
+
+/* ---- sound ---------------------------------------------------------------
+ *
+ * Samples are uploaded to the SPU's own 512 KB of RAM once, at load. Playing one
+ * is then just pointing a voice at an address -- the CPU does no mixing.
+ */
+/* Music is a CD audio track, not an SPU sample: songs are far too large for
+ * the SPU's 512 KB. Track 1 holds the game, so music starts at 2. */
+/* ---- saving --------------------------------------------------------------
+ *
+ * A memory card file holding a small fixed array of ints. There is no allocator
+ * and no serialisation format worth writing for a 2 MB machine -- a high score,
+ * a level number and some flags is what this is for.
+ *
+ * The path must be unique per game: the card is shared with every other title.
+ */
+#define NC_SAVE_SLOTS 16
+#define NC_SAVE_PATH  "bu00:BASLUS-99999SPRITEDE"
+#define NC_SAVE_TITLE "sprite_demo"
+
+void nc_save_init(void);
+int  nc_save_get(int slot);
+void nc_save_set(int slot, int value);
+int  nc_save_store(void);      /* 1 on success */
+int  nc_save_load(void);       /* 1 if a save was read; 0 if there is none */
+int  nc_save_erase(void);
+
+void nc_music_init(void);
+void nc_music_play(int track);
+void nc_music_stop(void);
+int  nc_music_track(void);
+
+void nc_audio_init(void);
+int  nc_audio_add(const void *adpcm, int size, int rate);  /* -> id, or -1   */
+void nc_audio_play(int id);
+int  nc_audio_count(void);
 
 
 /* ---- the live scene -----------------------------------------------------
@@ -181,6 +255,7 @@ typedef struct {
     int w, h;
     int u, v;                 /* which part of the texture to show           */
     int visible;
+    int fixed;                /* immune to screen shake                      */
 } NC_Sprite;
 
 int  nc_scene_load(const NC_Package *pkg, int index);

@@ -201,3 +201,57 @@ Still open:
    to share the drive with music.
 3. **Per-object scripts**, 4-bit textures, LTO.
 4. **PS2.** Untouched -- see M6.
+
+
+## Update, 2026-09-06 (saves, a menu, and a collision fix)
+
+- **Memory card saves.** 16 int slots, one 8 KB block, with a real BIOS header
+  so the save appears in the console's own memory card screen under the
+  project's name rather than as corrupted data. The failure that hid this for a
+  while is written up in KNOWN-ISSUES.md: `_bu_init()` called before the card
+  driver has exchanged a byte silently zeroes the card's directory, and every
+  later save then fails as "card full" on an empty card.
+- **A menu scene in the shooter.** High score read on entry, START to play,
+  SELECT to clear, written back on game over. This is the shape a template
+  should have: two scenes, one script, branching on `scene()`.
+- **A collision fix.** A hit moved the player to the respawn point and the rest
+  of the same loop then tested the remaining enemies against the new position,
+  so one collision could cost several lives and paint explosions at both the
+  impact and the respawn. Verified on the emulator: one collision, one life, one
+  pair of explosions at the impact.
+
+Still open:
+
+1. **A real font.** Text is the SDK's debug font, which does not belong next to
+   the panel art. A bitmap font sheet is the single most visible gap left.
+2. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+3. **Per-object scripts**, 4-bit textures, LTO.
+4. **PS2.** Untouched -- see M6.
+
+
+## Update, 2026-09-06 (a real font, and keeping projects in step)
+
+- **A bitmap font.** Text was the SDK's debug font, which does not belong next
+  to the panel art. Every package now carries a `FNT0` chunk -- an 8x8 sheet,
+  ASCII 32..95, uppercase only -- and `draw_text` emits one textured quad per
+  character from it. The sheet is 256x16 for a reason: that is the shape of the
+  VRAM strip between the framebuffers and the texture slots, so the font costs
+  no texture slot at all. The glyphs live in tools/ncc/ncc/fontgen.py as
+  editable pixel art rather than as a committed PNG; `ncc font out.png` dumps
+  them, and a project can point `"font"` in scene.json at its own sheet.
+- **`ncc sync`.** A project keeps its own copy of the runtime, which is what
+  makes it readable and modifiable -- and also means an engine fix never reaches
+  projects made before it. `ncc sync` copies the engine files back over,
+  re-applying the project's own name and save id, and touches nothing else.
+  There is a SYNC button in Studio.
+- **Two small build traps closed.** `file(GLOB)` without `CONFIGURE_DEPENDS` is
+  evaluated once, so a source file added later became an undefined reference at
+  link time. And a running emulator holds game.bin open, which failed the build
+  after a clean compile with a message about an output image -- `ncc run` now
+  closes it first, and the error explains itself if it happens anyway.
+
+Still open:
+
+1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+2. **Per-object scripts**, 4-bit textures, LTO.
+3. **PS2.** Untouched -- see M6.

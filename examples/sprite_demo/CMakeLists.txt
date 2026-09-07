@@ -12,7 +12,7 @@ project(
 	DESCRIPTION "Neon Coffee PS1 project"
 )
 
-file(GLOB _sources src/*.c)
+file(GLOB _sources CONFIGURE_DEPENDS src/*.c)
 
 psn00bsdk_add_executable(game GPREL ${_sources})
 target_include_directories(game PRIVATE include)

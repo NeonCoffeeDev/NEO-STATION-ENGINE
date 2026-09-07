@@ -121,10 +121,124 @@ def _substitute(root, name):
                     fh.write(new_text)
 
 
+# ---- sync ---------------------------------------------------------------
+
+# The engine files a project gets from _common and never edits. Everything else
+# in a project -- main.c, script.ncs, scene.json, art -- belongs to the author.
+ENGINE_FILES = [
+    os.path.join("include", "nc.h"),
+    os.path.join("include", "nc_script.h"),
+    os.path.join("src", "nc_gfx.c"),
+    os.path.join("src", "nc_input.c"),
+    os.path.join("src", "nc_pkg.c"),
+    os.path.join("src", "nc_scene.c"),
+    os.path.join("src", "nc_script.c"),
+    os.path.join("src", "nc_audio.c"),
+    os.path.join("src", "nc_music.c"),
+    os.path.join("src", "nc_save.c"),
+]
+
+
+def _project_name(root):
+    """The name a project was created with.
+
+    Engine files carry placeholders -- the save path and title in nc.h -- that
+    are filled in at creation. Copying a template file over a project would put
+    the placeholders back and give the game a save file literally called
+    @SAVEID@, so the sync has to know the name. CMakeLists.txt is where it
+    survives: `ncc sync` never touches that file, so its project() line is a
+    reliable record. The directory name is the fallback.
+    """
+    cml = os.path.join(root, "CMakeLists.txt")
+    if os.path.isfile(cml):
+        try:
+            with open(cml, encoding="utf-8") as fh:
+                text = fh.read()
+        except (OSError, UnicodeDecodeError):
+            text = ""
+        m = re.search(r"project\s*\(\s*([^\s)]+)", text)
+        if m:
+            return m.group(1)
+    return os.path.basename(os.path.normpath(root))
+
+
+def sync(args):
+    """Update a project's engine files from the templates.
+
+    A project owns its copy of the runtime, which is what makes it a real,
+    self-contained thing you can read and modify. The cost is that engine fixes
+    do not reach projects made before them -- a package built by a newer `ncc`
+    against an older runtime fails at boot with a version mismatch, which is a
+    confusing way to learn that your project is out of date. This is the way
+    back into step.
+
+    It touches only the files above. Your game is never overwritten.
+    """
+    dest = os.path.abspath(args.path or ".")
+    if not os.path.isdir(dest):
+        raise SystemExit(f"ncc: {dest} is not a directory")
+
+    name = _project_name(dest)
+    volume = _volume_name(name)
+    save_id = _save_id(name)
+
+    def template_text(path):
+        """The template file as this project should hold it."""
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        return (text.replace("@NAME@", name)
+                    .replace("@VOLUME@", volume)
+                    .replace("@SAVEID@", save_id))
+
+    updated, added, same = [], [], 0
+    for rel in ENGINE_FILES:
+        src = os.path.join(COMMON_DIR, rel)
+        dst = os.path.join(dest, rel)
+        if not os.path.isfile(src):
+            continue
+
+        want = template_text(src)
+
+        if os.path.isfile(dst):
+            try:
+                with open(dst, encoding="utf-8") as fh:
+                    have = fh.read()
+            except (OSError, UnicodeDecodeError):
+                have = None
+            if have == want:
+                same += 1
+                continue
+            record = updated
+        else:
+            # A project that never had this file predates the feature; adding it
+            # is what makes the sync useful rather than merely tidy.
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            record = added
+
+        with open(dst, "w", encoding="utf-8", newline="") as fh:
+            fh.write(want)
+        record.append(rel)
+
+    print(f"Syncing {name} with the engine templates")
+    for rel in added:
+        print(f"  added    {rel}")
+    for rel in updated:
+        print(f"  updated  {rel}")
+    if not added and not updated:
+        print(f"  already up to date ({same} files)")
+    else:
+        print(f"  {same} file(s) already current")
+        print("\n  Rebuild before running:  ncc build " + os.path.relpath(dest))
+    return 0
+
+
 # ---- new ----------------------------------------------------------------
 
 def new(args):
-    name = args.name
+    # `ncc new path/to/mygame` is a natural thing to type, and the name is then
+    # a whole path. Left alone that becomes the disc volume and the memory card
+    # id, so the save shows up on the card as CUSERSBA. Take the last segment.
+    name = os.path.basename(os.path.normpath(args.name.replace("\\", "/")))
     template = getattr(args, "template", None) or DEFAULT_TEMPLATE
     available = template_names()
 
@@ -135,7 +249,7 @@ def new(args):
             f"     See them with:  ncc templates"
         )
 
-    dest = os.path.abspath(args.path or name)
+    dest = os.path.abspath(args.path or args.name)
     if os.path.exists(dest) and os.listdir(dest):
         raise SystemExit(f"ncc: {dest} already exists and is not empty.")
 
@@ -313,10 +427,19 @@ def build(args):
     if r.returncode != 0:
         sys.stdout.write(r.stdout)
         sys.stderr.write(r.stderr)
-        if "Access is denied" in (r.stdout + r.stderr):
+        output = r.stdout + r.stderr
+        if "Access is denied" in output:
             print("\nncc: this is the spaces-in-build-path failure. The build dir was\n"
                   f"     {build_dir}\n"
                   "     See docs/KNOWN-ISSUES.md.", file=sys.stderr)
+        if "Cannot open or create output image file" in output:
+            # Everything compiled and linked; only writing the disc image failed.
+            # On Windows that means something else has the file open, and the
+            # only thing that ever does is the emulator still running the last
+            # build. The mkpsxiso message does not say so.
+            print("\nncc: the compile succeeded -- writing the disc image did not.\n"
+                  "     Something has game.bin open. Close DuckStation and build\n"
+                  "     again; `ncc run` does this for you.", file=sys.stderr)
         raise SystemExit("ncc: build failed.")
 
     # Surface compiler warnings even on success -- they are easy to miss.
@@ -337,7 +460,25 @@ def build(args):
 
 # ---- run ----------------------------------------------------------------
 
+def _close_running_emulator():
+    """Close a DuckStation left over from the last run, before rebuilding.
+
+    It holds game.bin open, and mkpsxiso cannot overwrite a file Windows has
+    locked -- so the build fails after compiling and linking cleanly, with a
+    message about an output image that says nothing about the emulator. Closing
+    it first is what makes `ncc run` twice in a row work the way you expect.
+    """
+    if os.name != "nt":
+        return
+    for image in ("duckstation-qt-x64-ReleaseLTCG.exe", "duckstation-qt.exe",
+                  "duckstation-nogui-x64-ReleaseLTCG.exe"):
+        subprocess.run(["taskkill", "/IM", image, "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def run(args):
+    _close_running_emulator()
+
     rc = build(args)
     if rc != 0:
         return rc

@@ -56,9 +56,18 @@ ChunkEntry (16 bytes)
 | `CLUT` | Palette, 16 or 256 entries of 16-bit BGR555                      |
 | `MESH` | Vertices, faces, per-face material/texture refs                  |
 | `ANIM` | Keyframes, fixed-point                                           |
+| `FNT0` | Font sheet: pixels and palette like a texture, plus the cell grid |
 | `SND0` | Audio, SPU-ADPCM on PS1                                          |
 | `SCN0` | Scene graph: node list, transforms, mesh refs, spawn data        |
 | `STRT` | Startup config: first scene, screen mode, budgets                |
+
+`FNT0` is not optional: every package carries one, and it lands in the strip of
+VRAM between the framebuffers and the texture slots, so it costs no texture slot.
+
+**This page is the original draft.** The shipped format is version 7, and it
+differs -- chunks are 8-aligned rather than 2048, `CLUT` is folded into `TEX0`,
+and `ANIM`/`STRT` do not exist yet. The reasons are in the module docstring of
+`tools/ncc/ncc/ncpkg.py`, which is the authority.
 
 Cross-references are by `id`, never by file offset — a chunk can be rebuilt or moved
 without touching the chunks that point at it.

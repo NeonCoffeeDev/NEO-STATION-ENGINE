@@ -119,8 +119,8 @@ func update_menu():
     draw_text(116, 70, "NEON COFFEE")
     draw_text(128, 86, "SQUADRON")
 
-    draw_text(14, 8, "HI")
-    draw_num(14, 18, hiscore)
+    draw_text(12, 23, "HI")
+    draw_num(12, 33, hiscore)
 
     # Blink the prompt so it reads as waiting rather than frozen.
     if (menu_timer % 60) < 40:
@@ -404,16 +404,19 @@ func overlap(ax, ay, aw, ah, bx, by, bw, bh):
 
 
 func draw_hud():
-    # The panels have a framed window near the top; the text sits inside it.
-    draw_text(14, 8, "SCORE")
-    draw_num(14, 18, score)
-    draw_text(14, 30, "HI")
-    draw_num(14, 40, hiscore)
-    draw_text(270, 8, "LIFE")
-    draw_num(270, 18, lives)
+    # The panels have a framed window near the top -- interior x 7..53 of each
+    # 64-wide panel, y 21..53 -- and the HUD sits inside it. Two rows of eight
+    # pixels is what fits, which is why the high score lives on the menu and the
+    # game over screen rather than here.
+    draw_text(12, 23, "SCORE")
+    draw_num(12, 33, score)
+    draw_text(268, 23, "LIFE")
+    draw_num(268, 33, lives)
 
     if lives <= 0:
         draw_text(124, 112, "GAME OVER")
+        draw_text(116, 96, "HI")
+        draw_num(140, 96, hiscore)
         if score >= hiscore and score > 0:
             draw_text(112, 128, "NEW HI SCORE")
         if dead_timer > 40:

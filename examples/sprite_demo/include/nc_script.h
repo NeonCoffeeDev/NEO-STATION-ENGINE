@@ -13,6 +13,26 @@
 
 #include "nc.h"
 
+/* Array access, bounds-checked.
+ *
+ * There is no MMU on this machine: an out-of-range write does not fault, it
+ * quietly corrupts whatever happens to be next in memory and the console locks
+ * up somewhere unrelated minutes later. So a bad index reads as 0 and writes
+ * nowhere -- the same forgiving rule the object and sprite calls follow.
+ *
+ * At -O2 these inline to a compare and a branch.
+ */
+static inline int nc_arr_get(const int *a, int n, int i)
+{
+    return (i >= 0 && i < n) ? a[i] : 0;
+}
+
+static inline void nc_arr_set(int *a, int n, int i, int v)
+{
+    if (i >= 0 && i < n)
+        a[i] = v;
+}
+
 /* Implemented by your script (or stubbed out by the transpiler if you did not
  * define them). */
 void nc_script_ready(void);
@@ -23,6 +43,18 @@ void nc_s_print(const char *msg);
 void nc_s_print_num(int value);
 int  nc_s_draw_text(int x, int y, const char *msg);
 int  nc_s_draw_num(int x, int y, int value);
+
+/* --- sound --- */
+int  nc_s_play_sound(int id);
+int  nc_s_sound_count(void);
+int  nc_s_play_music(int track);
+int  nc_s_stop_music(void);
+int  nc_s_shake(int amount);
+int  nc_s_save_get(int slot);
+int  nc_s_save_set(int slot, int value);
+int  nc_s_save_write(void);
+int  nc_s_save_read(void);
+int  nc_s_save_erase(void);
 
 /* --- input --- */
 int  nc_s_btn_held(int button);

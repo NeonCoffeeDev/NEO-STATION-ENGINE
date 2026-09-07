@@ -45,6 +45,12 @@ static int clear_r = 24, clear_g = 16, clear_b = 48;
  * camera sits at the origin looking down +Z. */
 static MATRIX view;
 
+/* Screen shake. Magnitude decays a little each frame and the offset is
+ * re-rolled, which looks like a jolt settling rather than a vibration. */
+static int shake_mag;
+static int shake_ox, shake_oy;
+static unsigned long shake_rng = 0x2545F491;
+
 static void setup_buffer(int i, int x)
 {
     SetDefDispEnv(&db[i].disp, x, 0, NC_SCREEN_W, NC_SCREEN_H);
@@ -92,23 +98,90 @@ void nc_gfx_init(void)
 }
 
 
+static NC_Font font;
+
+
+void nc_font_set(const NC_Font *f)
+{
+    font = *f;
+}
+
+
+int nc_text_width(const char *text)
+{
+    int n = 0;
+    if (text == 0)
+        return 0;
+    while (text[n])
+        n++;
+    return n * (font.ready ? font.cell_w : 8);
+}
+
+
+/* One glyph, as a screen-space quad. Text is not shaken: the HUD staying put
+ * while the playfield jolts is the whole point of the shake being selective. */
+static void glyph(int x, int y, int u, int v)
+{
+    POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
+    if (!poly)
+        return;
+
+    setPolyFT4(poly);
+    setRGB0(poly, 128, 128, 128);          /* 128 = neutral modulation */
+
+    poly->x0 = (short)x;                  poly->y0 = (short)y;
+    poly->x1 = (short)(x + font.cell_w);  poly->y1 = (short)y;
+    poly->x2 = (short)x;                  poly->y2 = (short)(y + font.cell_h);
+    poly->x3 = (short)(x + font.cell_w);  poly->y3 = (short)(y + font.cell_h);
+
+    setUV4(poly,
+           u,                  v,
+           u + font.cell_w - 1, v,
+           u,                  v + font.cell_h - 1,
+           u + font.cell_w - 1, v + font.cell_h - 1);
+    poly->tpage = font.tpage;
+    poly->clut = font.clut;
+
+    nc_gfx_sort(NC_TEXT_DEPTH, poly);
+}
+
+
 void nc_text(int x, int y, const char *text)
 {
-    char *start, *end;
+    int i;
 
     if (text == 0)
         return;
 
-    /* FntSort writes one sprite per character and hands back where it stopped,
-     * so reserve a generous block and then hand the unused tail back. */
-    start = (char *)nc_gfx_alloc(NC_TEXT_BUDGET);
-    if (!start)
+    if (!font.ready) {
+        /* No font in the package. FntSort writes one sprite per character and
+         * hands back where it stopped, so reserve a block and return the tail. */
+        char *start = (char *)nc_gfx_alloc(NC_TEXT_BUDGET);
+        if (!start)
+            return;
+        db_next = (char *)FntSort(db[db_active].ot, start, x, y, text);
         return;
+    }
 
-    end = (char *)FntSort(db[db_active].ot, start, x, y, text);
+    for (i = 0; text[i]; i++) {
+        int c = (unsigned char)text[i];
+        int index;
 
-    /* Rewind the bump allocator to what was actually used. */
-    db_next = end;
+        if (c >= 'a' && c <= 'z')
+            c -= 32;                        /* one case, like the arcade */
+
+        index = c - font.first;
+        /* Anything off the sheet -- including the space, whose cell is blank
+         * anyway -- costs nothing but the advance. Bounding this matters: an
+         * index past the last row would sample the texture slots below the font
+         * strip and draw somebody's artwork as a letter. */
+        if (index >= 0 && index < font.columns * font.rows && c != ' ')
+            glyph(x, y,
+                  font.u0 + (index % font.columns) * font.cell_w,
+                  font.v0 + (index / font.columns) * font.cell_h);
+
+        x += font.cell_w;
+    }
 }
 
 
@@ -184,12 +257,51 @@ void nc_gfx_flip(void)
     DrawOTag(db[1 - db_active].ot + (NC_OT_LEN - 1));
 }
 
+void nc_shake_add(int amount)
+{
+    /* Strongest wins rather than accumulating: three explosions at once should
+     * not multiply into a screen that never settles. */
+    if (amount > shake_mag)
+        shake_mag = amount;
+    if (shake_mag > 16)
+        shake_mag = 16;
+}
+
+
+void nc_shake_update(void)
+{
+    if (shake_mag <= 0) {
+        shake_mag = 0;
+        shake_ox = shake_oy = 0;
+        return;
+    }
+
+    shake_rng = shake_rng * 1103515245UL + 12345UL;
+    shake_ox = (int)((shake_rng >> 16) % (unsigned long)(shake_mag * 2 + 1))
+               - shake_mag;
+    shake_rng = shake_rng * 1103515245UL + 12345UL;
+    shake_oy = (int)((shake_rng >> 16) % (unsigned long)(shake_mag * 2 + 1))
+               - shake_mag;
+
+    shake_mag--;
+}
+
+
+int nc_shake_x(void) { return shake_ox; }
+int nc_shake_y(void) { return shake_oy; }
+
+
 void nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
-                    int u, int v)
+                    int u, int v, int fixed)
 {
     POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
     if (!poly)
         return;
+
+    if (!fixed) {
+        x += shake_ox;
+        y += shake_oy;
+    }
 
     setPolyFT4(poly);
 

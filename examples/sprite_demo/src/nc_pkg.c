@@ -14,7 +14,7 @@
 
 #include "nc.h"
 
-#define NC_PKG_VERSION 5
+#define NC_PKG_VERSION 7
 
 /* Mirrors the writer's layout exactly. Both sides must change together, which
  * is what the version field is for. */
@@ -50,6 +50,23 @@ typedef struct {
     RECT     tex_rect;
     RECT     clut_rect;
 } TexHeader;
+
+/* A font is a texture plus a grid. The first three lines match TexHeader
+ * exactly, on purpose -- the packer shares the same conversion code. */
+typedef struct {
+    uint16_t slot, w, h, pad;
+    RECT     tex_rect;
+    RECT     clut_rect;
+    int16_t  page_x, page_y;    /* the texture page the glyphs live in     */
+    int16_t  uv_x, uv_y;        /* where the sheet starts inside that page */
+    uint16_t cell_w, cell_h, first, columns;
+} FontHeader;
+
+typedef struct {
+    uint16_t id, pad;
+    uint32_t rate;
+    uint32_t size;
+} SoundHeader;
 
 typedef struct {
     uint16_t instance_count;
@@ -126,6 +143,41 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
             t->h = th->h;
             if ((int)th->slot >= pkg->texture_count)
                 pkg->texture_count = th->slot + 1;
+
+        } else if (fourcc_is(e->fourcc, "FNT0")) {
+            const FontHeader *fh = (const FontHeader *)p;
+            const uint32_t *pixels;
+            const uint32_t *palette;
+            uint32_t pixel_bytes;
+            NC_Font f;
+
+            pixels = (const uint32_t *)(p + sizeof(FontHeader));
+            pixel_bytes = (uint32_t)fh->w * fh->h;
+            pixel_bytes = (pixel_bytes + 3) & ~3u;
+            palette = (const uint32_t *)((const uint8_t *)pixels + pixel_bytes);
+
+            DrawSync(0);
+            LoadImage(&fh->tex_rect, pixels);
+            DrawSync(0);
+            LoadImage(&fh->clut_rect, palette);
+            DrawSync(0);
+
+            f.tpage = getTPage(1, 0, fh->page_x, fh->page_y);
+            f.clut = getClut(fh->clut_rect.x, fh->clut_rect.y);
+            f.u0 = fh->uv_x;
+            f.v0 = fh->uv_y;
+            f.cell_w = (uint8_t)fh->cell_w;
+            f.cell_h = (uint8_t)fh->cell_h;
+            f.first = (uint8_t)fh->first;
+            f.columns = (uint8_t)fh->columns;
+            f.rows = (uint8_t)(fh->cell_h ? fh->h / fh->cell_h : 0);
+            f.ready = 1;
+            nc_font_set(&f);
+
+        } else if (fourcc_is(e->fourcc, "SND0")) {
+            const SoundHeader *sh = (const SoundHeader *)p;
+            nc_audio_add(p + sizeof(SoundHeader), (int)sh->size,
+                         (int)sh->rate);
 
         } else if (fourcc_is(e->fourcc, "MESH")) {
             const MeshHeader *mh = (const MeshHeader *)p;
@@ -214,7 +266,8 @@ int nc_pkg_load(const void *data, NC_Package *pkg)
         return 0;
     }
 
-    printf("nc_pkg: %d mesh(es), %d texture(s), %d scene(s)\n",
-           pkg->mesh_count, pkg->texture_count, pkg->scene_count);
+    printf("nc_pkg: %d mesh(es), %d texture(s), %d sound(s), %d scene(s)\n",
+           pkg->mesh_count, pkg->texture_count, nc_audio_count(),
+           pkg->scene_count);
     return 1;
 }

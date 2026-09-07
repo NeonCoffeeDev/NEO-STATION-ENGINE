@@ -239,6 +239,10 @@ class Studio:
         Button(row2, "FOLDER", self.open_folder, DIM, width=8).pack(side="left")
         Button(row2, "OUTPUT", self.open_output, DIM, width=8).pack(side="left",
                                                                    padx=4)
+        # A project owns its copy of the runtime, so engine fixes do not reach
+        # it on their own. This is the way back into step.
+        Button(row2, "SYNC", lambda: self.run_ncc("sync"), DIM,
+               width=8).pack(side="left")
 
         self.b_godot = Button(body, "EDIT SCENE IN GODOT", self.open_godot, GREEN)
         self.b_godot.pack(fill="x", pady=(4, 0))

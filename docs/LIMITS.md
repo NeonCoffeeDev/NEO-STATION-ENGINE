@@ -41,6 +41,27 @@ eight separate images cost all eight.
 Oversized textures are **refused, not rescaled**. Silently resampling your art
 into mush would be worse than telling you.
 
+## Text
+
+Text is drawn from a font sheet the package carries, not from a system font.
+
+| Rule | Why |
+|---|---|
+| **Uppercase only**, ASCII 32–95 | An 8x8 cell has room for one case. Lowercase is folded up for you. |
+| **8x8 cells**, 8 pixels per character | 40 characters across a 320-wide screen. |
+| Sheet is **256x16**, 32 cells x 2 rows | It fits the VRAM strip above the texture slots, which is what makes it free. |
+| Costs **no texture slot** | See the VRAM map in `tools/ncc/ncc/textures.py`. |
+| One quad per character | A long HUD string every frame is real fill rate. |
+
+To use your own, put a 256x16 PNG in the project and name it in `scene.json`:
+
+```json
+"font": { "file": "textures/myfont.png", "cell": [8, 8], "first": 32 }
+```
+
+The built-in font is drawn in `tools/ncc/ncc/fontgen.py` as editable pixel
+art — change a glyph there rather than tracing it back out of a PNG.
+
 ## Sound
 
 | Rule | Why |

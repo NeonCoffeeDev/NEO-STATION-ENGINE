@@ -8,9 +8,16 @@ it is told.
 VRAM map
 --------
     (0,0)-(639,239)      the two 320x240 framebuffers
-    (960,0)              the debug font
+    (960,0)              the SDK debug font, used only if a package has no font
+    y=240, x=0..127      the NC font sheet, 256x16 texels
     y=256, x=slot*128    texture slots, 8 of them, 256x240 texels each
     x=0, y=496+slot      one 256-entry CLUT per slot, one row each
+    x=0, y=504           the font's CLUT
+
+Row 240..255 is the strip between the framebuffers and the texture band, and it
+is the reason the font costs no texture slot: it is 1024 cells wide and nothing
+else wants it. The font sheet is shaped to fit that strip rather than the other
+way round.
 
 Rows 496..511 sit inside the same page band as the textures, which is why
 textures are capped at 240 rows rather than 256 -- the last 16 rows are where the
@@ -46,6 +53,14 @@ MAX_TEX_W = 256
 MAX_TEX_H = 240                # 256 minus the 16 rows reserved for palettes
 CLUT_VRAM_X = 0
 CLUT_VRAM_Y = 496
+
+# The font lives in the strip above the texture band. Its texture page origin is
+# (0,0) -- pages are 256 texels tall -- so glyph V coordinates are 240..255.
+FONT_VRAM_X = 0
+FONT_VRAM_Y = 240
+FONT_CLUT_Y = 504
+FONT_PAGE_X = 0
+FONT_PAGE_Y = 0
 
 
 class TextureError(Exception):
@@ -148,6 +163,47 @@ def build_chunk(slot, indices, palette, w, h):
     out += indices
     if len(indices) % 4:
         out += b"\x00" * (4 - len(indices) % 4)   # keep the palette 4-aligned
+    for entry in palette:
+        out += struct.pack("<H", entry)
+    return bytes(out)
+
+
+FONT_MAX_W = 256
+FONT_MAX_H = 16
+
+
+def build_font_chunk(path, cell_w, cell_h, first, columns):
+    """FNT0: the same payload shape as a texture, plus the cell grid.
+
+    A font is a texture in every way that matters to the GPU. What makes it a
+    font is the grid, and that is four numbers -- so this shares convert() and
+    differs only in where it lands in VRAM.
+    """
+    indices, palette, w, h = convert(path, "font")
+
+    if w > FONT_MAX_W or h > FONT_MAX_H:
+        raise TextureError(
+            f"font sheet is {w}x{h}; the limit is {FONT_MAX_W}x{FONT_MAX_H}. "
+            f"It has to fit the VRAM strip above the texture slots, which is "
+            f"what keeps it from costing one of your 8 texture slots.")
+    if cell_w < 1 or cell_h < 1:
+        raise TextureError("font cell size must be at least 1x1")
+    if columns * cell_w > w:
+        raise TextureError(
+            f"font declares {columns} columns of {cell_w}px, which is "
+            f"{columns * cell_w}px wide, but the sheet is only {w}px.")
+
+    out = bytearray()
+    out += struct.pack("<HHHH", 0, w, h, 0)
+    out += struct.pack("<hhhh", FONT_VRAM_X, FONT_VRAM_Y, w // 2, h)
+    out += struct.pack("<hhhh", CLUT_VRAM_X, FONT_CLUT_Y, 256, 1)
+    # Page origin, the UV origin inside it, then the grid.
+    out += struct.pack("<hhhh", FONT_PAGE_X, FONT_PAGE_Y,
+                       FONT_VRAM_X * 2, FONT_VRAM_Y)
+    out += struct.pack("<HHHH", cell_w, cell_h, first, columns)
+    out += indices
+    if len(indices) % 4:
+        out += b"\x00" * (4 - len(indices) % 4)
     for entry in palette:
         out += struct.pack("<H", entry)
     return bytes(out)

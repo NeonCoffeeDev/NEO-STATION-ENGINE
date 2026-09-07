@@ -98,23 +98,90 @@ void nc_gfx_init(void)
 }
 
 
+static NC_Font font;
+
+
+void nc_font_set(const NC_Font *f)
+{
+    font = *f;
+}
+
+
+int nc_text_width(const char *text)
+{
+    int n = 0;
+    if (text == 0)
+        return 0;
+    while (text[n])
+        n++;
+    return n * (font.ready ? font.cell_w : 8);
+}
+
+
+/* One glyph, as a screen-space quad. Text is not shaken: the HUD staying put
+ * while the playfield jolts is the whole point of the shake being selective. */
+static void glyph(int x, int y, int u, int v)
+{
+    POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
+    if (!poly)
+        return;
+
+    setPolyFT4(poly);
+    setRGB0(poly, 128, 128, 128);          /* 128 = neutral modulation */
+
+    poly->x0 = (short)x;                  poly->y0 = (short)y;
+    poly->x1 = (short)(x + font.cell_w);  poly->y1 = (short)y;
+    poly->x2 = (short)x;                  poly->y2 = (short)(y + font.cell_h);
+    poly->x3 = (short)(x + font.cell_w);  poly->y3 = (short)(y + font.cell_h);
+
+    setUV4(poly,
+           u,                  v,
+           u + font.cell_w - 1, v,
+           u,                  v + font.cell_h - 1,
+           u + font.cell_w - 1, v + font.cell_h - 1);
+    poly->tpage = font.tpage;
+    poly->clut = font.clut;
+
+    nc_gfx_sort(NC_TEXT_DEPTH, poly);
+}
+
+
 void nc_text(int x, int y, const char *text)
 {
-    char *start, *end;
+    int i;
 
     if (text == 0)
         return;
 
-    /* FntSort writes one sprite per character and hands back where it stopped,
-     * so reserve a generous block and then hand the unused tail back. */
-    start = (char *)nc_gfx_alloc(NC_TEXT_BUDGET);
-    if (!start)
+    if (!font.ready) {
+        /* No font in the package. FntSort writes one sprite per character and
+         * hands back where it stopped, so reserve a block and return the tail. */
+        char *start = (char *)nc_gfx_alloc(NC_TEXT_BUDGET);
+        if (!start)
+            return;
+        db_next = (char *)FntSort(db[db_active].ot, start, x, y, text);
         return;
+    }
 
-    end = (char *)FntSort(db[db_active].ot, start, x, y, text);
+    for (i = 0; text[i]; i++) {
+        int c = (unsigned char)text[i];
+        int index;
 
-    /* Rewind the bump allocator to what was actually used. */
-    db_next = end;
+        if (c >= 'a' && c <= 'z')
+            c -= 32;                        /* one case, like the arcade */
+
+        index = c - font.first;
+        /* Anything off the sheet -- including the space, whose cell is blank
+         * anyway -- costs nothing but the advance. Bounding this matters: an
+         * index past the last row would sample the texture slots below the font
+         * strip and draw somebody's artwork as a letter. */
+        if (index >= 0 && index < font.columns * font.rows && c != ' ')
+            glyph(x, y,
+                  font.u0 + (index % font.columns) * font.cell_w,
+                  font.v0 + (index / font.columns) * font.cell_h);
+
+        x += font.cell_w;
+    }
 }
 
 

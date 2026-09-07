@@ -36,9 +36,28 @@ void *nc_gfx_alloc(int bytes);          /* NULL when the packet buffer is full *
 void  nc_gfx_sort(int otz, void *prim); /* bucket a primitive by depth          */
 void  nc_gfx_flip(void);                /* wait for vblank, swap, draw          */
 
-/* Draw a line of text over everything else, using the built-in debug font.
- * Screen coordinates, 0,0 top-left. Call between frames like any draw call. */
+/* Draw a line of text over everything else. Screen coordinates, 0,0 top-left.
+ * Call between frames like any draw call.
+ *
+ * Uses the package's font sheet, which every package carries. If a package has
+ * no font -- an old one, or a failed upload -- this falls back to the SDK debug
+ * font so text never simply vanishes. */
 void  nc_text(int x, int y, const char *text);
+
+/* The font sheet, as the package's FNT0 chunk describes it. Glyphs are a fixed
+ * grid: character `first` is the top-left cell, `columns` per row. Lowercase is
+ * folded to uppercase on the way out, because an 8x8 arcade font has one case. */
+typedef struct {
+    uint16_t tpage, clut;
+    short    u0, v0;        /* where the sheet starts inside the page      */
+    uint8_t  cell_w, cell_h;
+    uint8_t  first, columns;
+    uint8_t  rows;
+    uint8_t  ready;
+} NC_Font;
+
+void  nc_font_set(const NC_Font *font);
+int   nc_text_width(const char *text);   /* pixels, for centring            */
 
 /* Draw a textured quad in SCREEN space -- no GTE, no transform, no depth sort.
  * This is the 2D path: sprites are just quads the GPU draws where you say. */
@@ -63,6 +82,9 @@ int   nc_shake_y(void);
 /* Where sprites land in the ordering table. Text sits at 0 and the 3D pass uses
  * 2 upward, so 1 puts sprites over the world but under the HUD text. */
 #define NC_SPRITE_DEPTH 1
+
+/* Text sits at the front of the ordering table, over sprites and the 3D pass. */
+#define NC_TEXT_DEPTH 0
 
 /* ---- meshes ------------------------------------------------------------ */
 

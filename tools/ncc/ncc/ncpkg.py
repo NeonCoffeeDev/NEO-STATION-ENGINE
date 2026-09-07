@@ -22,12 +22,14 @@ Design notes, and where this departs from the original draft in docs/NCPKG.md:
 import json
 import os
 import struct
+import tempfile
 
 from . import audio as audio_mod
+from . import fontgen as font_mod
 from . import textures as tex_mod
 
 MAGIC = b"NCPK"
-VERSION = 6
+VERSION = 7
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -71,6 +73,45 @@ def face_normal(verts, quad):
     if length == 0:
         return (0, 0, 0)                    # degenerate face; leave it unlit
     return tuple(int(round(c / length * ONE)) for c in n)
+
+
+def build_font(spec, base_dir):
+    """The package's font chunk.
+
+    Every package gets one, whether or not the document asks for it. Text is not
+    an optional feature -- a game with no way to put a word on screen is a game
+    that cannot tell the player anything -- and the font costs no texture slot,
+    so there is nothing to save by leaving it out.
+
+    A document can override it:
+
+        "font": {"file": "textures/myfont.png", "cell": [8, 8], "first": 32}
+
+    A bare string is shorthand for the file with the default grid.
+    """
+    if isinstance(spec, str):
+        spec = {"file": spec}
+    spec = spec or {}
+
+    cell = spec.get("cell", [font_mod.CELL_W, font_mod.CELL_H])
+    cell_w, cell_h = int(cell[0]), int(cell[1])
+    first = int(spec.get("first", font_mod.FIRST_CHAR))
+    columns = int(spec.get("columns", font_mod.COLUMNS))
+
+    rel = spec.get("file")
+    if rel:
+        path = rel if os.path.isabs(rel) else os.path.join(base_dir, rel)
+        return tex_mod.build_font_chunk(path, cell_w, cell_h, first, columns)
+
+    # No font declared: render the built-in one to a temporary PNG. Generating
+    # it rather than shipping a binary asset keeps the glyphs editable as source.
+    fd, tmp = tempfile.mkstemp(suffix=".png", prefix="ncfont-")
+    os.close(fd)
+    try:
+        font_mod.write_png(tmp)
+        return tex_mod.build_font_chunk(tmp, cell_w, cell_h, first, columns)
+    finally:
+        os.unlink(tmp)
 
 
 def _clamp_short(v, what):
@@ -275,6 +316,8 @@ def pack(doc, base_dir="."):
     tex_chunks, tex_slots = tex_mod.build(doc.get("textures", []), base_dir)
     for i, data in enumerate(tex_chunks):
         chunks.append((b"TEX0", i, data))
+
+    chunks.append((b"FNT0", 0, build_font(doc.get("font"), base_dir)))
 
     snd_chunks, _snd_ids = audio_mod.build(doc.get("sounds", []), base_dir)
     for i, data in enumerate(snd_chunks):

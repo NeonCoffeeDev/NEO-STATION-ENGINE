@@ -7,6 +7,7 @@
  */
 
 #include <psxapi.h>
+#include <string.h>
 
 #include "nc.h"
 
@@ -15,9 +16,17 @@ static uint8_t pad_buff[2][34];
 
 static uint16_t btn_now;
 static uint16_t btn_prev;
+static int primed;
 
 void nc_input_init(void)
 {
+    /* Buttons are reported active-low, so a zeroed buffer reads as EVERY button
+     * held down. Before the BIOS driver has filled it in, that makes the first
+     * frame look like the player is mashing everything -- which instantly
+     * dismisses any menu waiting on a button press. Start it at 0xFF so an
+     * unpolled pad reads as idle. */
+    memset(pad_buff, 0xFF, sizeof(pad_buff));
+
     InitPAD(pad_buff[0], 34, pad_buff[1], 34);
     StartPAD();
 
@@ -25,6 +34,7 @@ void nc_input_init(void)
     ChangeClearPAD(0);
 
     btn_now = btn_prev = 0;
+    primed = 0;
 }
 
 void nc_input_poll(void)
@@ -33,12 +43,19 @@ void nc_input_poll(void)
 
     btn_prev = btn_now;
 
-    /* stat 0 means "a controller replied". The hardware reports buttons active-low,
-     * so invert to get the friendlier 1 = pressed. */
+    /* stat 0 means "a controller replied". The hardware reports buttons
+     * active-low, so invert to get the friendlier 1 = pressed. */
     if (pad->stat == 0)
         btn_now = ~pad->btn;
     else
         btn_now = 0;
+
+    /* On the very first poll btn_prev is still whatever we started with. Seed
+     * it from btn_now so nothing counts as "newly pressed" on frame one. */
+    if (!primed) {
+        btn_prev = btn_now;
+        primed = 1;
+    }
 }
 
 int nc_held(uint16_t button)

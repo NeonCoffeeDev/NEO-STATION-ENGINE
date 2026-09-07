@@ -13,6 +13,7 @@
 #include <psxgpu.h>
 #include <psxgte.h>
 #include <psxpad.h>
+#include <psxspu.h>
 #include <inline_c.h>
 
 #define NC_SCREEN_W   320
@@ -35,6 +36,56 @@ void *nc_gfx_alloc(int bytes);          /* NULL when the packet buffer is full *
 void  nc_gfx_sort(int otz, void *prim); /* bucket a primitive by depth          */
 void  nc_gfx_flip(void);                /* wait for vblank, swap, draw          */
 
+/* Draw a line of text over everything else. Screen coordinates, 0,0 top-left.
+ * Call between frames like any draw call.
+ *
+ * Uses the package's font sheet, which every package carries. If a package has
+ * no font -- an old one, or a failed upload -- this falls back to the SDK debug
+ * font so text never simply vanishes. */
+void  nc_text(int x, int y, const char *text);
+
+/* The font sheet, as the package's FNT0 chunk describes it. Glyphs are a fixed
+ * grid: character `first` is the top-left cell, `columns` per row. Lowercase is
+ * folded to uppercase on the way out, because an 8x8 arcade font has one case. */
+typedef struct {
+    uint16_t tpage, clut;
+    short    u0, v0;        /* where the sheet starts inside the page      */
+    uint8_t  cell_w, cell_h;
+    uint8_t  first, columns;
+    uint8_t  rows;
+    uint8_t  ready;
+} NC_Font;
+
+void  nc_font_set(const NC_Font *font);
+int   nc_text_width(const char *text);   /* pixels, for centring            */
+
+/* Draw a textured quad in SCREEN space -- no GTE, no transform, no depth sort.
+ * This is the 2D path: sprites are just quads the GPU draws where you say. */
+void  nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
+                     int u, int v, int fixed);
+
+/* ---- screen shake -------------------------------------------------------
+ *
+ * A decaying random offset applied to everything that is not marked fixed.
+ * Panels and HUD stay put while the playfield jolts, which reads as impact
+ * rather than as the television being kicked.
+ */
+void  nc_shake_add(int amount);   /* strongest wins; they do not stack     */
+void  nc_shake_update(void);      /* decay, once per frame                 */
+int   nc_shake_x(void);
+int   nc_shake_y(void);
+
+/* Room reserved per nc_text() call before the unused tail is handed back. One
+ * sprite per character, so this caps a single line at roughly 120 characters. */
+#define NC_TEXT_BUDGET 3072
+
+/* Where sprites land in the ordering table. Text sits at 0 and the 3D pass uses
+ * 2 upward, so 1 puts sprites over the world but under the HUD text. */
+#define NC_SPRITE_DEPTH 1
+
+/* Text sits at the front of the ordering table, over sprites and the 3D pass. */
+#define NC_TEXT_DEPTH 0
+
 /* ---- meshes ------------------------------------------------------------ */
 
 /* A quad face, as four indices into the vertex array. Quads are native on PS1 and
@@ -45,11 +96,27 @@ typedef struct {
     const SVECTOR *verts;   /* positions, 16-bit ints                       */
     const SVECTOR *norms;   /* one face normal per quad, for lighting       */
     const NC_Quad *quads;
+    const uint8_t *uvs;     /* 8 bytes per quad (u,v x4); 0 if untextured   */
     int            quad_count;
+    uint16_t       tpage;   /* resolved from the texture at load time       */
+    uint16_t       clut;
 } NC_Mesh;
 
-/* Transform, light, cull and sort a mesh into this frame's ordering table. */
+/* Transform, light, cull and sort a mesh into this frame's ordering table.
+ * Positions are in world space; the camera set by nc_camera_set() is applied. */
 void nc_mesh_draw(const NC_Mesh *mesh, const SVECTOR *rot, const VECTOR *pos);
+
+/* ---- camera -------------------------------------------------------------
+ *
+ * There is no camera in hardware -- "moving the camera" means transforming every
+ * object by the inverse of where the camera is. nc_camera_set() builds that
+ * inverse once per frame; nc_mesh_draw() then composes it with each object.
+ *
+ * Call it before drawing anything. The default is the identity: sitting at the
+ * origin looking down +Z.
+ */
+void nc_camera_set(const VECTOR *pos, const SVECTOR *rot);
+void nc_camera_reset(void);
 
 /* ---- input ------------------------------------------------------------- */
 
@@ -57,5 +124,160 @@ void nc_input_init(void);
 void nc_input_poll(void);               /* call once per frame, before reading */
 int  nc_held(uint16_t button);           /* PAD_CROSS, PAD_UP, ...              */
 int  nc_pressed(uint16_t button);        /* true only on the frame it went down */
+
+
+/* ---- packaged data ------------------------------------------------------
+ *
+ * A .ncpkg holds the meshes and one or more scenes, so a game's content can
+ * change without recompiling anything. The package is embedded in the
+ * executable and these structures point straight into it -- nothing is copied
+ * or parsed at load time.
+ */
+
+/* One placed object as it appears in the package. Laid out so every field is
+ * naturally aligned and the struct is exactly 32 bytes; the writer in
+ * tools/ncc/ncc/ncpkg.py must agree. */
+typedef struct {
+    uint16_t mesh_id;
+    uint16_t flags;
+    int32_t  px, py, pz;      /* position                                  */
+    int16_t  rx, ry, rz;      /* starting rotation, 4096 = one full turn   */
+    int16_t  sx, sy, sz;      /* rotation added per frame                  */
+    int16_t  pad0, pad1;
+} NC_Instance;
+
+/* A sprite as it appears in the package. 16 bytes; the writer must agree. */
+#define NC_SPRITE_FIXED 1        /* ignore screen shake: panels, HUD */
+
+typedef struct {
+    uint16_t tex_slot;
+    uint16_t flags;
+    int16_t  x, y, w, h;
+    uint16_t u, v;
+} NC_SpriteDef;
+
+typedef struct {
+    const NC_Instance *instances;
+    int instance_count;
+    const NC_SpriteDef *sprites;
+    int sprite_count;
+    int clear_r, clear_g, clear_b;
+    VECTOR  cam_pos;
+    SVECTOR cam_rot;
+} NC_Scene;
+
+#define NC_MAX_TEXTURES 8
+#define NC_MAX_SOUNDS   16
+#define NC_MAX_MESHES  64
+#define NC_MAX_SCENES  16
+
+/* A texture, once it is in VRAM. tpage and clut are the packed words the GPU
+ * wants; the runtime never needs the pixels again after uploading them. */
+typedef struct {
+    uint16_t tpage, clut;
+    int      w, h;
+} NC_Texture;
+
+typedef struct {
+    NC_Texture textures[NC_MAX_TEXTURES];
+    int      texture_count;
+    NC_Mesh  meshes[NC_MAX_MESHES];
+    int      mesh_count;
+    NC_Scene scenes[NC_MAX_SCENES];
+    int      scene_count;
+} NC_Package;
+
+/* Returns 1 on success, 0 if the blob is not a package this build understands.
+ * On failure the reason is printed to TTY. */
+int nc_pkg_load(const void *data, NC_Package *pkg);
+
+
+/* ---- sound ---------------------------------------------------------------
+ *
+ * Samples are uploaded to the SPU's own 512 KB of RAM once, at load. Playing one
+ * is then just pointing a voice at an address -- the CPU does no mixing.
+ */
+/* Music is a CD audio track, not an SPU sample: songs are far too large for
+ * the SPU's 512 KB. Track 1 holds the game, so music starts at 2. */
+/* ---- saving --------------------------------------------------------------
+ *
+ * A memory card file holding a small fixed array of ints. There is no allocator
+ * and no serialisation format worth writing for a 2 MB machine -- a high score,
+ * a level number and some flags is what this is for.
+ *
+ * The path must be unique per game: the card is shared with every other title.
+ */
+#define NC_SAVE_SLOTS 16
+#define NC_SAVE_PATH  "bu00:BASLUS-99999HELLOCUB"
+#define NC_SAVE_TITLE "hello_cube"
+
+void nc_save_init(void);
+int  nc_save_get(int slot);
+void nc_save_set(int slot, int value);
+int  nc_save_store(void);      /* 1 on success */
+int  nc_save_load(void);       /* 1 if a save was read; 0 if there is none */
+int  nc_save_erase(void);
+
+void nc_music_init(void);
+void nc_music_play(int track);
+void nc_music_stop(void);
+int  nc_music_track(void);
+
+void nc_audio_init(void);
+int  nc_audio_add(const void *adpcm, int size, int rate);  /* -> id, or -1   */
+void nc_audio_play(int id);
+int  nc_audio_count(void);
+
+
+/* ---- the live scene -----------------------------------------------------
+ *
+ * The package is read-only, but scripts need to move things. So loading a scene
+ * copies its instances into this mutable array; the package stays the pristine
+ * original that a scene reload restores from.
+ */
+
+#define NC_MAX_OBJECTS 128
+#define NC_MAX_SPRITES 64
+
+typedef struct {
+    int mesh_id;
+    int px, py, pz;           /* position                                  */
+    int rx, ry, rz;           /* rotation, 4096 = one full turn            */
+    int sx, sy, sz;           /* rotation added per frame                  */
+    int visible;
+} NC_Object;
+
+/* A sprite in the live scene. Screen coordinates, so 0,0 is the top-left of the
+ * 320x240 display and there is no camera involved. */
+typedef struct {
+    uint16_t tpage, clut;
+    int x, y;
+    int w, h;
+    int u, v;                 /* which part of the texture to show           */
+    int visible;
+    int fixed;                /* immune to screen shake                      */
+} NC_Sprite;
+
+int  nc_scene_load(const NC_Package *pkg, int index);
+void nc_scene_advance(void);      /* apply per-object spin, once per frame  */
+void nc_scene_draw(void);         /* set the camera, then draw everything   */
+
+int  nc_scene_object_count(void);
+NC_Object *nc_scene_object(int i);   /* NULL if i is out of range           */
+int  nc_scene_sprite_count(void);
+NC_Sprite *nc_scene_sprite(int i);   /* NULL if i is out of range           */
+int  nc_scene_index(void);
+int  nc_scene_total(void);
+
+/* Scene changes are deferred to the end of the frame, so a script can call
+ * this mid-update without the objects moving under its feet. */
+void nc_scene_request(int index);
+int  nc_scene_take_request(void);    /* -1 when nothing is pending          */
+
+/* Camera state lives with the scene, since each scene brings its own. */
+void nc_scene_camera_set(int x, int y, int z, int rx, int ry, int rz);
+void nc_scene_camera_move(int dx, int dy, int dz);
+int  nc_scene_camera_get(int axis);  /* 0=x 1=y 2=z 3=yaw                   */
+void nc_scene_set_clear(int r, int g, int b);
 
 #endif /* NC_H */

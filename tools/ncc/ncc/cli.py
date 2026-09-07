@@ -28,6 +28,10 @@ def main(argv=None):
                    help="which template to use (see: ncc templates)")
     n.set_defaults(func=build_mod.new)
 
+    sy = sub.add_parser("sync", help="update a project's engine files to this ncc")
+    sy.add_argument("path", nargs="?", default=".")
+    sy.set_defaults(func=build_mod.sync)
+
     tl = sub.add_parser("templates", help="list available project templates")
     tl.set_defaults(func=build_mod.templates)
 
@@ -51,6 +55,10 @@ def main(argv=None):
     ck.add_argument("path", nargs="?", default=".")
     ck.set_defaults(func=check_mod.run)
 
+    fo = sub.add_parser("font", help="write the built-in font sheet to a PNG")
+    fo.add_argument("out", nargs="?", default="font.png")
+    fo.set_defaults(func=_font)
+
     st = sub.add_parser("studio", help="open the NC Studio GUI")
     st.set_defaults(func=_studio)
 
@@ -62,6 +70,20 @@ def main(argv=None):
         p.print_help()
         return 0
     return args.func(args)
+
+
+def _font(args):
+    """Dump the default font sheet, as a starting point for your own.
+
+    Edit the pixels, keep the 256x16 shape and the 32x2 cell grid, then point
+    scene.json at it with "font": {"file": "textures/myfont.png"}.
+    """
+    from . import fontgen
+    w, h = fontgen.write_png(args.out)
+    print(f"Wrote {args.out}  ({w}x{h}, {fontgen.COLUMNS} cells per row, "
+          f"ASCII {fontgen.FIRST_CHAR}..{fontgen.LAST_CHAR})")
+    print("  Keep the size and grid; the runtime indexes glyphs by cell.")
+    return 0
 
 
 def _studio(args):

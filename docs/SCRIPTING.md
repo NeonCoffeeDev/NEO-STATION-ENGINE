@@ -65,8 +65,13 @@ Godot). Object 0 in a level is conventionally the player.
 |---|---|
 | `print(text)` | Write a string to the PS1 TTY. Shows in NC Studio's **PS1 TTY** pane. |
 | `print_num(n)` | Write a number. |
-| `draw_text(x, y, "TEXT")` | Draw on the TV with the debug font. 0,0 top-left of 320x240. |
+| `draw_text(x, y, "TEXT")` | Draw on the TV. 0,0 top-left of 320x240. |
 | `draw_num(x, y, n)` | Same, for a number -- scores, timers, debug values. |
+
+Text is **uppercase only** and every character is **8 pixels wide**, so a string
+of `n` characters is `n * 8` pixels and centring it is arithmetic you can do in
+your head: `x = (320 - n * 8) / 2`. Lowercase in a literal is folded up rather
+than dropped. See LIMITS.md for the font sheet and how to replace it.
 
 ### Input
 | | |

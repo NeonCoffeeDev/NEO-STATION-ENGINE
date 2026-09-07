@@ -12,7 +12,10 @@ project(
 	DESCRIPTION "Neon Coffee PS1 project"
 )
 
-file(GLOB _sources src/*.c)
+# CONFIGURE_DEPENDS makes CMake re-scan this on every build. Without it a plain
+# GLOB is evaluated once, so a file added later -- by `ncc sync`, or by you --
+# is silently left out and shows up as an undefined reference at link time.
+file(GLOB _sources CONFIGURE_DEPENDS src/*.c)
 
 psn00bsdk_add_executable(game GPREL ${_sources})
 target_include_directories(game PRIVATE include)

@@ -62,8 +62,16 @@ first run the loop is a couple of seconds.
 ./ncc templates        # list project templates
 ./ncc targets          # hardware profiles and budgets
 ./ncc check mygame     # what fits, what does not, and why
+./ncc sync mygame      # bring the project's engine files up to date
+./ncc font my.png      # dump the built-in font sheet to edit
 ./ncc doctor           # toolchain status
 ```
+
+`ncc sync` is worth knowing about. A project keeps its own copy of the runtime
+under `src/`, which is what makes it readable and yours to change -- but it also
+means a fix made to the engine after your project was created does not reach it.
+The symptom is usually a package that refuses to load with a version mismatch.
+`ncc sync` copies the engine files back over, and touches nothing else.
 
 On Windows `ncc.cmd` takes the same arguments as `./ncc`.
 
