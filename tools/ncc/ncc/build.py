@@ -443,6 +443,17 @@ def _build_ps2(src):
     except (OSError, ValueError) as exc:
         raise SystemExit(f"ncc: vn.json: {exc}")
 
+    # Audio is whatever is sitting in audio/sfx and audio/music. Adding a sound
+    # is putting a file in a folder; the encoding, the sample rate and the
+    # budget are handled here rather than being the author's problem. Results
+    # are cached against each file's contents, so this is only slow once.
+    from .audio import AudioError
+    from .sfxbank import build as build_audio
+    try:
+        build_audio(src, os.path.join(src, "src", "audio"))
+    except AudioError as exc:
+        raise SystemExit(f"ncc: audio: {exc}")
+
     cc = tc.ps2_cc()
     if not cc:
         raise SystemExit(
