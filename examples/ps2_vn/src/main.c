@@ -33,6 +33,7 @@
 #include <packet.h>
 #include <sifrpc.h>
 #include <loadfile.h>
+#include <iopcontrol.h>
 
 #define SCREEN_W 640
 #define SCREEN_H 448
@@ -107,6 +108,13 @@ static int text_speed = 2;
 
 static void load_pad_modules(void)
 {
+    SifInitRpc(0);
+    /* Own the IOP lifecycle instead of inheriting the ELF launcher's modules.
+     * Reset BEFORE pad/audio setup: existing RPC handles cannot survive it.
+     * Assets are embedded; this build does not require the launcher's USB driver.
+     */
+    while (!SifIopReset("", 0)) { }
+    while (!SifIopSync()) { }
     SifInitRpc(0);
     /* Console models disagree about the names: later ones ship the X variants.
      * Trying the plain pair first and falling back costs nothing. */

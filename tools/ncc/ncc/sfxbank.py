@@ -4,8 +4,8 @@ The rule this follows is that adding a sound should mean putting a file in a
 folder. Everything after that -- bit depth, channel count, sample rate, the
 ADPCM encoding, the budget -- is the engine's problem, not the author's.
 
-    <project>/audio/sfx/*.wav      one voice each, resident in SPU2 RAM
-    <project>/audio/music/*.ogg    streamed, one at a time
+    <project>/audio/sfx/*.wav      compressed bank resident in EE RAM
+    <project>/audio/music/*.ogg    compressed tracks resident in EE RAM
 
 Import normalises: whatever comes in is written back out as 16-bit mono at the
 project's sample rate. The pack that prompted this was 24-bit 44.1k stereo and
@@ -239,8 +239,8 @@ def build(project, out_dir, sfx_rate=sound.SFX_RATE, music_rate=sound.MUSIC_RATE
     summary = {"sfx": len(entries), "sfx_bytes": len(blob), "families": len(families),
                "tracks": len(tracks),
                "music_bytes": sum(size for _, size, _ in tracks), "reused": reused}
-    log("  audio: %d effects in %d families, %d KiB of SPU2 RAM (%d KiB free); "
-        "%d tracks, %d KiB streamed%s"
+    log("  audio: %d effects in %d families, %d KiB embedded (%d KiB bank allowance remaining); "
+        "%d tracks, %d KiB embedded in EE RAM (not USB streaming)%s"
         % (summary["sfx"], summary["families"], len(blob) // 1024,
            (SPU2_BUDGET - len(blob)) // 1024, summary["tracks"],
            summary["music_bytes"] // 1024,
