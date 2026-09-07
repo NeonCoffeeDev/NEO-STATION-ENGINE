@@ -426,13 +426,13 @@ loose ELFs either; uLaunchELF is the launcher for this.
 
 Also in this pass:
 
-- ****, and the same three buttons in Studio. It
+- **`ncc add texture|sound|music`**, and the same three buttons in Studio. It
   copies the file in and registers it in scene.json, and refuses up front --
   an oversized PNG is rejected when you add it, with the limit and the reason,
   rather than in a build log later.
 - **PS2 is a first-class target in the manager**: Studio builds and runs it,
-  the project list tags each row with its machine,  reports what can
-  honestly be said about a PS2 project, and  explains the PCSX2 BIOS
+  the project list tags each row with its machine, `ncc check` reports what can
+  honestly be said about a PS2 project, and `ncc run` explains the PCSX2 BIOS
   situation instead of failing at it.
 
 Still M6: the NC runtime on PS2. What runs today is a hand-written main.c.
