@@ -1,0 +1,8 @@
+{
+  "name": "ps2_3d",
+  "title": "PS2 3D Wireframe Lab",
+  "target": "ps2",
+  "order": 10,
+  "description": "Orbit and zoom a perspective cube on PS2.",
+  "detail": "D-pad orbit; shoulders zoom; X colour; START reset. Native C prototype. No mesh import, textures, collision or Godot 3D export yet."
+}

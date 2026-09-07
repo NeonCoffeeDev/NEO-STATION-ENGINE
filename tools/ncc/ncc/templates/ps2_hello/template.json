@@ -1,8 +1,8 @@
 {
   "name": "ps2_hello",
-  "title": "PS2 (backend not built yet)",
+  "title": "PS2 Controller Playground",
   "order": 9,
   "target": "ps2",
-  "description": "A PlayStation 2 project. It declares the target and reconfigures the tools around it; it does not build yet.",
-  "detail": "The PS2's renderer shares nothing with the PS1's -- different CPU, different GPU, no ordering table, a real FPU. That is milestone M6. This template exists so the PS2 path is a real, selectable thing with a hardware profile and a toolchain check rather than a promise, and so the manager can prove it reconfigures itself per project."
+  "description": "Buildable PS2 controller and rendering test.",
+  "detail": "Move with D-pad, change colour with X, resize with shoulders, reset with START. Native C template; no Godot export or NCScript runtime."
 }

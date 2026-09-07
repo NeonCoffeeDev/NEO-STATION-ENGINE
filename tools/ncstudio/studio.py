@@ -1043,6 +1043,12 @@ class Studio:
         if self.running:
             self.root.after(300, self._update_toolchain_badge)
             return
+        if self.target.get() == "ps2":
+            ok = bool(tc.ps2_cc() and tc.find_make())
+            self.tcstat.configure(
+                text=("toolchain: PS2 OK" if ok else "toolchain: PS2 INCOMPLETE"),
+                fg=GREEN if ok else RED)
+            return
         ok = tc.locate("mipsel-none-elf-gcc")[0] and tc.locate("cmake")[0]
         if ok and tc.find_openbios():
             self.tcstat.configure(text="toolchain: OK", fg=GREEN)
@@ -1057,6 +1063,9 @@ class Studio:
         if self.running:
             return
         templates = list_templates()
+        if self.mode in ("ps1", "ps2"):
+            templates = [t for t in templates
+                         if t.get("target", "ps1") == self.mode]
         if not templates:
             self.log("no templates found.", RED)
             return
@@ -1085,7 +1094,9 @@ class Studio:
         tk.Label(g.body, text="template", bg=PANEL, fg=DIM, font=MONO_SM,
                  anchor="w").pack(fill="x", padx=8, pady=(10, 2))
 
-        chosen = tk.StringVar(value=DEFAULT_TEMPLATE)
+        initial = next((t["name"] for t in templates
+                        if t["name"] == DEFAULT_TEMPLATE), templates[0]["name"])
+        chosen = tk.StringVar(value=initial)
         detail = tk.Label(g.body, text="", bg=PANEL, fg=DIM, font=MONO_SM,
                           anchor="w", justify="left", wraplength=380)
 
@@ -1120,7 +1131,7 @@ class Studio:
         tk.Label(g.body, text="created under examples/", bg=PANEL, fg=DIM,
                  font=MONO_SM, anchor="w").pack(fill="x", padx=8, pady=(8, 0))
 
-        select(DEFAULT_TEMPLATE)
+        select(initial)
 
         def create():
             name = entry.get().strip()
