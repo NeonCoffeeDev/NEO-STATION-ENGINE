@@ -28,6 +28,7 @@ from editor import ScriptEditor
 from scenepanel import ScenePanel
 from designpanel import DesignPanel
 from roompanel import RoomPanel
+from kitpanel import KitPanel
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -111,6 +112,9 @@ class Studio:
         self.explain_on_fail = False
         self.projects = []
         self.settings = load_settings()
+        self.fullscreen = False
+        self.hub_visible = True
+        self.windowed_geometry = None
         # Set before anything builds: the project list and the tab strip are
         # both filtered by it.
         self.mode = self.settings.get("mode", "all")
@@ -125,6 +129,15 @@ class Studio:
         style_ttk(root)     # before any ttk widget is built
 
         self._build_titlebar()
+        workspace = tk.Frame(root, bg=PANEL)
+        workspace.pack(fill="x", padx=8, pady=(0, 6))
+        Button(workspace, "PROJECT HUB", self.toggle_hub, CYAN).pack(side="left")
+        Button(workspace, "FULLSCREEN  F11", self.toggle_fullscreen, DIM).pack(side="right")
+        self.workspace_name = tk.Label(workspace, text="Select a project", bg=PANEL,
+                                       fg=AMBER, font=MONO_SM)
+        self.workspace_name.pack(side="left", padx=10)
+        root.bind("<F11>", lambda e: self.toggle_fullscreen())
+        root.bind("<Escape>", lambda e: self.toggle_fullscreen() if self.fullscreen else None)
 
         main = tk.Frame(root, bg=BG)
         main.pack(fill="both", expand=True, padx=8, pady=(0, 6))
@@ -182,6 +195,7 @@ class Studio:
 
     def _build_projects(self, parent):
         g = group(parent, "project", CYAN)
+        self.project_hub = g
         g.pack(fill="x", pady=(0, 6))
 
         wrap = tk.Frame(g.body, bg=BORDER)
@@ -392,6 +406,7 @@ class Studio:
         self.scene_panel.group = self.scene_panel
         self.design_panel = DesignPanel(self.panes, self.log, self.open_godot)
         self.room_panel = RoomPanel(self.panes, self.log)
+        self.kit_panel = KitPanel(self.panes)
 
         self.show_tab("console")
 
@@ -434,7 +449,8 @@ class Studio:
         self.root.bind("<F9>", lambda _: self.check_toolchain())
         self.root.bind("<Control-l>", lambda _: self.clear_log())
         self.root.bind("<Control-n>", lambda _: self.new_project())
-        self.root.bind("<Escape>", lambda _: self.stop_running())
+        self.root.bind("<Escape>", lambda _: self.toggle_fullscreen()
+                       if self.fullscreen else self.stop_running())
 
     # ---- tabs -----------------------------------------------------------
 
@@ -444,11 +460,13 @@ class Studio:
             on = k == key
             lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
         for k, w in (("console", self.text), ("tty", self.tty),
-                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel)):
+                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel), ("kits", self.kit_panel)):
             if k == key:
                 w.group.pack(fill="both", expand=True)
             else:
                 w.group.pack_forget()
+        if key == "kits":
+            self.kit_panel.load(self.selected_project())
         if key == "script":
             self.editor.text.focus_set()
         elif key == "room":
@@ -465,11 +483,11 @@ class Studio:
 
     # Which console each tab belongs to. ROOM and CONSOLE are common ground;
     # everything else is specific to one machine's toolchain.
-    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room")
+    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room", "kits")
     TAB_LABELS = {"console": "CONSOLE", "tty": "PS1 TTY", "script": "SCRIPT",
-                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM"}
+                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM", "kits": "KITS"}
     TAB_TARGETS = {"console": ("ps1", "ps2"), "tty": ("ps1",), "script": ("ps1",),
-                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2")}
+                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2")}
 
     def set_mode(self, key):
         """Filter the manager down to one console, or open it up to both.
@@ -601,6 +619,8 @@ class Studio:
 
     def on_select(self):
         p = self.selected_project()
+        self.workspace_name.configure(text=(os.path.basename(p) + "  /  " +
+            project_meta(p)["target"].upper()) if p else "Select a project")
         if p:
             self.set_status(os.path.relpath(p, self.repo))
             # A project knows what machine it is for. Selecting it should
@@ -608,6 +628,7 @@ class Studio:
             # hardware budgets, and whether building is even possible -- rather
             # than leave PS1 selected while you edit a PS2 game.
             self.set_target(project_meta(p)["target"], from_project=True)
+        self.kit_panel.load(p)
         self.sync_editor()
         if getattr(self, "room_panel", None):
             self.room_panel.load(p)
@@ -615,6 +636,25 @@ class Studio:
             self.design_panel.load(p)
         if getattr(self, "scene_panel", None):
             self.scene_panel.load(p)
+
+    def toggle_hub(self):
+        self.hub_visible = not self.hub_visible
+        if self.hub_visible:
+            siblings = self.project_hub.master.pack_slaves()
+            opts = {"before": siblings[0]} if siblings else {}
+            self.project_hub.pack(fill="x", pady=(0, 6), **opts)
+        else:
+            self.project_hub.pack_forget()
+
+    def toggle_fullscreen(self):
+        if not self.fullscreen:
+            self.windowed_geometry = self.root.geometry()
+            self.root.attributes("-fullscreen", True)
+        else:
+            self.root.attributes("-fullscreen", False)
+            if self.windowed_geometry:
+                self.root.geometry(self.windowed_geometry)
+        self.fullscreen = not self.fullscreen
 
     def sync_editor(self):
         """Keep the SCRIPT tab showing the selected project's script.
@@ -664,6 +704,7 @@ class Studio:
             self.log("create one with:  ncc new <name> -t game", DIM)
             return
 
+        self.kit_panel.load(p)
         self.sync_editor()
         if self.editor.path != path:
             return
@@ -1181,7 +1222,7 @@ class Studio:
             except OSError:
                 pass
         self.settings.update({
-            "geometry": self.root.geometry(),
+            "geometry": self.windowed_geometry if self.fullscreen else self.root.geometry(),
             "target": self.target.get(),
             "project": self.selected_project() or "",
             "autoscroll": bool(self.autoscroll.get()),

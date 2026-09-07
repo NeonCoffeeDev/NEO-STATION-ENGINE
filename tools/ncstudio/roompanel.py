@@ -138,7 +138,9 @@ class RoomPanel(tk.Frame):
             self.actor['values'] = [c.get('name',c['id']) for c in self.doc['kit'].get('characters',[])] if self.vn else []
             if self.actor['values']: self.actor.current(0)
             scenes = self.doc['kit']['scenes'] if self.vn else self.doc.get('scenes',[self.doc])
-            self.scene['values'] = [s.get('id', 'Scene '+str(i)) for i,s in enumerate(scenes)]
+            self.scene['values'] = ["%s [%s]" % (
+                s.get('name') or s.get('title') or s.get('id') or 'Room '+str(i),
+                s.get('id', i)) for i,s in enumerate(scenes)]
             if scenes: self.scene.current(0)
             self.note.configure(text='PS2 VN · drag portrait/dialogue; replace scene background or character portrait.' if self.vn
                                 else 'PS1 320x240 · drag existing sprites; script-assigned positions may override room placement.')
