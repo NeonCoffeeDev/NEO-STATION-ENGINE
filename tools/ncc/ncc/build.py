@@ -10,6 +10,7 @@ import time
 
 from . import ncpkg
 from . import ncscript
+from . import eventflow
 from . import toolchain as tc
 from .targets import TARGETS
 
@@ -501,6 +502,10 @@ def build(args):
 
     target = project_meta(src)["target"]
     if target == "ps2":
+        try:
+            eventflow.compose(src, target, "")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise SystemExit(f"ncc: event-flow.json -- {exc}")
         return _build_ps2(src)
     if target != "ps1":
         # Refusing here, by name, beats letting cmake fail three layers down
@@ -546,11 +551,16 @@ def build(args):
     # src/ so the existing glob picks it up; it is gitignored, because it is
     # build output rather than something anyone should edit.
     script = os.path.join(src, "script.ncs")
-    if os.path.isfile(script):
+    if os.path.isfile(script) or os.path.isfile(os.path.join(src, "event-flow.json")):
         gen = os.path.join(src, "src", "nc_script_generated.c")
         try:
-            lines = ncscript.compile_file(script, gen)
-        except ncscript.ScriptError as exc:
+            source = open(script, encoding="utf-8").read() if os.path.isfile(script) else ""
+            source = eventflow.compose(src, target, source)
+            generated = ncscript.compile_source(source)
+            with open(gen, "w", encoding="utf-8") as output:
+                output.write(generated)
+            lines = len(generated.splitlines())
+        except (ncscript.ScriptError, ValueError, KeyError, TypeError) as exc:
             raise SystemExit(f"ncc: script.ncs -- {exc}")
         print(f"  script.ncs -> C  ({lines} lines)")
 

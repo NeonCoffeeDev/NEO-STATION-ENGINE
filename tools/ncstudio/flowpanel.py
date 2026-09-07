@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from theme import BG, FG, CYAN, AMBER, Button
 from ncc.build import project_meta
+from ncc import eventflow, ncscript
 
 class FlowPanel(tk.Frame):
     def __init__(self, parent):
@@ -14,7 +15,7 @@ class FlowPanel(tk.Frame):
         bar=tk.Frame(self,bg=BG); bar.pack(fill='x')
         self.kind=ttk.Combobox(bar,state='readonly',values=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Run kit'])
         self.kind.current(0); self.kind.pack(side='left')
-        for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('SAVE',self.save)]:
+        for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('SAVE',self.save),('ENABLE PS1',self.enable),('DRAFT',self.disable)]:
             Button(bar,label,fn,CYAN).pack(side='left',padx=2)
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=850)
         self.note.pack(fill='x')
@@ -27,6 +28,7 @@ class FlowPanel(tk.Frame):
 
     def load(self,project):
         if self.project==project:return
+        self.enabled=False
         self.project=project; self.nodes=[];self.edges=[];self.selected=None;self.source=None;self.readonly=False
         if project:
             self.target=project_meta(project)['target']; p=Path(project)/'event-flow.json'
@@ -34,7 +36,7 @@ class FlowPanel(tk.Frame):
                 if p.exists():
                     d=json.loads(p.read_text())
                     if d.get('target')!=self.target:raise ValueError('Flow target mismatch; file left untouched.')
-                    self.nodes=d['nodes'];self.edges=d['edges']
+                    self.nodes=d['nodes'];self.edges=d['edges'];self.enabled=d.get('status')=='enabled'
                     ids={n['id'] for n in self.nodes}
                     if len(ids)!=len(self.nodes) or any(a not in ids or b not in ids for a,b in self.edges):raise ValueError('Invalid node links')
             except (ValueError,KeyError,TypeError,OSError) as e:
@@ -94,4 +96,19 @@ class FlowPanel(tk.Frame):
     def save(self):
         if not self.project or self.readonly:return
         p=Path(self.project)/'event-flow.json';tmp=p.with_suffix('.json.tmp')
-        tmp.write_text(json.dumps(dict(version=1,target=self.target,status='draft',nodes=self.nodes,edges=self.edges),indent=2)+'\n');tmp.replace(p)
+        tmp.write_text(json.dumps(dict(version=1,target=self.target,status='enabled' if getattr(self,'enabled',False) else 'draft',nodes=self.nodes,edges=self.edges),indent=2)+'\n');tmp.replace(p)
+
+    def disable(self):
+        self.enabled=False;self.save()
+
+    def enable(self):
+        if not self.project or self.readonly:return
+        self.enabled=True;self.save()
+        try:
+            script=Path(self.project)/'script.ncs'
+            source=script.read_text() if script.exists() else ''
+            ncscript.compile_source(eventflow.compose(self.project,self.target,source))
+        except (ValueError,KeyError,TypeError,ncscript.ScriptError) as exc:
+            self.enabled=False;self.save()
+            messagebox.showerror('Cannot enable flow',str(exc),parent=self);return
+        messagebox.showinfo('Flow enabled','Events will run on the next PS1 build. Authored script was not changed.',parent=self)
