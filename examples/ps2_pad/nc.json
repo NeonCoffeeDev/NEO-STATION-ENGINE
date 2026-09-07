@@ -1,0 +1,6 @@
+{
+  "format": 1,
+  "name": "ps2_pad",
+  "template": "ps2_hello",
+  "target": "ps2"
+}

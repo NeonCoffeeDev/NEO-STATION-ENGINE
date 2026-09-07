@@ -33,3 +33,6 @@ toolchain/
 # Godot generated script UIDs and import cache
 *.uid
 .godot/
+
+# PS2 build output (the PS1 side already covers .elf via build/)
+examples/*/game.elf

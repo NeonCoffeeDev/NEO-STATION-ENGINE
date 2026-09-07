@@ -70,6 +70,8 @@ def templates(args):
 
 # ---- helpers ------------------------------------------------------------
 
+PROJECT_FILE = "nc.json"
+
 def _volume_name(name):
     """ISO9660 volume id: uppercase, alnum + underscore, 32 chars max."""
     v = re.sub(r"[^A-Za-z0-9_]", "_", name).upper()
@@ -77,7 +79,10 @@ def _volume_name(name):
 
 
 def _is_project(path):
-    return os.path.isfile(os.path.join(path, "CMakeLists.txt"))
+    # A PS1 project is a CMake project; a PS2 project is a Makefile one. nc.json
+    # is what both have, and what says which.
+    return (os.path.isfile(os.path.join(path, "CMakeLists.txt"))
+            or os.path.isfile(os.path.join(path, PROJECT_FILE)))
 
 
 def _resolve(path):
@@ -139,9 +144,6 @@ ENGINE_FILES = [
     os.path.join("src", "nc_music.c"),
     os.path.join("src", "nc_save.c"),
 ]
-
-
-PROJECT_FILE = "nc.json"
 
 
 def project_meta(root):
@@ -287,12 +289,25 @@ def new(args):
     if os.path.exists(dest) and os.listdir(dest):
         raise SystemExit(f"ncc: {dest} already exists and is not empty.")
 
-    # Shared engine + build files first, then the template's own main.c on top.
-    shutil.copytree(COMMON_DIR, dest, dirs_exist_ok=True)
-
     tpl_dir = os.path.join(TEMPLATES_DIR, template)
-    if not os.path.isfile(os.path.join(tpl_dir, "main.c")):
-        raise SystemExit(f"ncc: template '{template}' has no main.c")
+
+    meta = {}
+    try:
+        with open(os.path.join(tpl_dir, "template.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError):
+        pass
+    target = meta.get("target", "ps1")
+
+    if target == "ps1":
+        # The shared PS1 engine goes down first and the template lands on top.
+        # A PS2 project must not get it: none of it compiles for that machine,
+        # and shipping a directory of dead PS1 source would be its own lie.
+        shutil.copytree(COMMON_DIR, dest, dirs_exist_ok=True)
+        if not os.path.isfile(os.path.join(tpl_dir, "main.c")):
+            raise SystemExit(f"ncc: template '{template}' has no main.c")
+    else:
+        os.makedirs(dest, exist_ok=True)
 
     # Copy everything the template provides, not just main.c -- a template may
     # also ship data files such as scene.json. main.c lands in src/; anything
@@ -314,14 +329,7 @@ def new(args):
         shutil.copytree(GODOT_ADDON_DIR, os.path.join(godot_dir, "addons"),
                         dirs_exist_ok=True)
 
-    meta = {}
-    meta_path = os.path.join(tpl_dir, "template.json")
-    try:
-        with open(meta_path, encoding="utf-8") as fh:
-            meta = json.load(fh)
-    except (OSError, ValueError):
-        pass
-    write_project_meta(dest, name, template, meta.get("target", "ps1"))
+    write_project_meta(dest, name, template, target)
 
     _substitute(dest, name)
 
