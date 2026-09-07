@@ -56,6 +56,9 @@
 
 extern unsigned int nc_logo[];
 extern const int nc_logo_width, nc_logo_height;
+/* The logo does not fill its power-of-two canvas, and it is not square. Both
+ * facts have to reach the draw call or it comes out squashed. */
+extern const int nc_logo_used_w, nc_logo_used_h;
 extern unsigned int nc_font[];
 extern const int nc_font_width, nc_font_height;
 
@@ -328,13 +331,28 @@ static qword_t *panel(qword_t *q, int x, int y, int w, int h,
 
 /* ---- scenes ------------------------------------------------------------ */
 
-static qword_t *draw_title(qword_t *q, int frames)
+/* Draw the logo at a given height, keeping its own proportions. */
+static qword_t *logo(qword_t *q, int x, int y, int height)
 {
-    int size = 192;
+    int width = nc_logo_used_w * height / nc_logo_used_h;
 
     q = bind_texture(q, &logo_tex);
-    q = sprite(q, (SCREEN_W - size) / 2, 48, size, size,
-               0, 0, nc_logo_width, nc_logo_height, 0x80);
+    return sprite(q, x, y, width, height, 0, 0,
+                  nc_logo_used_w, nc_logo_used_h, 0x80);
+}
+
+
+static int logo_width_for(int height)
+{
+    return nc_logo_used_w * height / nc_logo_used_h;
+}
+
+
+static qword_t *draw_title(qword_t *q, int frames)
+{
+    int height = 176;
+
+    q = logo(q, (SCREEN_W - logo_width_for(height)) / 2, 48, height);
 
     q = text_center(q, 272, "NEON COFFEE", 0x80);
     q = text_center(q, 300, "PLAYSTATION 2", 0x80);
@@ -350,13 +368,10 @@ static qword_t *draw_title(qword_t *q, int frames)
 static qword_t *draw_menu(qword_t *q, int selected)
 {
     int i;
-    int size = 96;
+    int height = 80;
 
-    q = bind_texture(q, &logo_tex);
-    q = sprite(q, 32, 32, size, size, 0, 0,
-               nc_logo_width, nc_logo_height, 0x80);
-
-    q = text(q, 152, 64, "NEON COFFEE", 0x80);
+    q = logo(q, 32, 36, height);
+    q = text(q, 48 + logo_width_for(height), 64, "NEON COFFEE", 0x80);
 
     for (i = 0; i < MENU_COUNT; i++) {
         int y = 200 + i * 40;

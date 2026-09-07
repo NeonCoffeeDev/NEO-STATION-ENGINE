@@ -6,6 +6,12 @@
  * cut-out, which is what the alpha test keys on. */
 const int nc_logo_width = 128;
 const int nc_logo_height = 128;
+
+/* The part of the canvas the image occupies. Sampling the whole
+ * texture would include the transparent padding, and drawing a wide
+ * image as a square would squash it. */
+const int nc_logo_used_w = 128;
+const int nc_logo_used_h = 128;
 unsigned int nc_logo[16384] __attribute__((aligned(16))) = {
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
