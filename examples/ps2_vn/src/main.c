@@ -62,7 +62,11 @@ extern const int nc_logo_used_w, nc_logo_used_h;
 extern unsigned int nc_font[];
 extern const int nc_font_width, nc_font_height;
 
-enum { SCENE_TITLE, SCENE_MENU, SCENE_STORY, SCENE_ABOUT };
+enum { SCENE_TITLE, SCENE_MENU, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
+
+/* Where START was pressed, so RESUME puts you back rather than somewhere
+ * sensible-looking. */
+static int scene_before_pause;
 
 static char pad_buffer[256] __attribute__((aligned(64)));
 
@@ -92,6 +96,10 @@ static const char *MENU_ITEMS[] = { "BEGIN", "ABOUT", "TITLE SCREEN" };
 
 #include "vn_content.h"
 #include "nc_audio.h"
+
+/* How many frames each character of dialogue takes. vn_runtime.h reads it,
+ * so it is declared here and seeded from the kit once VN_SPEED exists. */
+static int text_speed = 2;
 
 
 
@@ -412,7 +420,6 @@ enum { OPT_MUSIC, OPT_SFX, OPT_TRACK, OPT_SPEED, OPT_TEST, OPT_RESUME,
 
 static int option_selected;
 static int option_test_family;      /* which family the sound test is walking */
-static int text_speed = VN_SPEED;
 
 static const char *const OPTION_NAMES[OPT_COUNT] = {
     "MUSIC VOLUME", "EFFECT VOLUME", "MUSIC TRACK", "TEXT SPEED",
@@ -608,6 +615,11 @@ int main(void)
     upload(nc_logo, nc_logo_width, nc_logo_height, &logo_tex);
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
     if (!vn_init()) return 1;
+    text_speed = VN_SPEED;
+    /* Silence is survivable; a game that will not start because the sound
+     * card is unhappy is not. */
+    if (nc_audio_init())
+        nc_music_play(0);
 
     while (1) {
         qword_t *q;
@@ -617,11 +629,38 @@ int main(void)
         pressed = buttons & ~last;
         last = buttons;
 
+        /* Shoulder buttons change track wherever you are -- it is the kind of
+         * thing you want to do while reading, not from a menu. */
+        if (scene != SCENE_PAUSE && NC_MUSIC_COUNT > 1) {
+            if (pressed & PAD_L1) nc_music_play(nc_music_track - 1);
+            if (pressed & PAD_R1) nc_music_play(nc_music_track + 1);
+        }
+        if (scene != SCENE_PAUSE && scene != SCENE_TITLE && (pressed & PAD_START)) {
+            scene_before_pause = scene;
+            scene = SCENE_PAUSE;
+            option_selected = OPT_RESUME;
+            nc_sfx_family(nc_role_shift);
+            pressed = 0;                /* do not also act on it below */
+        }
+
         switch (scene) {
+        case SCENE_PAUSE: {
+            int verdict = options_update(pressed);
+            if (verdict == 0) {
+                scene = scene_before_pause;
+                nc_sfx_family(nc_role_shift);
+            } else if (verdict < 0) {
+                scene = SCENE_TITLE;
+                nc_sfx_family(nc_role_shift);
+            }
+            break;
+        }
+
         case SCENE_TITLE:
             if (pressed & (PAD_START | PAD_CROSS)) {
                 scene = SCENE_MENU;
                 selected = 0;
+                nc_sfx_family(nc_role_confirm);
             }
             break;
 
@@ -630,9 +669,14 @@ int main(void)
                 selected = (selected + MENU_COUNT - 1) % MENU_COUNT;
             if (pressed & PAD_DOWN)
                 selected = (selected + 1) % MENU_COUNT;
-            if (pressed & PAD_TRIANGLE)
+            if (pressed & (PAD_UP | PAD_DOWN))
+                nc_sfx_family(nc_role_move);
+            if (pressed & PAD_TRIANGLE) {
                 scene = SCENE_TITLE;
+                nc_sfx_family(nc_role_shift);
+            }
             if (pressed & PAD_CROSS) {
+                nc_sfx_family(nc_role_confirm);
                 if (selected == 0) { scene = SCENE_STORY; vn_begin(); }
                 else if (selected == 1) { scene = SCENE_ABOUT; }
                 else scene = SCENE_TITLE;
@@ -657,7 +701,7 @@ int main(void)
         /* Diagnostic marker: absence alone cannot identify a stale binary. */
 
 
-        switch (scene) {
+        switch (scene == SCENE_PAUSE ? scene_before_pause : scene) {
         case SCENE_TITLE:
             q = draw_title(q, frames);
             break;
@@ -672,6 +716,8 @@ int main(void)
                            "X BACK");
             break;
         }
+        if (scene == SCENE_PAUSE)
+            q = draw_options(q);
 
         q = draw_finish(q);
 
@@ -681,6 +727,7 @@ int main(void)
         draw_wait_finish();
         graph_wait_vsync();
 
+        nc_audio_pump();
         frames++;
     }
 

@@ -62,7 +62,11 @@ extern const int nc_logo_used_w, nc_logo_used_h;
 extern unsigned int nc_font[];
 extern const int nc_font_width, nc_font_height;
 
-enum { SCENE_TITLE, SCENE_MENU, SCENE_STORY, SCENE_ABOUT };
+enum { SCENE_TITLE, SCENE_MENU, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
+
+/* Where START was pressed, so RESUME puts you back rather than somewhere
+ * sensible-looking. */
+static int scene_before_pause;
 
 static char pad_buffer[256] __attribute__((aligned(64)));
 
@@ -91,6 +95,11 @@ static const char *MENU_ITEMS[] = { "BEGIN", "ABOUT", "TITLE SCREEN" };
 #define MENU_COUNT 3
 
 #include "vn_content.h"
+#include "nc_audio.h"
+
+/* How many frames each character of dialogue takes. vn_runtime.h reads it,
+ * so it is declared here and seeded from the kit once VN_SPEED exists. */
+static int text_speed = 2;
 
 
 
@@ -401,6 +410,159 @@ static qword_t *draw_lines(qword_t *q, const char *const *lines, int count,
 
 #include "vn_runtime.h"
 
+/* ---- pause and options ------------------------------------------------- */
+/* START opens this from anywhere, including mid-conversation, and it draws over
+ * whatever was underneath rather than replacing it, so pausing never costs you
+ * your place. */
+
+enum { OPT_MUSIC, OPT_SFX, OPT_TRACK, OPT_SPEED, OPT_TEST, OPT_RESUME,
+       OPT_TITLE, OPT_COUNT };
+
+static int option_selected;
+static int option_test_family;      /* which family the sound test is walking */
+
+static const char *const OPTION_NAMES[OPT_COUNT] = {
+    "MUSIC VOLUME", "EFFECT VOLUME", "MUSIC TRACK", "TEXT SPEED",
+    "SOUND TEST", "RESUME", "RETURN TO TITLE"
+};
+
+
+static void option_value(int row, char *out)
+{
+    int i = 0;
+    switch (row) {
+    case OPT_MUSIC:
+    case OPT_SFX: {
+        /* A ten-segment bar reads faster than a number at television distance. */
+        int level = (row == OPT_MUSIC ? nc_music_volume : nc_sfx_volume) / 10;
+        for (i = 0; i < 10; i++)
+            out[i] = i < level ? '=' : '-';
+        out[10] = 0;
+        return;
+    }
+    case OPT_TRACK:
+        if (NC_MUSIC_COUNT <= 0) { strcpy(out, "NONE"); return; }
+        if (nc_music_track < 0) { strcpy(out, "OFF"); return; }
+        strncpy(out, nc_music[nc_music_track].name, 20);
+        out[20] = 0;
+        return;
+    case OPT_SPEED:
+        strcpy(out, text_speed <= 1 ? "FAST" : text_speed <= 3 ? "NORMAL" : "SLOW");
+        return;
+    case OPT_TEST:
+        if (NC_FAMILY_COUNT <= 0) { strcpy(out, "NONE"); return; }
+        strncpy(out, nc_families[option_test_family].name, 20);
+        out[20] = 0;
+        return;
+    default:
+        out[0] = 0;
+    }
+}
+
+
+static qword_t *draw_options(qword_t *q)
+{
+    char value[24];
+    int i;
+
+    q = panel(q, 64, 48, SCREEN_W - 128, SCREEN_H - 128, 0x0a, 0x0c, 0x12);
+    q = panel(q, 64, 48, SCREEN_W - 128, 2, 0x5f, 0xd4, 0xd0);
+    q = text_center(q, 66, "PAUSED", 0x80);
+
+    for (i = 0; i < OPT_COUNT; i++) {
+        int y = 110 + i * 30;
+        int bright = i == option_selected ? 0x80 : 0x44;
+        q = text(q, 96, y, i == option_selected ? ">" : " ", bright);
+        q = text(q, 120, y, OPTION_NAMES[i], bright);
+        option_value(i, value);
+        if (value[0])
+            q = text(q, 360, y, value, bright);
+    }
+
+    if (option_selected == OPT_TEST) {
+        char label[36];
+        int index = nc_families[option_test_family].first
+                  + (nc_family_cursor[option_test_family]
+                     % nc_families[option_test_family].count);
+        sprintf(label, "%d OF %d",
+                (nc_family_cursor[option_test_family]
+                 % nc_families[option_test_family].count) + 1,
+                nc_families[option_test_family].count);
+        q = text_center(q, SCREEN_H - 116, label, 0x50);
+        q = text_center(q, SCREEN_H - 96, nc_sfx[index].name, 0x50);
+    }
+    q = text_center(q, SCREEN_H - 74, "LEFT / RIGHT ADJUST   X PLAY", 0x40);
+    q = text_center(q, SCREEN_H - 54, "START OR TRIANGLE CLOSE", 0x40);
+    return q;
+}
+
+
+/* Returns 0 when the pause screen should close, -1 to leave for the title. */
+static int options_update(unsigned int pressed)
+{
+    int step = 0;
+
+    if (pressed & PAD_UP)
+        option_selected = (option_selected + OPT_COUNT - 1) % OPT_COUNT;
+    if (pressed & PAD_DOWN)
+        option_selected = (option_selected + 1) % OPT_COUNT;
+    if (pressed & (PAD_UP | PAD_DOWN))
+        nc_sfx_family(nc_role_move);
+
+    if (pressed & PAD_LEFT) step = -1;
+    if (pressed & PAD_RIGHT) step = 1;
+
+    if (step) {
+        switch (option_selected) {
+        case OPT_MUSIC:
+            nc_music_volume += step * 10;
+            if (nc_music_volume < 0) nc_music_volume = 0;
+            if (nc_music_volume > 100) nc_music_volume = 100;
+            break;
+        case OPT_SFX:
+            nc_sfx_volume += step * 10;
+            if (nc_sfx_volume < 0) nc_sfx_volume = 0;
+            if (nc_sfx_volume > 100) nc_sfx_volume = 100;
+            nc_sfx_family(nc_role_confirm);   /* so the level can be heard */
+            break;
+        case OPT_TRACK:
+            if (NC_MUSIC_COUNT > 0)
+                nc_music_play(nc_music_track + step);
+            break;
+        case OPT_SPEED:
+            text_speed -= step;             /* right is faster */
+            if (text_speed < 1) text_speed = 1;
+            if (text_speed > 6) text_speed = 6;
+            break;
+        case OPT_TEST:
+            if (NC_FAMILY_COUNT > 0)
+                option_test_family = (option_test_family + step + NC_FAMILY_COUNT)
+                                   % NC_FAMILY_COUNT;
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (pressed & PAD_CROSS) {
+        switch (option_selected) {
+        case OPT_TEST:
+            nc_sfx_family(option_test_family);
+            break;
+        case OPT_RESUME:
+            return 0;
+        case OPT_TITLE:
+            return -1;
+        default:
+            break;
+        }
+    }
+    if (pressed & (PAD_START | PAD_TRIANGLE))
+        return 0;
+    return 1;
+}
+
+
 /* ---- main -------------------------------------------------------------- */
 
 int main(void)
@@ -453,6 +615,11 @@ int main(void)
     upload(nc_logo, nc_logo_width, nc_logo_height, &logo_tex);
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
     if (!vn_init()) return 1;
+    text_speed = VN_SPEED;
+    /* Silence is survivable; a game that will not start because the sound
+     * card is unhappy is not. */
+    if (nc_audio_init())
+        nc_music_play(0);
 
     while (1) {
         qword_t *q;
@@ -462,11 +629,38 @@ int main(void)
         pressed = buttons & ~last;
         last = buttons;
 
+        /* Shoulder buttons change track wherever you are -- it is the kind of
+         * thing you want to do while reading, not from a menu. */
+        if (scene != SCENE_PAUSE && NC_MUSIC_COUNT > 1) {
+            if (pressed & PAD_L1) nc_music_play(nc_music_track - 1);
+            if (pressed & PAD_R1) nc_music_play(nc_music_track + 1);
+        }
+        if (scene != SCENE_PAUSE && scene != SCENE_TITLE && (pressed & PAD_START)) {
+            scene_before_pause = scene;
+            scene = SCENE_PAUSE;
+            option_selected = OPT_RESUME;
+            nc_sfx_family(nc_role_shift);
+            pressed = 0;                /* do not also act on it below */
+        }
+
         switch (scene) {
+        case SCENE_PAUSE: {
+            int verdict = options_update(pressed);
+            if (verdict == 0) {
+                scene = scene_before_pause;
+                nc_sfx_family(nc_role_shift);
+            } else if (verdict < 0) {
+                scene = SCENE_TITLE;
+                nc_sfx_family(nc_role_shift);
+            }
+            break;
+        }
+
         case SCENE_TITLE:
             if (pressed & (PAD_START | PAD_CROSS)) {
                 scene = SCENE_MENU;
                 selected = 0;
+                nc_sfx_family(nc_role_confirm);
             }
             break;
 
@@ -475,9 +669,14 @@ int main(void)
                 selected = (selected + MENU_COUNT - 1) % MENU_COUNT;
             if (pressed & PAD_DOWN)
                 selected = (selected + 1) % MENU_COUNT;
-            if (pressed & PAD_TRIANGLE)
+            if (pressed & (PAD_UP | PAD_DOWN))
+                nc_sfx_family(nc_role_move);
+            if (pressed & PAD_TRIANGLE) {
                 scene = SCENE_TITLE;
+                nc_sfx_family(nc_role_shift);
+            }
             if (pressed & PAD_CROSS) {
+                nc_sfx_family(nc_role_confirm);
                 if (selected == 0) { scene = SCENE_STORY; vn_begin(); }
                 else if (selected == 1) { scene = SCENE_ABOUT; }
                 else scene = SCENE_TITLE;
@@ -502,7 +701,7 @@ int main(void)
         /* Diagnostic marker: absence alone cannot identify a stale binary. */
 
 
-        switch (scene) {
+        switch (scene == SCENE_PAUSE ? scene_before_pause : scene) {
         case SCENE_TITLE:
             q = draw_title(q, frames);
             break;
@@ -517,6 +716,8 @@ int main(void)
                            "X BACK");
             break;
         }
+        if (scene == SCENE_PAUSE)
+            q = draw_options(q);
 
         q = draw_finish(q);
 
@@ -526,6 +727,7 @@ int main(void)
         draw_wait_finish();
         graph_wait_vsync();
 
+        nc_audio_pump();
         frames++;
     }
 

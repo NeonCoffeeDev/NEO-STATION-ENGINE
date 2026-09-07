@@ -2,6 +2,8 @@
 #include "vn_kit.h"
 static texbuffer_t vn_textures[16];
 static int vn_current, vn_reveal, vn_tick, vn_selection, vn_inventory_open;
+static VNCast vn_stage[4];
+static int vn_stage_count;
 static unsigned int vn_inventory;
 
 static int vn_init(void)
@@ -23,14 +25,24 @@ static int vn_init(void)
 
 static void vn_enter(int index)
 {
+    int i;
     vn_current=index; vn_reveal=0; vn_tick=0; vn_selection=0;
-    if (index>=0 && vn_lines[index].give>=0)
+    if (index>=0 && vn_lines[index].give>=0) {
         vn_inventory |= 1u << vn_lines[index].give;
+        nc_sfx_family(nc_role_reward);
+    }
+    /* Characters stay where they were put. A line that names no cast is not
+     * asking for an empty stage -- it is not talking about the staging at all,
+     * and clearing it is why the second character vanished on the next page. */
+    if (index>=0 && vn_lines[index].cast_count>0) {
+        vn_stage_count=vn_lines[index].cast_count;
+        for (i=0;i<vn_stage_count;i++) vn_stage[i]=vn_lines[index].cast[i];
+    }
 }
 
 static void vn_begin(void)
 {
-    vn_inventory=0; vn_inventory_open=0; vn_enter(VN_START);
+    vn_inventory=0; vn_inventory_open=0; vn_stage_count=0; vn_enter(VN_START);
 }
 
 /* Returns false when the conversation ends or TRIANGLE returns to menu. */
@@ -38,30 +50,37 @@ static int vn_update(unsigned int pressed)
 {
     const VNLine *line=&vn_lines[vn_current];
     int length=(int)strlen(line->text);
-    if (pressed & PAD_SQUARE) vn_inventory_open=!vn_inventory_open;
+    if (pressed & PAD_SQUARE) {
+        vn_inventory_open=!vn_inventory_open;
+        nc_sfx_family(nc_role_shift);
+    }
     if (vn_inventory_open) {
         if (pressed & PAD_TRIANGLE) vn_inventory_open=0;
         return 1;
     }
     if (pressed & PAD_TRIANGLE) return 0;
-    if (++vn_tick>=VN_SPEED) {
+    if (++vn_tick>=text_speed) {
         vn_tick=0;
         if (vn_reveal<length) vn_reveal++;
     }
     if (vn_reveal>=length && line->count) {
         if (pressed & PAD_UP) vn_selection=(vn_selection+line->count-1)%line->count;
         if (pressed & PAD_DOWN) vn_selection=(vn_selection+1)%line->count;
+        if (pressed & (PAD_UP|PAD_DOWN)) nc_sfx_family(nc_role_move);
     }
     if (pressed & PAD_CROSS) {
         int next=line->next;
-        if (vn_reveal<length) { vn_reveal=length; return 1; }
+        if (vn_reveal<length) { vn_reveal=length; nc_sfx_family(nc_role_confirm); return 1; }
         if (line->count) {
             const VNChoice *c=&line->choices[vn_selection];
             if (c->requires>=0 && !(vn_inventory & (1u<<c->requires))) return 1;
-            if (c->give>=0) vn_inventory |= 1u<<c->give;
+            if (c->give>=0) { vn_inventory |= 1u<<c->give; nc_sfx_family(nc_role_reward); }
             next=c->next;
         }
         if (next<0) return 0;
+        /* A scene change is a bigger event than turning a page, and gets a
+         * different family so the two do not sound the same. */
+        nc_sfx_family(vn_lines[next].scene!=line->scene ? nc_role_shift : nc_role_confirm);
         vn_enter(next);
     }
     return 1;
@@ -88,8 +107,8 @@ static qword_t *vn_draw(qword_t *q)
      * list order in ROOM is the layer order on screen. Each portrait keeps its
      * own aspect ratio and stands on the bottom edge of its slot, so characters
      * of different heights line up on the floor rather than at the top. */
-    for (i=0;i<line->cast_count;i++) {
-        const VNCast *member=&line->cast[i];
+    for (i=0;i<vn_stage_count;i++) {
+        const VNCast *member=&vn_stage[i];
         const VNRect *slot;
         int portrait,w,h;
         if (member->slot<0 || member->slot>=VN_SLOT_COUNT || member->character<0)

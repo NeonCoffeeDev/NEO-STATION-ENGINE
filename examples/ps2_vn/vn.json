@@ -54,16 +54,16 @@
       {
         "choices": [
           {
-            "give": "",
+            "text": "OPEN THE DOOR",
             "next": "outside",
             "requires": "key",
-            "text": "OPEN THE DOOR"
+            "give": ""
           },
           {
-            "give": "",
+            "text": "STAY FOR COFFEE",
             "next": "coffee",
             "requires": "",
-            "text": "STAY FOR COFFEE"
+            "give": ""
           }
         ],
         "give": "",
@@ -71,7 +71,17 @@
         "next": "",
         "scene": "cafe",
         "speaker": "barista",
-        "text": "Where would you like to go?"
+        "text": "Where would you like to go?",
+        "cast": [
+          {
+            "slot": "left",
+            "character": "scott"
+          },
+          {
+            "slot": "right",
+            "character": "barista"
+          }
+        ]
       },
       {
         "choices": [],
@@ -94,11 +104,21 @@
       {
         "id": "2",
         "scene": "cafe",
-        "text": "Look at this static background loading up crisp on the GS. Ready to build the legacy?",
+        "text": "YESSSSSS WEEEEE HAVEEEEE BEEEEEEEN WAITTTTTINGGGGG",
         "speaker": "barista",
         "next": "",
         "give": "",
-        "choices": []
+        "choices": [],
+        "cast": [
+          {
+            "slot": "left",
+            "character": "scott"
+          },
+          {
+            "slot": "right",
+            "character": "barista"
+          }
+        ]
       }
     ],
     "frames_per_character": 2,
