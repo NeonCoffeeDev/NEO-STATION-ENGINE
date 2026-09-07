@@ -160,6 +160,36 @@ int main(void)
         q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, frame.height,
                        0x20, 0x38, 0x70);
 
+        /* Build marker. draw_clear is the one call already proven to reach the
+         * screen, so it paints this bar -- and it is drawn in a different place
+         * and colour in every build. Two of these hardware tests were spent
+         * arguing about whether the running binary was the new one; a stripe
+         * that changes settles that before any other question is asked.
+         *
+         * BUILD B: one orange bar across the top. */
+        q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, 24,
+                       0xFF, 0xB0, 0x3A);
+
+        /* And the same bar again through draw_rect_filled, at the same place
+         * but 32 pixels lower and in cyan. If the orange bar appears and the
+         * cyan one does not, filled rectangles are the problem and clears are
+         * not -- which is the entire question. */
+        {
+            rect_t probe;
+            probe.v0.x = (float)(OFF_X);
+            probe.v0.y = (float)(OFF_Y + 32);
+            probe.v0.z = 0;
+            probe.v1.x = (float)(OFF_X + frame.width);
+            probe.v1.y = (float)(OFF_Y + 56);
+            probe.v1.z = 0;
+            probe.color.r = 0x5f;
+            probe.color.g = 0xd4;
+            probe.color.b = 0xd0;
+            probe.color.a = 0x80;
+            probe.color.q = 1.0f;
+            q = draw_rect_filled(q, 0, &probe);
+        }
+
         /* Four attempts at the same texture, differing only in the two things
          * that could plausibly be wrong. Whichever quadrant shows the logo is
          * the answer, and one boot settles it.

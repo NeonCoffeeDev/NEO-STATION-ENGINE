@@ -443,6 +443,7 @@ int main(void)
     int selected = 0;
     int shown = 1;
     int frames = 0;
+    int limit_qwords;
 
     printf("@NAME@: Neon Coffee, PlayStation 2\n");
 
@@ -458,12 +459,21 @@ int main(void)
     if (!have_pad)
         printf("@NAME@: no controller in port 1\n");
 
-    packet = packet_init(DRAW_QWORDS, PACKET_NORMAL);
+    /* Ask for a generous packet, but never stop dead if it cannot be had. A
+     * console that hangs at startup is indistinguishable from a crash, and a
+     * smaller packet still draws most of a frame. */
+    limit_qwords = DRAW_QWORDS;
+    packet = packet_init(limit_qwords, PACKET_NORMAL);
     if (packet == NULL) {
-        printf("@NAME@: could not allocate the draw packet\n");
-        SleepThread();
+        limit_qwords = 1024;
+        packet = packet_init(limit_qwords, PACKET_NORMAL);
+        printf("@NAME@: large packet refused, using %d qwords\n", limit_qwords);
     }
-    packet_limit = packet->data + DRAW_QWORDS;
+    if (packet == NULL) {
+        printf("@NAME@: no draw packet at all\n");
+        return 1;
+    }
+    packet_limit = packet->data + limit_qwords;
     init_gs();
     init_environment();
 
@@ -523,6 +533,12 @@ int main(void)
         bound = 0;
         q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, frame.height,
                        BG_R, BG_G, BG_B);
+
+        /* Build marker, painted with draw_clear -- the one call already proven
+         * to reach the screen. If this amber bar is missing you are running an
+         * older binary, which is worth knowing before anything else is
+         * debated. Two hardware tests went on that question. */
+        q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, 6, 0xFF, 0xB0, 0x3A);
 
         switch (scene) {
         case SCENE_TITLE:
