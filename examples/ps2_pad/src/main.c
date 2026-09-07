@@ -215,14 +215,16 @@ int main(void)
 
         {
             rect_t box;
-            /* Coordinates are fixed point with four fractional bits, which is
-             * what ftoi4 is for. Passing raw pixels here draws the box at a
-             * sixteenth of its size, which is a confusing first bug to hit. */
-            box.v0.x = ftoi4(OFFSET_X + x - size / 2);
-            box.v0.y = ftoi4(OFFSET_Y + y - size / 2);
+            /* Plain pixels. draw_rect_filled applies ftoi4 itself, and
+             * pre-applying it too multiplies every coordinate by sixteen --
+             * which pushed every quad off screen and cost three hardware
+             * tests to find, because draw_clear does NOT do that, so the
+             * background kept working while nothing else drew. */
+            box.v0.x = (float)(OFFSET_X + x - size / 2);
+            box.v0.y = (float)(OFFSET_Y + y - size / 2);
             box.v0.z = 0;
-            box.v1.x = ftoi4(OFFSET_X + x + size / 2);
-            box.v1.y = ftoi4(OFFSET_Y + y + size / 2);
+            box.v1.x = (float)(OFFSET_X + x + size / 2);
+            box.v1.y = (float)(OFFSET_Y + y + size / 2);
             box.v1.z = 0;
             box.color.r = palette[colour][0];
             box.color.g = palette[colour][1];

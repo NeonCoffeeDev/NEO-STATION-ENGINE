@@ -188,11 +188,11 @@ int main(void)
             /* A dark plate behind each quadrant, so an empty one is obviously
              * empty rather than just blue. This is an untextured rect, which
              * NCPAD already proved works. */
-            marker.v0.x = ftoi4(OFF_X + x - 4);
-            marker.v0.y = ftoi4(OFF_Y + y - 4);
+            marker.v0.x = (float)(OFF_X + x - 4);
+            marker.v0.y = (float)(OFF_Y + y - 4);
             marker.v0.z = 0;
-            marker.v1.x = ftoi4(OFF_X + x + qw + 4);
-            marker.v1.y = ftoi4(OFF_Y + y + qh + 4);
+            marker.v1.x = (float)(OFF_X + x + qw + 4);
+            marker.v1.y = (float)(OFF_Y + y + qh + 4);
             marker.v1.z = 0;
             marker.color.r = 0x10 + variant * 0x08;
             marker.color.g = 0x10;
@@ -201,11 +201,11 @@ int main(void)
             marker.color.q = 1.0f;
             q = draw_rect_filled(q, 0, &marker);
 
-            r.v0.x = ftoi4(OFF_X + x);
-            r.v0.y = ftoi4(OFF_Y + y);
+            r.v0.x = (float)(OFF_X + x);
+            r.v0.y = (float)(OFF_Y + y);
             r.v0.z = 0;
-            r.v1.x = ftoi4(OFF_X + x + qw);
-            r.v1.y = ftoi4(OFF_Y + y + qh);
+            r.v1.x = (float)(OFF_X + x + qw);
+            r.v1.y = (float)(OFF_Y + y + qh);
             r.v1.z = 0;
             if (normalised) {
                 r.t0.u = 0.0f;

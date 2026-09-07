@@ -263,14 +263,14 @@ static qword_t *sprite(qword_t *q, int x, int y, int w, int h,
     if (q + QWORD_MARGIN >= packet_limit)
         return q;
 
-    r.v0.x = ftoi4(OFF_X + x);
-    r.v0.y = ftoi4(OFF_Y + y);
+    r.v0.x = (float)(OFF_X + x);
+    r.v0.y = (float)(OFF_Y + y);
     r.v0.z = 0;
     r.t0.u = (float)u;
     r.t0.v = (float)v;
 
-    r.v1.x = ftoi4(OFF_X + x + w);
-    r.v1.y = ftoi4(OFF_Y + y + h);
+    r.v1.x = (float)(OFF_X + x + w);
+    r.v1.y = (float)(OFF_Y + y + h);
     r.v1.z = 0;
     r.t1.u = (float)(u + tw);
     r.t1.v = (float)(v + th);
@@ -338,11 +338,11 @@ static qword_t *panel(qword_t *q, int x, int y, int w, int h,
      * drawing one would sample a glyph across the whole panel. */
     bound = 0;
 
-    box.v0.x = ftoi4(OFF_X + x);
-    box.v0.y = ftoi4(OFF_Y + y);
+    box.v0.x = (float)(OFF_X + x);
+    box.v0.y = (float)(OFF_Y + y);
     box.v0.z = 0;
-    box.v1.x = ftoi4(OFF_X + x + w);
-    box.v1.y = ftoi4(OFF_Y + y + h);
+    box.v1.x = (float)(OFF_X + x + w);
+    box.v1.y = (float)(OFF_Y + y + h);
     box.v1.z = 0;
     box.color.r = r;
     box.color.g = g;
