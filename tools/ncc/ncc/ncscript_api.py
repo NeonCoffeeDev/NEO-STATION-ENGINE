@@ -28,6 +28,15 @@ FUNCTIONS = {
     "play_music":    {"c": "nc_s_play_music",   "args": 1},
     "stop_music":    {"c": "nc_s_stop_music",   "args": 0},
 
+    # --- saving to a memory card ---
+    # Values live in RAM; save_write()/save_read() move them to and from the
+    # card. Both return 1 on success, 0 if there is no card or no save.
+    "save_get":      {"c": "nc_s_save_get",     "args": 1},
+    "save_set":      {"c": "nc_s_save_set",     "args": 2},
+    "save_write":    {"c": "nc_s_save_write",   "args": 0},
+    "save_read":     {"c": "nc_s_save_read",    "args": 0},
+    "save_erase":    {"c": "nc_s_save_erase",   "args": 0},
+
     # --- feel ---
     "shake":         {"c": "nc_s_shake",        "args": 1},
 

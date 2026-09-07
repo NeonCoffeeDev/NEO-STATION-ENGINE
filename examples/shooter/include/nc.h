@@ -177,6 +177,25 @@ int nc_pkg_load(const void *data, NC_Package *pkg);
  */
 /* Music is a CD audio track, not an SPU sample: songs are far too large for
  * the SPU's 512 KB. Track 1 holds the game, so music starts at 2. */
+/* ---- saving --------------------------------------------------------------
+ *
+ * A memory card file holding a small fixed array of ints. There is no allocator
+ * and no serialisation format worth writing for a 2 MB machine -- a high score,
+ * a level number and some flags is what this is for.
+ *
+ * The path must be unique per game: the card is shared with every other title.
+ */
+#define NC_SAVE_SLOTS 16
+#define NC_SAVE_PATH  "bu00:BASLUS-99999SHOOTERX"
+#define NC_SAVE_TITLE "shooter"
+
+void nc_save_init(void);
+int  nc_save_get(int slot);
+void nc_save_set(int slot, int value);
+int  nc_save_store(void);      /* 1 on success */
+int  nc_save_load(void);       /* 1 if a save was read; 0 if there is none */
+int  nc_save_erase(void);
+
 void nc_music_init(void);
 void nc_music_play(int track);
 void nc_music_stop(void);

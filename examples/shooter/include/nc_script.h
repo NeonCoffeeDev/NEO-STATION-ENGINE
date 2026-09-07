@@ -50,6 +50,11 @@ int  nc_s_sound_count(void);
 int  nc_s_play_music(int track);
 int  nc_s_stop_music(void);
 int  nc_s_shake(int amount);
+int  nc_s_save_get(int slot);
+int  nc_s_save_set(int slot, int value);
+int  nc_s_save_write(void);
+int  nc_s_save_read(void);
+int  nc_s_save_erase(void);
 
 /* --- input --- */
 int  nc_s_btn_held(int button);

@@ -167,6 +167,35 @@ A game can be entirely 2D: a package with no meshes at all is fine.
 | `scene()` | Which scene is running, from 0. |
 | `scene_count()` | How many the package holds. |
 
+### Saving
+| | |
+|---|---|
+| `save_set(slot, value)` | Put an int in one of **16** slots. RAM only. |
+| `save_get(slot)` | Read one back. Out-of-range slots read as `0`. |
+| `save_write()` | Write all 16 slots to the memory card. `1` on success. |
+| `save_read()` | Load them back. `0` if there is no card and no save yet. |
+| `save_erase()` | Delete the file. |
+
+Sixteen ints is the whole format, and that is on purpose: a high score, a level
+number, some flags. There is no allocator and nothing to serialise strings with.
+The file takes one 8 KB block — the smallest a PlayStation save can be.
+
+`save_read()` returning `0` is the normal state on a first run. Treat it as "no
+save", not as an error, and never block the player on it:
+
+```
+func _ready():
+    if save_read() == 1:
+        hiscore = save_get(0)
+```
+
+The save shows up in the console's own memory card screen with your project's
+name and a small icon. Everything about it — the file name, the title — comes
+from the project name, so two Neon Coffee games never collide.
+
+Writing takes a few frames and blocks while it happens. Save at a natural pause
+(game over, a checkpoint), never every frame.
+
 ### Numbers
 | | |
 |---|---|

@@ -30,7 +30,181 @@
   "meshes": [],
   "scenes": [
     {
-      "_comment": "Sprite order is the contract with script.ncs and also the draw order -- sprite 0 is on top. 0-1 panels, 2 player, 3-10 bullets, 11-16 enemies, 17-20 booms, 21-36 stars.",
+      "_comment": "scene 0 -- title. 0-1 panels, 2-17 stars.",
+      "clear": [
+        8,
+        7,
+        20
+      ],
+      "sprites": [
+        {
+          "texture": "panels",
+          "x": 0,
+          "y": 0,
+          "w": 64,
+          "h": 240,
+          "u": 0,
+          "v": 0,
+          "fixed": true
+        },
+        {
+          "texture": "panels",
+          "x": 256,
+          "y": 0,
+          "w": 64,
+          "h": 240,
+          "u": 64,
+          "v": 0,
+          "fixed": true
+        },
+        {
+          "texture": "sheet",
+          "x": 70,
+          "y": 0,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 111,
+          "y": 53,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 152,
+          "y": 106,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 193,
+          "y": 159,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 234,
+          "y": 212,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 99,
+          "y": 25,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 140,
+          "y": 78,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 181,
+          "y": 131,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 222,
+          "y": 184,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 87,
+          "y": 237,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 128,
+          "y": 50,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 169,
+          "y": 103,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 210,
+          "y": 156,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 75,
+          "y": 209,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 116,
+          "y": 22,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        },
+        {
+          "texture": "sheet",
+          "x": 157,
+          "y": 75,
+          "w": 2,
+          "h": 2,
+          "u": 40,
+          "v": 0
+        }
+      ]
+    },
+    {
+      "_comment": "scene 1 -- the game. Sprite order is also draw order, and sprite 0 is on top: 0-1 panels, 2 player, 3-10 bullets, 11-16 enemies, 17-20 booms, 21-36 stars.",
       "clear": [
         8,
         7,

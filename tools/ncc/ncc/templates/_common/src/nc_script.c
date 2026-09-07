@@ -92,6 +92,37 @@ int nc_s_shake(int amount)
 }
 
 
+int nc_s_save_get(int slot)
+{
+    return nc_save_get(slot);
+}
+
+
+int nc_s_save_set(int slot, int value)
+{
+    nc_save_set(slot, value);
+    return 0;
+}
+
+
+int nc_s_save_write(void)
+{
+    return nc_save_store();
+}
+
+
+int nc_s_save_read(void)
+{
+    return nc_save_load();
+}
+
+
+int nc_s_save_erase(void)
+{
+    return nc_save_erase();
+}
+
+
 /* --- input --- */
 
 int nc_s_btn_held(int button)

@@ -89,8 +89,20 @@ def _resolve(path):
     return path
 
 
+def _save_id(name):
+    """A memory card filename fragment: 8 uppercase alphanumerics.
+
+    The BIOS caps a card filename at 20 characters and the region/serial prefix
+    already uses 12, so this is what is left. It also has to be unique per game
+    -- the card is shared with every other title on the shelf.
+    """
+    v = "".join(c for c in name.upper() if c.isalnum())
+    return (v or "NCGAME")[:8].ljust(8, "X")
+
+
 def _substitute(root, name):
     volume = _volume_name(name)
+    save_id = _save_id(name)
     for base, _, files in os.walk(root):
         for f in files:
             p = os.path.join(base, f)
@@ -101,7 +113,9 @@ def _substitute(root, name):
                     text = fh.read()
             except (OSError, UnicodeDecodeError):
                 continue
-            new_text = text.replace("@NAME@", name).replace("@VOLUME@", volume)
+            new_text = (text.replace("@NAME@", name)
+                            .replace("@VOLUME@", volume)
+                            .replace("@SAVEID@", save_id))
             if new_text != text:
                 with open(p, "w", encoding="utf-8") as fh:
                     fh.write(new_text)
@@ -158,8 +172,14 @@ def new(args):
     print(f"  template: {template}")
     print("\n  Next:")
     print(f"    ncc run {os.path.relpath(dest)}")
-    print("\n  Edit src/main.c to change the game; nc_gfx.c and nc_input.c are the")
-    print("  engine. See docs/GETTING-STARTED.md.")
+    if os.path.exists(os.path.join(dest, "script.ncs")):
+        print("\n  Edit script.ncs for the logic and scene.json for what exists")
+        print("  (or open godot/ and press \"Export to NC\"). Everything under")
+        print("  src/ is the engine and needs no editing.")
+    else:
+        print("\n  Edit src/main.c to change the game; the other files in src/")
+        print("  are the engine.")
+    print("  See docs/GETTING-STARTED.md.")
     return 0
 
 

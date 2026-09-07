@@ -74,6 +74,23 @@ no main RAM, no SPU RAM, no CPU.
 List them under `"music"` in `scene.json`; `ncc build` rewrites the marked region
 of `iso.xml` so the disc layout stays in step.
 
+## Saving
+
+| Rule | Why |
+|---|---|
+| **16 int slots**, nothing else | No allocator, and no serialisation format worth writing for 2 MB. |
+| One **8 KB block** | The smallest unit a PlayStation save can occupy. |
+| Card 1 only | `bu00:`. Card 2 (`bu10:`) is not wired up. |
+| Writing **blocks** for several frames | The driver talks to the card over the controller port, a little each vertical blank. |
+
+**Guidance.** Save at a pause the player already expects — game over, a
+checkpoint, a menu — never every frame. `save_read()` returning `0` is the
+ordinary first-run answer, not a failure; leave the defaults and let them in.
+
+The file carries a proper BIOS header, so it shows up in the console's own
+memory card screen with your project's name and an icon rather than as
+"corrupted data".
+
 ## Geometry (3D)
 
 | Rule | Why |

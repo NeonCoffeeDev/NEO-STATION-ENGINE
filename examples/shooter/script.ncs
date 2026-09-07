@@ -5,22 +5,24 @@
 # is not decoration for its own sake -- a 320x240 screen is far wider than a
 # vertical shmup wants, and arcade boards solved it exactly this way.
 #
-#   D-pad    move
-#   X        shoot
-#   START    restart after a game over
+#   MENU     START to play,  SELECT to clear the high score
+#   GAME     D-pad to move, X to shoot, START to retry after a game over
 #
-# Sprite indices are the contract with scene.json, and they are also the draw
-# order: sprite 0 is drawn last, so it ends up on top. Panels are 0 and 1 so
-# they cover anything that strays out of the playfield.
+# There are two scenes, and each has its own sprite list. Sprite order is also
+# the draw order reversed -- sprite 0 ends up on top -- which is why the panels
+# come first and the starfield last.
 #
-# Nothing can be created at run time -- there is no allocator -- so every bullet,
-# enemy and explosion exists from the start and is shown, hidden and moved.
+# Nothing can be created at run time; there is no allocator. Every bullet, enemy
+# and explosion exists from the start and is shown, hidden and moved.
 
 
-# ---- sprite layout, matching scene.json ------------------------------------
+# ---- scene 0: the menu ------------------------------------------------------
 
-var PANEL_L   = 0
-var PANEL_R   = 1
+var M_STAR0   = 2
+var M_STARS   = 16
+
+# ---- scene 1: the game ------------------------------------------------------
+
 var PLAYER    = 2
 var BULLET0   = 3
 var N_BULLETS = 8
@@ -43,6 +45,13 @@ var SCREEN_H = 240
 var PLAYER_SPEED = 2
 var BULLET_SPEED = 5
 var FIRE_DELAY   = 7
+var INVULN_TIME  = 90       # frames of mercy after being hit
+
+# ---- saved data ------------------------------------------------------------
+# Slot 0 is the high score. Values live in RAM; save_write() puts them on the
+# memory card.
+
+var SLOT_HISCORE = 0
 
 # ---- state -----------------------------------------------------------------
 
@@ -53,18 +62,94 @@ var boom_timer: array[4]
 var star_speed: array[16]
 
 var score = 0
+var hiscore = 0
 var lives = 3
 var cooldown = 0
 var dead_timer = 0
 var next_boom = 0
+var invuln = 0
+var saved = 0
+var menu_timer = 0
 
 
 func _ready():
+    if scene() == 0:
+        ready_menu()
+    else:
+        ready_game()
+
+
+func _update():
+    if scene() == 0:
+        update_menu()
+    else:
+        update_game()
+
+
+# ============================================================================
+#  MENU
+# ============================================================================
+
+func ready_menu():
+    menu_timer = 0
+
+    # Pull the high score off the memory card. No card, or no save yet, simply
+    # leaves it at zero -- never a reason to stop the player getting in.
+    if save_read() == 1:
+        hiscore = save_get(SLOT_HISCORE)
+
+    for i in range(M_STARS):
+        star_speed[i] = 1 + (i % 3)
+
+    play_music(2)          # track 1 is the game data, so the song is track 2
+    print("menu")
+
+
+func update_menu():
+    menu_timer = menu_timer + 1
+
+    for i in range(M_STARS):
+        var s = M_STAR0 + i
+        var y = sprite_y(s) + star_speed[i]
+        if y > SCREEN_H:
+            sprite_set_pos(s, FIELD_L + rand(FIELD_R - FIELD_L - 2), 0)
+        else:
+            sprite_set_pos(s, sprite_x(s), y)
+
+    draw_text(116, 70, "NEON COFFEE")
+    draw_text(128, 86, "SQUADRON")
+
+    draw_text(14, 8, "HI")
+    draw_num(14, 18, hiscore)
+
+    # Blink the prompt so it reads as waiting rather than frozen.
+    if (menu_timer % 60) < 40:
+        draw_text(116, 150, "PRESS START")
+
+    draw_text(72, 200, "SELECT CLEARS HI SCORE")
+
+    if btn_pressed(BTN_START):
+        goto_scene(1)
+
+    if btn_pressed(BTN_SELECT):
+        hiscore = 0
+        save_set(SLOT_HISCORE, 0)
+        save_write()
+        play_sound(0)
+
+
+# ============================================================================
+#  GAME
+# ============================================================================
+
+func ready_game():
     score = 0
     lives = 3
     cooldown = 0
     dead_timer = 0
     next_boom = 0
+    invuln = 0
+    saved = 0
 
     sprite_set_pos(PLAYER, 152, 190)
     sprite_show(PLAYER)
@@ -85,11 +170,10 @@ func _ready():
     for i in range(N_STARS):
         star_speed[i] = 1 + (i % 3)
 
-    play_music(2)          # track 1 is the game data, so the song is track 2
-    print("vertical shooter ready")
+    print("game start")
 
 
-func _update():
+func update_game():
     scroll_stars()
 
     if lives > 0:
@@ -136,6 +220,17 @@ func update_player():
                    clamp(x, FIELD_L, FIELD_R - 16),
                    clamp(y, 100, SCREEN_H - 20))
 
+    # Mercy time after a hit. Blinking shows it is running, and while it is the
+    # collision test below is skipped entirely.
+    if invuln > 0:
+        invuln = invuln - 1
+        if (invuln % 8) < 4:
+            sprite_hide(PLAYER)
+        else:
+            sprite_show(PLAYER)
+        if invuln == 0:
+            sprite_show(PLAYER)
+
     if cooldown > 0:
         cooldown = cooldown - 1
 
@@ -161,8 +256,17 @@ func fire():
 
 func update_game_over():
     dead_timer = dead_timer + 1
+
+    # Record the score once, the first frame after dying.
+    if saved == 0:
+        saved = 1
+        if score > hiscore:
+            hiscore = score
+            save_set(SLOT_HISCORE, hiscore)
+            save_write()
+
     if btn_pressed(BTN_START) and dead_timer > 40:
-        _ready()
+        goto_scene(0)
 
 
 # ---- bullets ----------------------------------------------------------------
@@ -233,7 +337,12 @@ func update_enemies():
         else:
             sprite_set_pos(s, x, y)
 
-            if lives > 0:
+            # The invuln check matters for more than fairness. Without it, the
+            # hit below moves the player to the respawn point and the REST of
+            # this same loop then tests the remaining enemies against that new
+            # position -- so one collision could cost several lives and paint
+            # explosions at both the impact and the respawn.
+            if lives > 0 and invuln == 0:
                 if overlap(x, y, 16, 16,
                            sprite_x(PLAYER), sprite_y(PLAYER), 16, 16) == 1:
                     hit_player()
@@ -245,9 +354,12 @@ func hit_player():
     lives = lives - 1
     play_sound(2)
     shake(9)
+    spawn_boom(sprite_x(PLAYER), sprite_y(PLAYER))
     sprite_set_pos(PLAYER, 152, 190)
+    invuln = INVULN_TIME
     if lives <= 0:
         dead_timer = 0
+        invuln = 0
         sprite_hide(PLAYER)
         stop_music()
     return 0
@@ -293,12 +405,16 @@ func overlap(ax, ay, aw, ah, bx, by, bw, bh):
 
 func draw_hud():
     # The panels have a framed window near the top; the text sits inside it.
-    draw_text(14, 22, "SCORE")
-    draw_num(14, 34, score)
-    draw_text(270, 22, "LIFE")
-    draw_num(270, 34, lives)
+    draw_text(14, 8, "SCORE")
+    draw_num(14, 18, score)
+    draw_text(14, 30, "HI")
+    draw_num(14, 40, hiscore)
+    draw_text(270, 8, "LIFE")
+    draw_num(270, 18, lives)
 
     if lives <= 0:
-        draw_text(122, 112, "GAME OVER")
+        draw_text(124, 112, "GAME OVER")
+        if score >= hiscore and score > 0:
+            draw_text(112, 128, "NEW HI SCORE")
         if dead_timer > 40:
-            draw_text(106, 130, "START TO RETRY")
+            draw_text(112, 146, "START = MENU")

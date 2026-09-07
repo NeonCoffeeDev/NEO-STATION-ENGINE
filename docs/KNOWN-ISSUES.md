@@ -72,3 +72,38 @@ One footnote from the rename itself: the folder could not be renamed while
 DuckStation was running, because `ncc run` spawned it without setting `cwd` and
 the emulator inherited the project directory, holding a lock on it. Fixed -- it
 now launches with the build directory as its working directory.
+
+## RESOLVED: memory card saves always failed with OpenBIOS
+
+Every `save_write()` failed. The BIOS reported no error worth the name -- just
+that it could not open the file -- and the emulator showed no memory card being
+written. The card was fine: reading sector 0 directly returned the `MC` magic,
+so it was present and formatted.
+
+The cause was ordering. `nc_save.c` did this:
+
+```c
+InitCARD(1);
+StartCARD();
+_bu_init();        /* <-- too early */
+```
+
+`_bu_init()` reads the card's directory. But the driver reaches the card over
+the *controller* port, one exchange per vertical blank, so at that moment it has
+not yet swapped a single byte with it. The read fails, and `buInit()` responds by
+zeroing all fifteen directory entries. Nothing reports this. Every later `open()`
+then walks a directory in which no entry is marked free, concludes the card is
+full, and refuses -- for a card that is in fact empty.
+
+**Fixed** by waiting eight frames between `StartCARD()` and `_bu_init()`.
+Verified end to end: the save appears in DuckStation's `.mcd` with a valid BIOS
+directory entry, an `SC` header, and the values read back on the next boot.
+
+Two things found on the way, both worth knowing:
+
+- **`_get_errno()` halts the console.** It is `B(0x54)`, and OpenBIOS leaves that
+  entry unimplemented -- calling it prints `Unimplemented B0:54` and stops dead.
+  Diagnostics use `_card_status()` instead.
+- **`_card_info()` costs you the card.** It marks the card busy, and only the
+  driver's completion interrupt clears that flag; every `open()` refuses while it
+  is set. It reads like a harmless query. It is not.
