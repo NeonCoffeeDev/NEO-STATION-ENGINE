@@ -11,6 +11,7 @@ project whose whole premise is a self-contained toolchain.
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -22,6 +23,7 @@ sys.path.insert(0, os.path.join(_HERE, "..", "ncc"))
 
 from theme import (AMBER, BG, BORDER, CYAN, DIM, FG, GREEN, MONO, MONO_SM, PANEL,
                    PANEL_HI, RED, SUNKEN, UI, UI_BOLD, Button, field, group)
+from editor import ScriptEditor
 
 from ncc import toolchain as tc
 from ncc.build import DEFAULT_TEMPLATE, list_templates
@@ -261,7 +263,8 @@ class Studio:
         strip = tk.Frame(outer, bg=BG)
         strip.pack(fill="x")
         self.tabs = {}
-        for key, label in (("console", "CONSOLE"), ("tty", "PS1 TTY")):
+        for key, label in (("console", "CONSOLE"), ("tty", "PS1 TTY"),
+                           ("script", "SCRIPT")):
             lb = tk.Label(strip, text=f"  {label}  ", bg=PANEL, fg=DIM,
                           font=UI_BOLD, pady=4, cursor="hand2")
             lb.pack(side="left", padx=(0, 2))
@@ -282,6 +285,13 @@ class Studio:
 
         self.text = self._make_pane()
         self.tty = self._make_pane()
+
+        # The script editor is a pane like the others so the build output and
+        # the source you are fixing share one window and one keyboard shortcut.
+        self.editor = ScriptEditor(self.panes, on_save=self.save_script,
+                                   on_run=self.save_and_run)
+        self.editor.group = self.editor
+
         self.show_tab("console")
 
     def _make_pane(self):
@@ -332,11 +342,14 @@ class Studio:
         for k, lb in self.tabs.items():
             on = k == key
             lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
-        for k, w in (("console", self.text), ("tty", self.tty)):
+        for k, w in (("console", self.text), ("tty", self.tty),
+                     ("script", self.editor)):
             if k == key:
                 w.group.pack(fill="both", expand=True)
             else:
                 w.group.pack_forget()
+        if key == "script":
+            self.editor.text.focus_set()
 
     # ---- state ----------------------------------------------------------
 
@@ -411,11 +424,47 @@ class Studio:
         p = self.selected_project()
         if p:
             self.set_status(os.path.relpath(p, self.repo))
+        self.sync_editor()
+
+    def sync_editor(self):
+        """Keep the SCRIPT tab showing the selected project's script.
+
+        Without this the editor keeps whatever was opened first, so switching
+        projects in the list leaves you editing the previous game's logic --
+        which is a good way to build one project while reading another.
+        """
+        p = self.selected_project()
+        if not p:
+            self.editor.clear("no project selected")
+            return
+
+        path = os.path.join(p, "script.ncs")
+        if self.editor.path == path:
+            return
+
+        if self.editor.is_dirty() and self.editor.path:
+            self.editor.save()
+            self.log("saved %s before switching project."
+                     % os.path.basename(self.editor.path), DIM)
+
+        if not os.path.isfile(path):
+            self.editor.clear("%s has no script.ncs"
+                              % os.path.basename(p))
+            return
+
+        err = self.editor.load(path)
+        if err:
+            self.log("could not open %s: %s" % (path, err), RED)
 
     # ---- open buttons ---------------------------------------------------
 
     def open_script(self):
-        """script.ncs -- the game logic, for projects that have one."""
+        """script.ncs -- the game logic, for projects that have one.
+
+        It opens in the SCRIPT tab rather than in whatever Windows associates
+        with .ncs, which is nothing. Editing the game in the same window that
+        shows the build output and the console's TTY is the whole point.
+        """
         p = self.selected_project()
         if not p:
             return
@@ -424,10 +473,28 @@ class Studio:
             self.log("this project has no script.ncs.", AMBER)
             self.log("create one with:  ncc new <name> -t game", DIM)
             return
-        if not reveal(path):
-            self.log("could not open %s" % path, RED)
-            self.log(".ncs has no file association; open it in any text editor.",
-                     DIM)
+
+        self.sync_editor()
+        if self.editor.path != path:
+            return
+        self.show_tab("script")
+        self.set_status("editing %s" % os.path.relpath(path, self.repo), CYAN)
+
+    def save_script(self):
+        if not self.editor.path:
+            return False
+        if self.editor.save():
+            self.set_status("saved %s" % os.path.basename(self.editor.path),
+                            GREEN)
+            return True
+        self.log("could not write %s" % self.editor.path, RED)
+        return False
+
+    def save_and_run(self):
+        """F5 from inside the editor: save first, then the usual build+run."""
+        if self.editor.path:
+            self.save_script()
+        self.run_ncc("run")
 
     def open_scene_json(self):
         p = self.selected_project()
@@ -548,6 +615,37 @@ class Studio:
             return DIM
         return None
 
+    # The transpiler says: ncc: script.ncs -- line 23: ...   and ncc check
+    # repeats it in its problem list. Both are worth catching.
+    SCRIPT_ERROR_RE = re.compile(r"script\.ncs\D*?line (\d+)", re.I)
+
+    def _catch_script_error(self, line):
+        """Turn a compiler complaint into a caret on the offending line.
+
+        The transpiler already reports "script.ncs: line 42: ...". Reading that,
+        switching windows and counting down to line 42 by hand is the part worth
+        removing.
+        """
+        m = self.SCRIPT_ERROR_RE.search(line)
+        if not m:
+            return
+        p = self.selected_project()
+        if not p:
+            return
+        path = os.path.join(p, "script.ncs")
+        if not os.path.isfile(path):
+            return
+        if self.editor.path != path and not self.editor.is_dirty():
+            self.editor.load(path)
+        if self.editor.path != path:
+            return
+        lineno = int(m.group(1))
+        self.root.after(60, lambda: self._goto_error(lineno))
+
+    def _goto_error(self, lineno):
+        self.show_tab("script")
+        self.editor.show_error(lineno)
+
     def _drain(self):
         """Pump subprocess output from the worker thread into the console."""
         batch = []
@@ -568,6 +666,7 @@ class Studio:
                     self.set_status(item[0], item[1])
                 else:
                     batch.append((item, self._classify(item)))
+                    self._catch_script_error(item)
         except queue.Empty:
             pass
         if batch:
