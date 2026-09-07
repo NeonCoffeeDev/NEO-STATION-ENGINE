@@ -417,10 +417,59 @@ def _config_of(args):
     return "Release" if getattr(args, "release", False) else "Debug"
 
 
+def _build_ps2(src):
+    """Build a PS2 project with PS2SDK's Makefiles.
+
+    The PS1 side uses CMake because PSn00bSDK does; PS2SDK uses Makefiles, and
+    reimplementing its link rules to force one build system would put the most
+    fragile part of the toolchain in our hands for no gain.
+    """
+    name = os.path.basename(src)
+    print(f"Building {name}  [PS2]")
+
+    cc = tc.ps2_cc()
+    if not cc:
+        raise SystemExit(
+            "ncc: no PS2 toolchain." + chr(10) +
+            "     Install it with:  sh tools/install-ps2dev.sh" + chr(10) +
+            "     Then check it with:  ncc doctor --target ps2")
+
+    make = tc.find_make()
+    if not make:
+        raise SystemExit(
+            "ncc: GNU make not found, and PS2SDK builds with Makefiles." + chr(10) +
+            "     winget install ezwinports.make")
+
+    env = tc.ps2_build_env()
+    r = subprocess.run([make], cwd=src, env=env, capture_output=True, text=True)
+    sys.stdout.write(r.stdout)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        raise SystemExit("ncc: build failed.")
+
+    for line in (r.stdout or "").splitlines():
+        if "warning:" in line.lower():
+            print(f"  {line.strip()}")
+
+    elf = os.path.join(src, "game.elf")
+    if not os.path.isfile(elf):
+        raise SystemExit("ncc: make succeeded but produced no game.elf")
+
+    size = os.path.getsize(elf)
+    print(f"  ok  {elf}  ({size / 1024:.0f} KB)")
+    print()
+    print("  On a FreeMcBoot console: copy game.elf to a USB stick and launch")
+    print("  it from uLaunchELF or OPL. In PCSX2 it needs a PS2 BIOS dumped")
+    print("  from your own machine -- there is no OpenBIOS equivalent for PS2.")
+    return 0
+
+
 def build(args):
     src = _resolve(getattr(args, "path", None))
 
     target = project_meta(src)["target"]
+    if target == "ps2":
+        return _build_ps2(src)
     if target != "ps1":
         # Refusing here, by name, beats letting cmake fail three layers down
         # with a missing compiler.

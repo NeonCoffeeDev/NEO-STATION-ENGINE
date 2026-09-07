@@ -371,3 +371,42 @@ Still open:
    No ordering table, a depth buffer, a real FPU, two vector units.
 2. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
 3. **Per-object scripts**, 4-bit textures, LTO.
+
+
+## Update, 2026-09-06 (the PS2 toolchain actually builds)
+
+M6 is no longer a promise:  on a PS2 project produces a real .elf.
+
+- **ps2dev installed** into toolchain/ps2dev by tools/install-ps2dev.sh --
+  the EE and IOP compilers (GCC 15.2.0), PS2SDK and gsKit. Prebuilt, because
+  building ps2dev from source on Windows is an afternoon.
+- ** builds PS2 projects** with PS2SDK Makefiles. The PS1 side uses
+  CMake because PSn00bSDK does; forcing one build system across both would mean
+  reimplementing PS2SDK link rules, which is the part most likely to be subtly
+  wrong.
+- **** reports the real toolchain rather than a
+  deferred placeholder.
+- **The ps2_hello template builds and runs**: it sets up the GS, clears a
+  640x448 framebuffer and prints to TTY. Not the NC runtime -- the smallest
+  thing that proves the path works.
+
+Two Windows-specific traps, both recorded in install-ps2dev.sh because both
+cost real time:
+
+1. The archive contains symlinks under ps2sdk/ports/bin. Windows refuses to
+   create them and tar then aborts the whole extraction.
+2. The binaries are 32-bit and linked against a MinGW runtime they do not
+   ship. Without it the gcc driver starts, spawns cc1, and cc1 dies before
+   printing anything -- make reports "Error 1" with no diagnostic, and the same
+   command works by hand. tools/ps2dev_runtime.py reads what the binaries
+   import, fetches those DLLs from MSYS2 and puts a copy beside every
+   executable, so nothing depends on the machine having MinGW.
+
+What is still M6: **the NC runtime itself**. The PS2 has a depth buffer, a real
+FPU, 32 MB of RAM and two vector units, so the ordering table, the fixed-point
+arithmetic and the GTE path -- most of the PS1 renderer -- have no counterpart.
+That is a second renderer, not a port.
+
+On hardware: PS2 output is an .elf, so a FreeMcBoot console runs it straight
+from a USB stick via uLaunchELF or OPL. PCSX2 additionally needs a PS2 BIOS
+dumped from your own console; unlike the PS1, there is no open replacement.

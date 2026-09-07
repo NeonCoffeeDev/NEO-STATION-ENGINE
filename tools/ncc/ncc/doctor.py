@@ -45,12 +45,46 @@ CHECKS_PS1 = [
      "winget install Stenzek.DuckStation"),
 ]
 
-CHECKS_PS2 = [
-    ("Docker", "docker", False, "Simplest way to run ps2dev on Windows. Deferred to M6.",
-     "https://docs.docker.com/desktop/install/windows-install/"),
-    ("ee-gcc", "ee-gcc", False, "PS2 cross compiler, if installed natively. Deferred to M6.",
-     "Use the ps2dev/ps2dev Docker image, or WSL2 + ps2dev."),
-]
+CHECKS_PS2 = []
+
+
+def ps2_section():
+    """The PS2 toolchain, which is a local install rather than a PATH lookup."""
+    from . import toolchain as tc
+    print("\n  PS2 target")
+    print("  ----------")
+
+    cc = tc.ps2_cc()
+    if cc:
+        print("  [ok]    EE compiler    %s" % version_of(cc))
+        print("          %s" % cc)
+    else:
+        print("  [  --   ] EE compiler  ps2dev is not installed.")
+        print("            -> sh tools/install-ps2dev.sh")
+
+    make = tc.find_make()
+    if make:
+        print("  [ok]    make           %s" % version_of(make))
+    else:
+        print("  [  --   ] make         PS2SDK builds with Makefiles, not CMake.")
+        print("            -> winget install ezwinports.make")
+
+    root = tc.ps2dev_root()
+    for name, sub in (("PS2SDK", "ps2sdk"), ("gsKit", "gsKit")):
+        path = os.path.join(root, sub)
+        if os.path.isdir(path):
+            print("  [ok]    %-14s %s" % (name, path))
+        else:
+            print("  [  --   ] %-12s not found under %s" % (name, root))
+
+    if cc and make:
+        # Worth saying here rather than only in the docs: the two consoles
+        # differ in how you get a build onto them, and that surprises people.
+        print("\n  PS2 output is an .elf. On a FreeMcBoot console, copy it to a")
+        print("  USB stick and launch it from uLaunchELF or OPL. PCSX2 also needs")
+        print("  a PS2 BIOS dumped from your own machine -- unlike the PS1, there")
+        print("  is no open replacement for it.")
+        print("\n  The NC runtime itself is still PS1-only: see M6 in ROADMAP.md.")
 
 
 def version_of(path):
@@ -97,7 +131,7 @@ def run(args):
     if args.target in ("ps1", "all"):
         section("PS1 target", CHECKS_PS1, missing)
     if args.target in ("ps2", "all"):
-        section("PS2 target", CHECKS_PS2, missing)
+        ps2_section()
 
     print("\n  Project")
     print("  -------")

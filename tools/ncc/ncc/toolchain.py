@@ -174,3 +174,65 @@ def find_godot(console=False):
     if hit:
         return hit
     return None
+
+# ---- PS2 (ps2dev) ---------------------------------------------------------
+
+PS2_PREFIX = "mips64r5900el-ps2-elf"
+
+
+def ps2dev_root():
+    """Where tools/install-ps2dev.sh puts the PS2 toolchain.
+
+    The archive unpacks with its own ps2dev/ directory inside, so the real root
+    is one level down from where it was extracted.
+    """
+    base = os.path.join(project_root(), "toolchain", "ps2dev")
+    nested = os.path.join(base, "ps2dev")
+    return nested if os.path.isdir(os.path.join(nested, "ee")) else base
+
+
+def ps2_cc():
+    """The EE compiler, or None if the toolchain is not installed."""
+    exe = PS2_PREFIX + "-gcc" + (".exe" if os.name == "nt" else "")
+    p = os.path.join(ps2dev_root(), "ee", "bin", exe)
+    if os.path.isfile(p):
+        return p
+    return shutil.which(PS2_PREFIX + "-gcc") or shutil.which("ee-gcc")
+
+
+def find_make():
+    """GNU make. PS2SDK builds with Makefiles, not CMake."""
+    hit = shutil.which("make")
+    if hit:
+        return hit
+    # Windows has no make; ezwinports is what `ncc doctor` tells you to install,
+    # and winget puts it somewhere no sane PATH includes.
+    import glob
+    pat = os.path.join(
+        os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages",
+        "ezwinports.make*", "bin", "make.exe")
+    hits = sorted(glob.glob(pat))
+    return hits[0] if hits else None
+
+
+def ps2_build_env():
+    """Environment for a PS2 build: PS2DEV/PS2SDK/GSKIT set, tools on PATH.
+
+    Every toolchain executable needs its 32-bit runtime DLLs beside it -- see
+    tools/install-ps2dev.sh -- so nothing here depends on a system-wide MinGW.
+    """
+    root = ps2dev_root()
+    env = os.environ.copy()
+    env["PS2DEV"] = root
+    env["PS2SDK"] = os.path.join(root, "ps2sdk")
+    env["GSKIT"] = os.path.join(root, "gsKit")
+
+    dirs = [os.path.join(root, d) for d in
+            (os.path.join("ee", "bin"), os.path.join("iop", "bin"),
+             os.path.join("dvp", "bin"), "bin")]
+    make = find_make()
+    if make:
+        dirs.append(os.path.dirname(make))
+    dirs = [d for d in dirs if os.path.isdir(d)]
+    env["PATH"] = os.pathsep.join(dirs + [env.get("PATH", "")])
+    return env
