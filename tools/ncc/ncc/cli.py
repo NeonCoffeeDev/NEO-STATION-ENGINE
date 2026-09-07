@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from . import __version__, build as build_mod, check as check_mod, doctor
+from . import __version__, assets, build as build_mod, check as check_mod, doctor
 from .targets import TARGETS
 
 
@@ -54,6 +54,13 @@ def main(argv=None):
     ck = sub.add_parser("check", help="report what fits and what does not")
     ck.add_argument("path", nargs="?", default=".")
     ck.set_defaults(func=check_mod.run)
+
+    ad = sub.add_parser("add", help="add a texture, sound or music file to a project")
+    ad.add_argument("kind", choices=["texture", "sound", "music"])
+    ad.add_argument("file", help="the file to add; it is copied into the project")
+    ad.add_argument("path", nargs="?", default=".", help="the project")
+    ad.add_argument("-n", "--name", help="what scripts and scene.json call it")
+    ad.set_defaults(func=assets.run)
 
     fo = sub.add_parser("font", help="write the built-in font sheet to a PNG")
     fo.add_argument("out", nargs="?", default="font.png")

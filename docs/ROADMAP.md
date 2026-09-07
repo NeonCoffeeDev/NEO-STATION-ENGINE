@@ -410,3 +410,29 @@ That is a second renderer, not a port.
 On hardware: PS2 output is an .elf, so a FreeMcBoot console runs it straight
 from a USB stick via uLaunchELF or OPL. PCSX2 additionally needs a PS2 BIOS
 dumped from your own console; unlike the PS1, there is no open replacement.
+
+
+## Update, 2026-09-06 (running on real hardware)
+
+**The PS2 build ran on a real console.** examples/ps2_pad, launched from
+uLaunchELF off a USB stick on a FreeMcBoot PS2: a box that moves with the
+D-pad and changes colour with X. Toolchain, build, GS display, controller and
+frame loop, all verified on hardware rather than on my word.
+
+That is the first Neon Coffee output to run on a real machine at all -- the PS1
+side has only ever been verified in DuckStation, because a PS1 disc image needs
+an ODE or a modchip and a FreeMcBoot PS2 will not boot one. OPL does not list
+loose ELFs either; uLaunchELF is the launcher for this.
+
+Also in this pass:
+
+- ****, and the same three buttons in Studio. It
+  copies the file in and registers it in scene.json, and refuses up front --
+  an oversized PNG is rejected when you add it, with the limit and the reason,
+  rather than in a build log later.
+- **PS2 is a first-class target in the manager**: Studio builds and runs it,
+  the project list tags each row with its machine,  reports what can
+  honestly be said about a PS2 project, and  explains the PCSX2 BIOS
+  situation instead of failing at it.
+
+Still M6: the NC runtime on PS2. What runs today is a hand-written main.c.

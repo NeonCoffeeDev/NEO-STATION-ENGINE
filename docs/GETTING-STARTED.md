@@ -62,12 +62,23 @@ first run the loop is a couple of seconds.
 ./ncc templates        # list project templates
 ./ncc targets          # hardware profiles and budgets
 ./ncc check mygame     # what fits, what does not, and why
+./ncc add texture art/hero.png mygame   # copy it in AND register it
+./ncc add sound sfx/jump.wav mygame
+./ncc add music song.wav mygame
 ./ncc sync mygame      # bring the project's engine files up to date
 ./ncc font my.png      # dump the built-in font sheet to edit
 ./ncc doctor           # toolchain status
 ```
 
-`ncc sync` is worth knowing about. A project keeps its own copy of the runtime
+`ncc sync` does both halves of adding an asset: the file lands in the project
+*and*  names it. Doing that by hand is not hard, but it is exactly
+the chore where the file arrives and the JSON edit is forgotten, and the symptom
+-- a texture that silently is not there -- costs far more than the edit saved.
+It also refuses up front: a 512x512 PNG is rejected when you add it, naming the
+limit and the reason, rather than twenty minutes later in a build log. NC Studio
+has the same three buttons under **add asset**.
+
+ is worth knowing about. A project keeps its own copy of the runtime
 under `src/`, which is what makes it readable and yours to change -- but it also
 means a fix made to the engine after your project was created does not reach it.
 The symptom is usually a package that refuses to load with a version mismatch.

@@ -26,6 +26,7 @@ from theme import (AMBER, BG, BORDER, CYAN, DIM, FG, GREEN, MONO, MONO_SM, PANEL
 from editor import ScriptEditor
 
 from ncc import toolchain as tc
+from ncc import assets
 from ncc.build import DEFAULT_TEMPLATE, list_templates, project_meta
 from ncc.targets import TARGETS
 
@@ -128,6 +129,7 @@ class Studio:
         self._build_target(left)
         self._build_actions(left)
         self._build_tools(left)
+        self._build_assets(left)
         self._build_hardware(left)
         self._build_output(main)
         self._build_statusbar()
@@ -254,6 +256,75 @@ class Studio:
 
         self.b_godot = Button(body, "EDIT SCENE IN GODOT", self.open_godot, GREEN)
         self.b_godot.pack(fill="x", pady=(4, 0))
+
+    def _build_assets(self, parent):
+        g = group(parent, "add asset", CYAN)
+        g.pack(fill="x", pady=(0, 6))
+        body = tk.Frame(g.body, bg=PANEL)
+        body.pack(fill="x", padx=6, pady=6)
+
+        hint = tk.Label(body, text="Copied in and registered in scene.json.",
+                        bg=PANEL, fg=DIM, font=UI, anchor="w")
+        hint.pack(fill="x", pady=(0, 4))
+
+        row = tk.Frame(body, bg=PANEL)
+        row.pack(fill="x")
+        Button(row, "TEXTURE", lambda: self.add_asset("texture"), AMBER,
+               width=9).pack(side="left")
+        Button(row, "SOUND", lambda: self.add_asset("sound"), AMBER,
+               width=8).pack(side="left", padx=4)
+        Button(row, "MUSIC", lambda: self.add_asset("music"), AMBER,
+               width=8).pack(side="left")
+
+    def add_asset(self, kind):
+        """Pick a file and add it, reporting refusals in the console.
+
+        The checks run here rather than at build time. Being told a 512x512 PNG
+        is too big when you add it, with the limit and the reason, is worth more
+        than being told twenty minutes later in a build log.
+        """
+        from tkinter import filedialog
+
+        p = self.selected_project()
+        if not p:
+            self.log("no project selected.", RED)
+            return
+        if project_meta(p)["target"] != "ps1":
+            self.log("assets are a PS1 runtime feature; a PS2 project owns its "
+                     "own main.c.", AMBER)
+            return
+
+        types = {"texture": [("PNG image", "*.png")],
+                 "sound": [("WAV audio", "*.wav")],
+                 "music": [("WAV audio", "*.wav")]}[kind]
+        path = filedialog.askopenfilename(
+            title="Add a %s to %s" % (kind, os.path.basename(p)),
+            filetypes=types + [("All files", "*.*")])
+        if not path:
+            return
+
+        self.show_tab("console")
+        self.log("")
+        self.log("> ncc add %s %s" % (kind, os.path.basename(path)), CYAN)
+        try:
+            name, rel = assets.add(p, kind, path)
+        except Exception as exc:
+            for line in str(exc).split(chr(10)):
+                self.log("  " + line.strip(), RED)
+            self.set_status("%s rejected" % kind, RED)
+            return
+
+        self.log("  added %s '%s' -> %s" % (kind, name, rel), GREEN)
+        got = assets.listing(p)
+        if kind == "sound":
+            self.log("  play it with:  play_sound(%d)" % (len(got["sounds"]) - 1),
+                     DIM)
+        elif kind == "music":
+            self.log("  play it with:  play_music(%d)" % (len(got["music"]) + 1),
+                     DIM)
+        else:
+            self.log("  use it with:  \"texture\": \"%s\"" % name, DIM)
+        self.set_status("added %s '%s'" % (kind, name), GREEN)
 
     def _build_hardware(self, parent):
         g = group(parent, "hardware profile", CYAN)
