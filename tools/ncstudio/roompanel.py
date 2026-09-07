@@ -86,6 +86,16 @@ class RoomPanel(tk.Frame):
             row = tk.Frame(left, bg=BG); row.pack(fill='x')
             tk.Label(row, text=caption, width=7, bg=BG, fg=FG).pack(side='left')
             box = entry(row, width=9); box.pack(side='left'); self.values.append(box)
+        # A HUD element is an ordinary sprite that does not move with the screen
+        # shake. Without this flag exposed the only way to add one was to edit
+        # scene.json by hand and know the flag existed.
+        self.fixed = tk.BooleanVar(value=False)
+        self.fixed_box = tk.Checkbutton(
+            left, text='fixed  (HUD: ignores screen shake)', variable=self.fixed,
+            command=self.toggle_fixed, bg=BG, fg=FG, selectcolor=SUNKEN,
+            activebackground=BG, activeforeground=FG, anchor='w', font=MONO_SM,
+            bd=0, highlightthickness=0)
+        self.fixed_box.pack(fill='x', pady=2)
         Button(left, 'APPLY SIZE / POSITION', self.apply, AMBER).pack(fill='x', pady=4)
         Button(left, 'REPLACE IMAGE', self.replace_image, CYAN).pack(fill='x')
         Button(left, 'EDIT CONVERSATION', self.conversation, CYAN).pack(fill='x', pady=4)
@@ -233,6 +243,7 @@ class RoomPanel(tk.Frame):
             self.objects.selection_set(self.selected)
             for field,value in zip(self.values,(x,y,rw,rh)):
                 field.delete(0,'end');field.insert(0,str(value))
+        self._sync_fixed()
 
     def select(self, event):
         if self.objects.curselection(): self.selected=self.objects.curselection()[0];self.draw()
@@ -310,6 +321,25 @@ class RoomPanel(tk.Frame):
         self.draw()
 
     # ---- naming and layer order -----------------------------------------
+
+    def toggle_fixed(self):
+        """Mark the selected PS1 sprite as HUD, or let it move with the shake."""
+        if not self.doc or self.vn:
+            return
+        sprites = self._sprites()
+        if not 0 <= self.selected < len(sprites):
+            return
+        self.checkpoint()
+        if self.fixed.get():
+            sprites[self.selected]['fixed'] = True
+        else:
+            sprites[self.selected].pop('fixed', None)
+
+    def _sync_fixed(self):
+        sprites = [] if self.vn or not self.doc else self._sprites()
+        usable = bool(sprites) and 0 <= self.selected < len(sprites)
+        self.fixed_box.configure(state='normal' if usable else 'disabled')
+        self.fixed.set(bool(sprites[self.selected].get('fixed')) if usable else False)
 
     def _sprites(self):
         return self.doc.get('scenes', [self.doc])[max(0, self.scene.current())].setdefault('sprites', [])
