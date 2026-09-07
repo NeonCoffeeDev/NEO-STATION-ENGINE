@@ -46,6 +46,25 @@ func to_kit() -> Dictionary:
 	return kit
 
 
+## Nodes the exporter does not read. Adding a TextureRect in the 2D view is the
+## natural way to try to put a second character on screen, and it is silently
+## ignored: portraits come from the characters array and the slots in Studio's
+## ROOM tab, not from nodes. Saying so is the difference between a five-minute
+## correction and an evening lost to an export that reported success.
+func export_warnings() -> String:
+	var known := ["Background", "Portrait", "Dialogue", "SafeArea"]
+	var ignored: Array[String] = []
+	for child in get_children():
+		if child is CanvasItem and not known.has(child.name):
+			ignored.append(str(child.name))
+	if ignored.is_empty():
+		return ""
+	return ("\n\nIgnored: %s. Extra nodes in this scene are not exported. "
+		+ "To put another character on screen, add them to the Characters array "
+		+ "and cast them into a portrait slot (Studio: ROOM > ADD SPRITE / SLOT, "
+		+ "then EDIT CONVERSATION > ON SCREEN).") % ", ".join(ignored)
+
+
 func export_project() -> String:
 	if position != Vector2.ZERO or not is_zero_approx(rotation) or scale != Vector2.ONE:
 		return "Keep the VN root transform at default; move the Background/Portrait/Dialogue children."

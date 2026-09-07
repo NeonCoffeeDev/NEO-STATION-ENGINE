@@ -67,6 +67,62 @@ class VNKitTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'resize'):
             self.compile()
 
+    # ---- portrait slots and the cast ---------------------------------
+
+    def _cast_setup(self):
+        kit = self.doc['kit']
+        kit['characters'] = [{'id': 'a', 'name': 'A'}, {'id': 'b', 'name': 'B'}]
+        kit['layout'] = {'portraits': [{'name': 'left', 'rect': [32, 24, 128, 224]},
+                                       {'name': 'right', 'rect': [400, 24, 128, 224]}]}
+        return kit
+
+    def test_slots_default_to_the_old_single_portrait(self):
+        """Content written before slots existed still compiles, unchanged."""
+        self.doc['kit']['characters'] = [{'id': 'a', 'name': 'A'}]
+        self.doc['kit']['dialogue'][0]['speaker'] = 'a'
+        self.compile()
+        result = (self.root / 'src/vn_kit.h').read_text()
+        self.assertIn('#define VN_SLOT_COUNT 1', result)
+        # The speaker is placed in slot 0, which is what the old runtime drew.
+        self.assertIn('1,{{0,0},{-1,-1},{-1,-1},{-1,-1}}', result)
+
+    def test_cast_is_sorted_by_slot_so_order_is_layer_order(self):
+        kit = self._cast_setup()
+        # Deliberately the wrong way round: the compiler must sort these, or the
+        # list order in the editor would not match what the console draws.
+        kit['dialogue'][0]['cast'] = [{'slot': 'right', 'character': 'b'},
+                                      {'slot': 'left', 'character': 'a'}]
+        self.compile()
+        result = (self.root / 'src/vn_kit.h').read_text()
+        self.assertIn('#define VN_SLOT_COUNT 2', result)
+        self.assertIn('vn_slots[] = {{32,24,128,224},{400,24,128,224}}', result)
+        self.assertIn('2,{{0,0},{1,1},{-1,-1},{-1,-1}}', result)
+
+    def test_two_characters_cannot_share_a_slot(self):
+        kit = self._cast_setup()
+        kit['dialogue'][0]['cast'] = [{'slot': 'left', 'character': 'a'},
+                                      {'slot': 'left', 'character': 'b'}]
+        with self.assertRaisesRegex(ValueError, 'two characters in slot'):
+            self.compile()
+
+    def test_unknown_slot_is_reported(self):
+        kit = self._cast_setup()
+        kit['dialogue'][0]['cast'] = [{'slot': 'middle', 'character': 'a'}]
+        with self.assertRaisesRegex(ValueError, 'unknown portrait slot'):
+            self.compile()
+
+    def test_slot_rectangle_must_fit_the_screen(self):
+        kit = self._cast_setup()
+        kit['layout']['portraits'][0]['rect'] = [600, 24, 128, 224]
+        with self.assertRaisesRegex(ValueError, 'must fit'):
+            self.compile()
+
+    def test_duplicate_slot_names_are_rejected(self):
+        kit = self._cast_setup()
+        kit['layout']['portraits'][1]['name'] = 'left'
+        with self.assertRaisesRegex(ValueError, 'duplicate name'):
+            self.compile()
+
     def test_asset_path_escape(self):
         self.doc['kit']['scenes'][0]['background'] = '../outside.png'
         with self.assertRaisesRegex(ValueError, 'inside the project'):

@@ -116,7 +116,8 @@ func _on_export_vn() -> void:
 		_report("VN export", "Open vn_authoring.tscn first.", false)
 		return
 	var problem: String = root.export_project()
-	_report("VN export", "Saved layout and conversations. Use CHECK / BUILD to validate budgets." if problem.is_empty() else problem, problem.is_empty())
+	var note: String = root.export_warnings() if root.has_method("export_warnings") else ""
+	_report("VN export", ("Saved layout and conversations. Use CHECK / BUILD to validate budgets." + note) if problem.is_empty() else problem, problem.is_empty())
 
 
 func _on_reload_vn() -> void:
