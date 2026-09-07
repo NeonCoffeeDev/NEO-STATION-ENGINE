@@ -1,0 +1,8 @@
+{
+  "name": "ps2_vn",
+  "title": "PS2 visual novel",
+  "order": 10,
+  "target": "ps2",
+  "description": "Logo title screen, pad-driven menu, and a scene of text you advance a line at a time.",
+  "detail": "A deliberate first game for this machine: no physics, no scrolling, no per-frame budget to blow -- textured quads and text. The logo and an 8x8 font sheet are compiled in as GS textures, and the alpha test does the cut-outs. Menu navigation matches the PS1 shooter's shape: a title, a menu, and scenes you move between."
+}

@@ -1,0 +1,21 @@
+# @NAME@ - Neon Coffee PlayStation 2 visual novel
+#
+# Do not run make directly; use `ncc build`. It sets PS2DEV, PS2SDK and GSKIT
+# and puts the toolchain on PATH.
+#
+# The two _data.c files are generated art, made by tools/png2ps2.py. The PS2
+# side has no runtime that loads assets yet, so the pixels are compiled in --
+# exactly what PS2SDK's own samples do. That is M6.
+
+EE_BIN  = game.elf
+EE_OBJS = src/main.o src/logo_data.o src/font_data.o
+
+EE_LIBS = -ldraw -lgraph -lmath3d -lpacket -ldma -lpad
+
+all: $(EE_BIN)
+
+clean:
+	rm -f $(EE_BIN) $(EE_OBJS)
+
+include $(PS2SDK)/samples/Makefile.pref
+include $(PS2SDK)/samples/Makefile.eeglobal
