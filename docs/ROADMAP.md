@@ -375,16 +375,16 @@ Still open:
 
 ## Update, 2026-09-06 (the PS2 toolchain actually builds)
 
-M6 is no longer a promise:  on a PS2 project produces a real .elf.
+M6 is no longer a promise: `ncc build` on a PS2 project produces a real .elf.
 
 - **ps2dev installed** into toolchain/ps2dev by tools/install-ps2dev.sh --
   the EE and IOP compilers (GCC 15.2.0), PS2SDK and gsKit. Prebuilt, because
   building ps2dev from source on Windows is an afternoon.
-- ** builds PS2 projects** with PS2SDK Makefiles. The PS1 side uses
+- **`ncc build` builds PS2 projects** with PS2SDK Makefiles. The PS1 side uses
   CMake because PSn00bSDK does; forcing one build system across both would mean
   reimplementing PS2SDK link rules, which is the part most likely to be subtly
   wrong.
-- **** reports the real toolchain rather than a
+- **`ncc doctor --target ps2`** reports the real toolchain rather than a
   deferred placeholder.
 - **The ps2_hello template builds and runs**: it sets up the GS, clears a
   640x448 framebuffer and prints to TTY. Not the NC runtime -- the smallest
