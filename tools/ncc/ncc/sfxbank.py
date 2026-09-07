@@ -204,6 +204,14 @@ def build(project, out_dir, sfx_rate=sound.SFX_RATE, music_rate=sound.MUSIC_RATE
     # was started from.
     if irx and os.path.isfile(irx):
         (out / "audsrv.irx").write_bytes(Path(irx).read_bytes())
+        freesd = Path(irx).with_name("freesd.irx")
+        if not freesd.is_file():
+            raise AudioError("PS2 audio requires freesd.irx beside audsrv.irx")
+        (out / "freesd.irx").write_bytes(freesd.read_bytes())
+        asm += ['\t.align 6', '\t.globl nc_freesd_irx', 'nc_freesd_irx:',
+                '\t.incbin "%s/freesd.irx"' % here,
+                '\t.globl nc_freesd_irx_end', 'nc_freesd_irx_end:', '\t.align 6']
+
         asm += ['\t.align 6', '\t.globl nc_audsrv_irx', 'nc_audsrv_irx:',
                 '\t.incbin "%s/audsrv.irx"' % here,
                 '\t.globl nc_audsrv_irx_end', 'nc_audsrv_irx_end:']

@@ -39,6 +39,8 @@
 
 #include "audio/audio_data.h"
 
+extern unsigned char nc_freesd_irx[];
+extern unsigned char nc_freesd_irx_end[];
 extern unsigned char nc_audsrv_irx[];
 extern unsigned char nc_audsrv_irx_end[];
 
@@ -208,7 +210,7 @@ static int nc_audio_detail;             /* whatever the failing step returned */
 static int nc_audio_failed_at;          /* the step that failed, not FAILED */
 
 static const char *const NC_AUDIO_STAGE[] = {
-    "PATCH LOADER", "LOAD LIBSD", "ALLOC IOP", "SUBMIT DMA", "WAIT DMA", "LOAD IRX", "FREE IOP", "START AUDSRV",
+    "PATCH LOADER", "LOAD FREESD", "ALLOC IOP", "SUBMIT DMA", "WAIT DMA", "LOAD IRX", "FREE IOP", "START AUDSRV",
     "SET FORMAT", "READY", "FAILED"
 };
 
@@ -228,10 +230,18 @@ static void nc_audio_advance(void)
         return;
 
     case NC_AUDIO_LIBSD:
-        /* libsd is in the console's own ROM, so it is the one module that does
-         * not have to be carried. */
-        nc_audio_detail = SifLoadModule("rom0:LIBSD", 0, NULL);
-        if (nc_audio_detail < 0) { nc_audio_failed_at = nc_audio_step; nc_audio_step = NC_AUDIO_FAILED; return; }
+        /* Use the SDK sound dependency rather than a model-dependent ROM copy.
+         * The initial IOP reset ensures ROM LIBSD has not already been loaded.
+         */
+        FlushCache(0);
+        nc_audio_detail = SifExecModuleBuffer(nc_freesd_irx,
+            (unsigned int)(nc_freesd_irx_end - nc_freesd_irx), 0, NULL, &result);
+        if (nc_audio_detail < 0 || result == 1 || result < 0) {
+            if (result < 0) nc_audio_detail = result;
+            nc_audio_failed_at = nc_audio_step;
+            nc_audio_step = NC_AUDIO_FAILED;
+            return;
+        }
         nc_audio_step = NC_AUDIO_IRX;
         return;
 

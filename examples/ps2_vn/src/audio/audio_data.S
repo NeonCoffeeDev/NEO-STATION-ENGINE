@@ -13,6 +13,13 @@ nc_music_0_bin:
 nc_music_1_bin:
 	.incbin "src/audio/music_1.bin"
 	.align 6
+	.globl nc_freesd_irx
+nc_freesd_irx:
+	.incbin "src/audio/freesd.irx"
+	.globl nc_freesd_irx_end
+nc_freesd_irx_end:
+	.align 6
+	.align 6
 	.globl nc_audsrv_irx
 nc_audsrv_irx:
 	.incbin "src/audio/audsrv.irx"
