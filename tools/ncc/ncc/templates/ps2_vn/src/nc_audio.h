@@ -32,6 +32,7 @@
 #include <audsrv.h>
 #include <kernel.h>
 #include <loadfile.h>
+#include <iopheap.h>
 #include <sbv_patches.h>
 #include <sifrpc.h>
 #include <string.h>
@@ -195,16 +196,19 @@ static int nc_voice_next(NCVoice *voice, int twice)
  * it instead of a round of guesses.
  */
 enum {
-    NC_AUDIO_PATCH, NC_AUDIO_LIBSD, NC_AUDIO_IRX, NC_AUDIO_START,
+    NC_AUDIO_PATCH, NC_AUDIO_LIBSD, NC_AUDIO_IRX, NC_AUDIO_DMA, NC_AUDIO_WAIT_DMA, NC_AUDIO_LOAD, NC_AUDIO_FREE, NC_AUDIO_START,
     NC_AUDIO_FORMAT, NC_AUDIO_DONE, NC_AUDIO_FAILED
 };
 
 static int nc_audio_step = NC_AUDIO_PATCH;
+static void *nc_audio_iop;
+static unsigned int nc_audio_dma;
+static int nc_audio_dma_frames;
 static int nc_audio_detail;             /* whatever the failing step returned */
 static int nc_audio_failed_at;          /* the step that failed, not FAILED */
 
 static const char *const NC_AUDIO_STAGE[] = {
-    "PATCH LOADER", "LOAD LIBSD", "SEND AUDSRV", "START AUDSRV",
+    "PATCH LOADER", "LOAD LIBSD", "ALLOC IOP", "SUBMIT DMA", "WAIT DMA", "LOAD IRX", "FREE IOP", "START AUDSRV",
     "SET FORMAT", "READY", "FAILED"
 };
 
@@ -232,21 +236,61 @@ static void nc_audio_advance(void)
         return;
 
     case NC_AUDIO_IRX:
-        /* An ELF launched from a USB stick has no working directory to load
-         * audsrv from, so it travels inside the executable. The transfer is a
-         * DMA out of main memory and does not see the EE's cache. */
-        FlushCache(0);
-        nc_audio_detail = SifExecModuleBuffer(
-            nc_audsrv_irx, (unsigned int)(nc_audsrv_irx_end - nc_audsrv_irx),
-            0, NULL, &result);
-        /* `result` is the module's own verdict. A module that loaded but
-         * refused to stay resident leaves audsrv_init spinning on an RPC that
-         * will never be answered, so it is checked here rather than there. */
-        if (nc_audio_detail < 0 || result == 1) {
+        nc_audio_iop = SifAllocIopHeap(
+            ((unsigned int)(nc_audsrv_irx_end - nc_audsrv_irx) + 15) & ~15);
+        if (!nc_audio_iop) {
+            nc_audio_detail = -1001;
             nc_audio_failed_at = nc_audio_step;
             nc_audio_step = NC_AUDIO_FAILED;
             return;
         }
+        nc_audio_step = NC_AUDIO_DMA;
+        return;
+
+    case NC_AUDIO_DMA: {
+        SifDmaTransfer_t transfer;
+        transfer.src = nc_audsrv_irx;
+        transfer.dest = nc_audio_iop;
+        transfer.size = ((unsigned int)(nc_audsrv_irx_end-nc_audsrv_irx)+15)&~15;
+        transfer.attr = 0;
+        FlushCache(0);
+        nc_audio_dma = SifSetDma(&transfer, 1);
+        if (!nc_audio_dma) {
+            nc_audio_detail = -1002;
+            nc_audio_failed_at = nc_audio_step;
+            nc_audio_step = NC_AUDIO_FAILED;
+            return;
+        }
+        nc_audio_step = NC_AUDIO_WAIT_DMA;
+        return;
+    }
+    case NC_AUDIO_WAIT_DMA:
+        if (SifDmaStat(nc_audio_dma) >= 0) {
+            if (++nc_audio_dma_frames > 300) {
+                /* Keep the destination allocated: DMA may still own it. */
+                nc_audio_detail = -1003;
+                nc_audio_failed_at = nc_audio_step;
+                nc_audio_step = NC_AUDIO_FAILED;
+            }
+            return;
+        }
+        nc_audio_step = NC_AUDIO_LOAD;
+        return;
+
+    case NC_AUDIO_LOAD:
+        nc_audio_detail = SifLoadStartModuleBuffer(nc_audio_iop, 0, NULL, &result);
+        if (nc_audio_detail < 0 || result == 1 || result < 0) {
+            if (result < 0) nc_audio_detail = result;
+            nc_audio_failed_at = nc_audio_step;
+            nc_audio_step = NC_AUDIO_FAILED;
+            return;
+        }
+        nc_audio_step = NC_AUDIO_FREE;
+        return;
+
+    case NC_AUDIO_FREE:
+        SifFreeIopHeap(nc_audio_iop);
+        nc_audio_iop = NULL;
         nc_audio_step = NC_AUDIO_START;
         return;
 

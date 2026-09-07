@@ -728,7 +728,7 @@ int main(void)
          * be recorded at all. */
         if (nc_audio_step != NC_AUDIO_DONE) {
             char line[48];
-            sprintf(line, "AUDIO %d/5 %s%s", nc_audio_step + 1,
+            sprintf(line, "AUDIO %d/9 %s%s", nc_audio_step + 1,
                     NC_AUDIO_STAGE[nc_audio_step],
                     nc_audio_step == NC_AUDIO_FAILED ? "" : " ...");
             q = text(q, 24, SCREEN_H - 26, line, 0x80);
