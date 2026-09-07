@@ -36,8 +36,8 @@
 
 #define SCREEN_W 640
 #define SCREEN_H 448
-#define OFF_X (2048 - (SCREEN_W / 2))
-#define OFF_Y (2048 - (SCREEN_H / 2))
+#define OFF_X (-(SCREEN_W / 2))
+#define OFF_Y (-(SCREEN_H / 2))
 
 /* The Neon Coffee ground, matching NC Studio and the PS1 runtime. */
 #define BG_R 0x14
@@ -90,40 +90,8 @@ static texbuffer_t *bound;
 static const char *MENU_ITEMS[] = { "BEGIN", "ABOUT", "TITLE SCREEN" };
 #define MENU_COUNT 3
 
-static const char *STORY[] = {
-    "THE SHOP IS SHUT. THE SIGN STILL HUMS.",
-    "",
-    "YOU HAVE A DEV KIT THAT IS NOT A DEV KIT,",
-    "A CONSOLE FROM 2000, AND A USB STICK.",
-    "",
-    "THAT TURNS OUT TO BE ENOUGH.",
-    "",
-    "EVERYTHING ON THIS SCREEN WAS BUILT BY",
-    "NEON COFFEE AND RAN ON REAL HARDWARE.",
-    "",
-    "THE LOGO IS A TEXTURE IN GRAPHICS MEMORY.",
-    "THE TEXT IS A SHEET OF 8X8 GLYPHS.",
-    "THE PAD IS READ THROUGH THE IOP.",
-    "",
-    "NOW GO AND MAKE SOMETHING.",
-};
-#define STORY_LINES (int)(sizeof(STORY) / sizeof(STORY[0]))
+#include "vn_content.h"
 
-static const char *ABOUT[] = {
-    "NEON COFFEE ENGINE",
-    "",
-    "PS1  PSN00BSDK, A .NCPKG OF ART AND",
-    "     SCENES, AND NCSCRIPT COMPILED TO C.",
-    "",
-    "PS2  PS2SDK. THIS SCREEN. THE RUNTIME",
-    "     ITSELF IS STILL TO COME -- M6.",
-    "",
-    "GODOT IS THE SCENE EDITOR, UNFORKED.",
-    "NC STUDIO IS THE MANAGER.",
-    "",
-    "TRIANGLE TO GO BACK.",
-};
-#define ABOUT_LINES (int)(sizeof(ABOUT) / sizeof(ABOUT[0]))
 
 
 /* ---- setup ------------------------------------------------------------- */
@@ -158,7 +126,7 @@ static void init_gs(void)
     logo_tex.width = nc_logo_width;
     logo_tex.psm = GS_PSM_32;
     logo_tex.address = graph_vram_allocate(nc_logo_width, nc_logo_height,
-                                           GS_PSM_32, GRAPH_ALIGN_BLOCK);
+                                           GS_PSM_32, GRAPH_ALIGN_PAGE);
     logo_tex.info.width = draw_log2(nc_logo_width);
     logo_tex.info.height = draw_log2(nc_logo_height);
     logo_tex.info.components = TEXTURE_COMPONENTS_RGBA;
@@ -166,8 +134,8 @@ static void init_gs(void)
 
     font_tex.width = nc_font_width;
     font_tex.psm = GS_PSM_32;
-    font_tex.address = graph_vram_allocate(nc_font_width, nc_font_height,
-                                           GS_PSM_32, GRAPH_ALIGN_BLOCK);
+    font_tex.address = graph_vram_allocate(nc_font_width, (nc_font_height + 31) & ~31,
+                                           GS_PSM_32, GRAPH_ALIGN_PAGE);
     font_tex.info.width = draw_log2(nc_font_width);
     font_tex.info.height = draw_log2(nc_font_height);
     font_tex.info.components = TEXTURE_COMPONENTS_RGBA;
@@ -204,7 +172,7 @@ static void init_environment(void)
     lod_t lod;
 
     q = draw_setup_environment(q, 0, &frame, &z);
-    q = draw_primitive_xyoffset(q, 0, OFF_X, OFF_Y);
+    q = draw_primitive_xyoffset(q, 0, 2048 + OFF_X, 2048 + OFF_Y);
 
     /* The alpha test is what makes cut-out textures work without blending:
      * anything at alpha 0 never reaches the framebuffer. Cheaper than blending
@@ -359,7 +327,7 @@ static qword_t *panel(qword_t *q, int x, int y, int w, int h,
 /* Draw the logo at a given height, keeping its own proportions. */
 static qword_t *logo(qword_t *q, int x, int y, int height)
 {
-    int width = nc_logo_used_w * height / nc_logo_used_h;
+    int width = nc_logo_used_w * height * NC_LOGO_SCALE_X / (nc_logo_used_h * 100);
 
     q = bind_texture(q, &logo_tex);
     return sprite(q, x, y, width, height, 0, 0,
@@ -369,7 +337,7 @@ static qword_t *logo(qword_t *q, int x, int y, int height)
 
 static int logo_width_for(int height)
 {
-    return nc_logo_used_w * height / nc_logo_used_h;
+    return nc_logo_used_w * height * NC_LOGO_SCALE_X / (nc_logo_used_h * 100);
 }
 
 
@@ -379,8 +347,8 @@ static qword_t *draw_title(qword_t *q, int frames)
 
     q = logo(q, (SCREEN_W - logo_width_for(height)) / 2, 48, height);
 
-    q = text_center(q, 272, "NEON COFFEE", 0x80);
-    q = text_center(q, 300, "PLAYSTATION 2", 0x80);
+    q = text_center(q, 272, NC_VN_TITLE, 0x80);
+    q = text_center(q, 300, NC_VN_SUBTITLE, 0x80);
 
     /* Blink, so it reads as waiting rather than frozen. */
     if ((frames % 60) < 40)
@@ -423,13 +391,15 @@ static qword_t *draw_lines(qword_t *q, const char *const *lines, int count,
     q = panel(q, 32, 96, SCREEN_W - 64, SCREEN_H - 176, 0x0a, 0x0c, 0x0d);
     q = panel(q, 32, 96, SCREEN_W - 64, 2, 0x5f, 0xd4, 0xd0);
 
-    for (i = 0; i < shown && i < count; i++)
-        q = text(q, 56, 120 + i * 20, lines[i], 0x80);
+    for (i = (shown > 11 ? shown - 11 : 0); i < shown && i < count; i++)
+        q = text(q, 56, 120 + (i - (shown > 11 ? shown - 11 : 0)) * 20, lines[i], 0x80);
 
     q = text_center(q, SCREEN_H - 56, footer, 0x40);
     return q;
 }
 
+
+#include "vn_runtime.h"
 
 /* ---- main -------------------------------------------------------------- */
 
@@ -441,9 +411,12 @@ int main(void)
 
     int scene = SCENE_TITLE;
     int selected = 0;
-    int shown = 1;
     int frames = 0;
     int limit_qwords;
+
+    /* Initialize GIF and select it for dma_wait_fast, as in PS2SDK samples. */
+    dma_channel_initialize(DMA_CHANNEL_GIF, NULL, 0);
+    dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
     printf("ps2_vn: Neon Coffee, PlayStation 2\n");
 
@@ -479,6 +452,7 @@ int main(void)
 
     upload(nc_logo, nc_logo_width, nc_logo_height, &logo_tex);
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
+    if (!vn_init()) return 1;
 
     while (1) {
         qword_t *q;
@@ -504,23 +478,14 @@ int main(void)
             if (pressed & PAD_TRIANGLE)
                 scene = SCENE_TITLE;
             if (pressed & PAD_CROSS) {
-                if (selected == 0) { scene = SCENE_STORY; shown = 1; }
-                else if (selected == 1) { scene = SCENE_ABOUT; shown = ABOUT_LINES; }
+                if (selected == 0) { scene = SCENE_STORY; vn_begin(); }
+                else if (selected == 1) { scene = SCENE_ABOUT; }
                 else scene = SCENE_TITLE;
             }
             break;
 
         case SCENE_STORY:
-            /* One line at a time, which is the whole interaction model of the
-             * genre: the reader sets the pace. */
-            if (pressed & PAD_CROSS) {
-                if (shown < STORY_LINES)
-                    shown++;
-                else
-                    scene = SCENE_MENU;
-            }
-            if (pressed & PAD_TRIANGLE)
-                scene = SCENE_MENU;
+            if (!vn_update(pressed)) scene = SCENE_MENU;
             break;
 
         case SCENE_ABOUT:
@@ -534,11 +499,8 @@ int main(void)
         q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, frame.height,
                        BG_R, BG_G, BG_B);
 
-        /* Build marker, painted with draw_clear -- the one call already proven
-         * to reach the screen. If this amber bar is missing you are running an
-         * older binary, which is worth knowing before anything else is
-         * debated. Two hardware tests went on that question. */
-        q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, 6, 0xFF, 0xB0, 0x3A);
+        /* Diagnostic marker: absence alone cannot identify a stale binary. */
+
 
         switch (scene) {
         case SCENE_TITLE:
@@ -548,9 +510,7 @@ int main(void)
             q = draw_menu(q, selected);
             break;
         case SCENE_STORY:
-            q = draw_lines(q, STORY, STORY_LINES, shown,
-                           shown < STORY_LINES ? "X NEXT   TRIANGLE MENU"
-                                               : "X DONE   TRIANGLE MENU");
+            q = vn_draw(q);
             break;
         case SCENE_ABOUT:
             q = draw_lines(q, ABOUT, ABOUT_LINES, ABOUT_LINES,

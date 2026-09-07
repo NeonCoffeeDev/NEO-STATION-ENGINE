@@ -22,9 +22,12 @@ sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(_HERE, "..", "ncc"))
 
 from theme import (AMBER, BG, BORDER, CYAN, DIM, FG, GREEN, MONO, MONO_SM, PANEL,
-                   PANEL_HI, RED, SUNKEN, UI, UI_BOLD, Button, field, group)
+                   PANEL_HI, RED, SUNKEN, UI, UI_BOLD, Button, field, group,
+                   style_ttk)
 from editor import ScriptEditor
 from scenepanel import ScenePanel
+from designpanel import DesignPanel
+from roompanel import RoomPanel
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -108,6 +111,9 @@ class Studio:
         self.explain_on_fail = False
         self.projects = []
         self.settings = load_settings()
+        # Set before anything builds: the project list and the tab strip are
+        # both filtered by it.
+        self.mode = self.settings.get("mode", "all")
         self.autoscroll = tk.BooleanVar(value=self.settings.get("autoscroll", True))
         self.release = bool(self.settings.get("release", False))
 
@@ -116,6 +122,7 @@ class Studio:
         root.geometry(self.settings.get("geometry", "1120x720"))
         root.minsize(940, 580)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
+        style_ttk(root)     # before any ttk widget is built
 
         self._build_titlebar()
 
@@ -136,17 +143,19 @@ class Studio:
         self._build_statusbar()
         self._bind_keys()
 
-        self.refresh_projects()
         self._sync_config_button()
         self.set_target(self.settings.get("target", "ps1"))
+        self.set_mode(self.mode)      # filters the list, then selects into it
         self.log(f"repo   {self.repo}", CYAN)
         self.log("F5 build+run   F7 build   F8 check   F9 doctor   Ctrl+L clear",
                  DIM)
         self.check_toolchain()
 
         self._tty_pos = 0
+        self._data_stamp = None
         self.root.after(60, self._drain)
         self.root.after(1000, self._poll_tty)
+        self.root.after(1200, self._poll_project_data)
 
     # ---- chrome ---------------------------------------------------------
 
@@ -191,14 +200,18 @@ class Studio:
         Button(row, "NEW...", self.new_project, GREEN).pack(side="left", padx=(4, 0))
 
     def _build_target(self, parent):
-        g = group(parent, "target", CYAN)
+        g = group(parent, "mode", CYAN)
         g.pack(fill="x", pady=(0, 6))
         self.target = tk.StringVar(value="ps1")
         row = tk.Frame(g.body, bg=PANEL)
         row.pack(fill="x", padx=6, pady=6)
         self.tbuttons = {}
-        for key, label in (("ps1", "PS1"), ("ps2", "PS2")):
-            b = Button(row, label, lambda k=key: self.set_target(k), AMBER, width=8)
+        # The mode switch sections the whole window. PS1 and PS2 are different
+        # machines with different runtimes, different asset rules and different
+        # tools; showing both at once is how you end up editing NCScript for a
+        # game that has no script, or reading a PS1 TTY that will never speak.
+        for key, label in (("all", "ALL"), ("ps1", "PS1"), ("ps2", "PS2")):
+            b = Button(row, label, lambda k=key: self.set_mode(k), AMBER, width=6)
             b.pack(side="left", padx=(0, 4))
             self.tbuttons[key] = b
 
@@ -343,10 +356,9 @@ class Studio:
         strip = tk.Frame(outer, bg=BG)
         strip.pack(fill="x")
         self.tabs = {}
-        for key, label in (("console", "CONSOLE"), ("tty", "PS1 TTY"),
-                           ("script", "SCRIPT"), ("scene", "SCENE")):
-            lb = tk.Label(strip, text=f"  {label}  ", bg=PANEL, fg=DIM,
-                          font=UI_BOLD, pady=4, cursor="hand2")
+        for key in self.TAB_ORDER:
+            lb = tk.Label(strip, text="  %s  " % self.TAB_LABELS[key], bg=PANEL,
+                          fg=DIM, font=UI_BOLD, pady=4, cursor="hand2")
             lb.pack(side="left", padx=(0, 2))
             lb.bind("<Button-1>", lambda _e, k=key: self.show_tab(k))
             self.tabs[key] = lb
@@ -378,6 +390,8 @@ class Studio:
         self.scene_panel = ScenePanel(self.panes, on_log=self.log,
                                       on_add=self.add_asset)
         self.scene_panel.group = self.scene_panel
+        self.design_panel = DesignPanel(self.panes, self.log, self.open_godot)
+        self.room_panel = RoomPanel(self.panes, self.log)
 
         self.show_tab("console")
 
@@ -430,13 +444,17 @@ class Studio:
             on = k == key
             lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
         for k, w in (("console", self.text), ("tty", self.tty),
-                     ("script", self.editor), ("scene", self.scene_panel)):
+                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel)):
             if k == key:
                 w.group.pack(fill="both", expand=True)
             else:
                 w.group.pack_forget()
         if key == "script":
             self.editor.text.focus_set()
+        elif key == "room":
+            self.room_panel.load(self.selected_project(), force=not self.room_panel.dirty)
+        elif key == "design":
+            self.design_panel.load(self.selected_project())
         elif key == "scene":
             self.scene_panel.load(self.selected_project())
 
@@ -445,15 +463,56 @@ class Studio:
     def set_status(self, msg, color=DIM):
         self.status.configure(text=msg, fg=color)
 
+    # Which console each tab belongs to. ROOM and CONSOLE are common ground;
+    # everything else is specific to one machine's toolchain.
+    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room")
+    TAB_LABELS = {"console": "CONSOLE", "tty": "PS1 TTY", "script": "SCRIPT",
+                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM"}
+    TAB_TARGETS = {"console": ("ps1", "ps2"), "tty": ("ps1",), "script": ("ps1",),
+                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2")}
+
+    def set_mode(self, key):
+        """Filter the manager down to one console, or open it up to both.
+
+        This only changes what you can see and reach. The build target still
+        comes from the selected project, so a project can never be built for the
+        wrong machine because a button was left on the wrong setting.
+        """
+        self.mode = key if key in ("all", "ps1", "ps2") else "all"
+        self.settings["mode"] = self.mode
+        save_settings(self.settings)
+        for k, b in self.tbuttons.items():
+            on = k == self.mode
+            b.label.configure(fg=BG if on else AMBER,
+                              bg=AMBER if on else PANEL_HI)
+        self.refresh_projects()
+        self._sync_tabs()
+
+    def effective_target(self):
+        """The console the window is currently about."""
+        if self.mode in ("ps1", "ps2"):
+            return self.mode
+        return self.target.get()
+
+    def _sync_tabs(self):
+        """Show only the tabs that mean something for this console."""
+        target = self.effective_target()
+        visible = [k for k in self.TAB_ORDER
+                   if target in self.TAB_TARGETS.get(k, ("ps1", "ps2"))]
+        for key in self.TAB_ORDER:
+            self.tabs[key].pack_forget()
+        for key in visible:
+            self.tabs[key].pack(side="left", padx=(0, 2))
+        if getattr(self, "active_tab", None) not in visible and visible:
+            self.show_tab(visible[0])
+
     def set_target(self, key, from_project=False):
         if key not in TARGETS:
             key = "ps1"
         changed = self.target.get() != key
         self.target.set(key)
-        for k, b in self.tbuttons.items():
-            b.label.configure(fg=BG if k == key else AMBER,
-                              bg=AMBER if k == key else PANEL_HI)
         self.show_hardware(key)
+        self._sync_tabs()
         self._sync_target_buttons(key)
         if key == "ps2" and (changed or not from_project):
             self.log("PlayStation 2: builds a real .elf. The NC runtime itself "
@@ -512,7 +571,10 @@ class Studio:
 
     def refresh_projects(self):
         want = self.selected_project() or self.settings.get("project")
-        self.projects = find_projects(self.repo)
+        found = find_projects(self.repo)
+        self.projects = [p for p in found
+                         if self.mode == "all"
+                         or project_meta(p)["target"] == self.mode]
         self.plist.delete(0, "end")
         for p in self.projects:
             # Tag the machine. With two targets in one list, which console a
@@ -521,7 +583,9 @@ class Studio:
             self.plist.insert("end", "  %-5s %s"
                               % (tag, os.path.relpath(p, self.repo)))
         if not self.projects:
-            self.set_status("no projects found -- press NEW...", AMBER)
+            self.set_status("no %s projects -- press NEW... or switch to ALL"
+                            % self.mode.upper() if self.mode != "all"
+                            else "no projects found -- press NEW...", AMBER)
             return
         idx = self.projects.index(want) if want in self.projects else 0
         self.plist.selection_clear(0, "end")
@@ -545,6 +609,10 @@ class Studio:
             # than leave PS1 selected while you edit a PS2 game.
             self.set_target(project_meta(p)["target"], from_project=True)
         self.sync_editor()
+        if getattr(self, "room_panel", None):
+            self.room_panel.load(p)
+        if getattr(self, "design_panel", None):
+            self.design_panel.load(p)
         if getattr(self, "scene_panel", None):
             self.scene_panel.load(p)
 
@@ -821,6 +889,43 @@ class Studio:
             pass
         self.root.after(1000, self._poll_tty)
 
+    def _poll_project_data(self):
+        """Notice when Godot rewrites the selected project's scene or VN data.
+
+        Godot exports by replacing vn.json / scene.json on disk. Studio has no
+        way of being told, so it watches the file: the alternative is what used
+        to happen, where an export succeeded, Studio kept showing its own older
+        copy, and the two silently disagreed until something overwrote the other.
+        """
+        project = self.selected_project()
+        stamp = None
+        try:
+            if project:
+                for name in ("vn.json", "scene.json"):
+                    path = os.path.join(project, name)
+                    if os.path.isfile(path):
+                        stamp = (project, name, os.stat(path).st_mtime_ns)
+                        break
+        except OSError:
+            stamp = None
+        if stamp != self._data_stamp:
+            first = self._data_stamp is None or self._data_stamp[0] != project
+            self._data_stamp = stamp
+            if stamp and not first:
+                # Unsaved room edits are the user's, not Godot's: say so rather
+                # than throwing either side away.
+                if self.room_panel.dirty:
+                    self.log("%s changed on disk, but ROOM has unsaved edits. "
+                             "Save or RELOAD to choose which wins." % stamp[1],
+                             AMBER)
+                else:
+                    self.room_panel.load(project, force=True)
+                    self.log("%s reloaded from disk (Godot export)." % stamp[1],
+                             CYAN)
+                self.design_panel.load(project)
+                self.scene_panel.load(project, force=True)
+        self.root.after(1200, self._poll_project_data)
+
     def set_buttons(self, on):
         # Whether a build is running and whether this target can build at all
         # are two different reasons to be unavailable; both have to hold.
@@ -879,14 +984,20 @@ class Studio:
     def run_ncc(self, cmd):
         if self.running:
             return
-        if self.target.get() == "ps2" and cmd in ("build", "run"):
-            self.log("PS2 has no backend yet. Switch to PS1.", RED)
-            return
         p = self.selected_project()
         if not p:
             self.log("no project selected.", RED)
             return
+        if cmd in ("build", "run") and self.room_panel.dirty:
+            self.room_panel.save()
+            if self.room_panel.dirty:
+                return
         self.show_tab("console")
+        if cmd in ("build", "run") and os.path.isfile(os.path.join(p, "vn.json")):
+            self.design_panel.load(p)
+            if not self.design_panel.save():
+                self.show_tab("design")
+                return
         rel = os.path.relpath(p, self.repo)
         argv = [cmd, p]
         if self.release and cmd in ("build", "run"):

@@ -1,0 +1,200 @@
+{
+  "about": [
+    "NEON COFFEE ENGINE",
+    "",
+    "PS1  PSN00BSDK, A .NCPKG OF ART",
+    "AND",
+    "     SCENES, AND NCSCRIPT",
+    "COMPILED TO C.",
+    "",
+    "PS2  PS2SDK. THIS SCREEN. THE",
+    "RUNTIME",
+    "     ITSELF IS STILL TO COME --",
+    "M6.",
+    "",
+    "GODOT IS THE SCENE EDITOR,",
+    "UNFORKED.",
+    "NC STUDIO IS THE MANAGER.",
+    "",
+    "TRIANGLE TO GO BACK."
+  ],
+  "kit": {
+    "characters": [
+      {
+        "id": "barista",
+        "name": "ARIA",
+        "portrait": "godot/assets/Portrait_6_2.png"
+      },
+      {
+        "id": "scott",
+        "name": "SCOTT",
+        "portrait": "godot/assets/Portrait_1.png"
+      }
+    ],
+    "dialogue": [
+      {
+        "choices": [],
+        "give": "key",
+        "id": "welcome",
+        "next": "2",
+        "scene": "cafe",
+        "speaker": "barista",
+        "text": "Oh, hey there, Scott... we've been waiting for you to finally get to your first PlayStation 2 build. ",
+        "cast": [
+          {
+            "slot": "left",
+            "character": "barista"
+          },
+          {
+            "slot": "right",
+            "character": "scott"
+          }
+        ]
+      },
+      {
+        "choices": [
+          {
+            "give": "",
+            "next": "outside",
+            "requires": "key",
+            "text": "OPEN THE DOOR"
+          },
+          {
+            "give": "",
+            "next": "coffee",
+            "requires": "",
+            "text": "STAY FOR COFFEE"
+          }
+        ],
+        "give": "",
+        "id": "choice",
+        "next": "",
+        "scene": "cafe",
+        "speaker": "barista",
+        "text": "Where would you like to go?"
+      },
+      {
+        "choices": [],
+        "give": "",
+        "id": "outside",
+        "next": "",
+        "scene": "street",
+        "speaker": "",
+        "text": "The key opens the door. You step into the night. This is a named scene change."
+      },
+      {
+        "choices": [],
+        "give": "",
+        "id": "coffee",
+        "next": "",
+        "scene": "cafe",
+        "speaker": "barista",
+        "text": "One coffee, coming up. Your inventory lasts until you choose BEGIN again."
+      },
+      {
+        "id": "2",
+        "scene": "cafe",
+        "text": "Look at this static background loading up crisp on the GS. Ready to build the legacy?",
+        "speaker": "barista",
+        "next": "",
+        "give": "",
+        "choices": []
+      }
+    ],
+    "frames_per_character": 2,
+    "items": [
+      {
+        "id": "key",
+        "name": "CAFE KEY"
+      }
+    ],
+    "layout": {
+      "background": [
+        0,
+        0,
+        640,
+        448
+      ],
+      "dialogue": [
+        32,
+        232,
+        576,
+        168
+      ],
+      "portrait": [
+        72,
+        8,
+        128,
+        224
+      ],
+      "portraits": [
+        {
+          "name": "left",
+          "rect": [
+            48,
+            120,
+            192,
+            304
+          ]
+        },
+        {
+          "name": "right",
+          "rect": [
+            400,
+            120,
+            192,
+            304
+          ]
+        }
+      ]
+    },
+    "scenes": [
+      {
+        "background": "godot/assets/bg_1_test_2.png",
+        "color": [
+          30,
+          38,
+          55
+        ],
+        "id": "cafe"
+      },
+      {
+        "background": "godot/assets/street.png",
+        "color": [
+          35,
+          20,
+          45
+        ],
+        "id": "street"
+      }
+    ],
+    "start": "welcome"
+  },
+  "logo_scale_x": 110,
+  "story": [
+    "THE SHOP IS SHUT. THE SIGN STILL",
+    "HUMS.",
+    "",
+    "YOU HAVE A DEV KIT THAT IS NOT A",
+    "DEV KIT,",
+    "A CONSOLE FROM 2000, AND A USB",
+    "STICK.",
+    "",
+    "THAT TURNS OUT TO BE ENOUGH.",
+    "",
+    "EVERYTHING ON THIS SCREEN WAS",
+    "BUILT BY",
+    "NEON COFFEE AND RAN ON REAL",
+    "HARDWARE.",
+    "",
+    "THE LOGO IS A TEXTURE IN",
+    "GRAPHICS MEMORY.",
+    "THE TEXT IS A SHEET OF 8X8",
+    "GLYPHS.",
+    "THE PAD IS READ THROUGH THE IOP.",
+    "",
+    "NOW GO AND MAKE SOMETHING."
+  ],
+  "subtitle": "PLAYSTATION 2",
+  "title": "NEON COFFEE"
+}

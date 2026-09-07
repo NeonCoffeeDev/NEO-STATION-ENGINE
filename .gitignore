@@ -36,3 +36,10 @@ toolchain/
 
 # PS2 build output (the PS1 side already covers .elf via build/)
 examples/*/game.elf
+
+# Native intermediate objects
+*.o
+
+# Generated VN tables (rebuilt from vn.json)
+vn_content.h
+vn_kit.h

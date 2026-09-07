@@ -1,0 +1,8 @@
+{
+  "name": "ps2_pulse",
+  "title": "PS2 liveness test",
+  "order": 12,
+  "target": "ps2",
+  "description": "A screen that cycles colour once a second with a white square on it. Impossible to misread.",
+  "detail": "Built after three hardware tests produced screens that could not be interpreted -- partly because one of them cleared to the same blue as uLaunchELF's own background. This has no textures, no pad and no state: the colour cycling proves the frame loop, and the white square proves filled rectangles."
+}

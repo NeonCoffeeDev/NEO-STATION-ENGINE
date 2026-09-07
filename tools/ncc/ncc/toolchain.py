@@ -234,6 +234,16 @@ def ps2_build_env():
     if make:
         dirs.append(os.path.dirname(make))
     dirs = [d for d in dirs if os.path.isdir(d)]
+    if os.name == "nt":
+        # PS2SDK recipes use POSIX commands such as mkdir -p and rm -f.
+        git = shutil.which("git")
+        candidates = [os.path.join(os.path.dirname(os.path.dirname(git)), "bin", "sh.exe")] if git else []
+        candidates.append(r"C:/Program Files/Git/bin/sh.exe")
+        shell = next((p for p in candidates if os.path.isfile(p)), None)
+        if not shell:
+            raise SystemExit("ncc: PS2 builds require Git for Windows (including its sh.exe shell).")
+        env["SHELL"] = shell.replace("\\", "/")
+        dirs.append(os.path.join(os.path.dirname(os.path.dirname(shell)), "usr", "bin"))
     env["PATH"] = os.pathsep.join(dirs + [env.get("PATH", "")])
     return env
 

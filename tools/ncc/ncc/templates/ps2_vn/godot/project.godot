@@ -1,0 +1,8 @@
+config_version=5
+[application]
+config/name="NC VN Essentials"
+run/main_scene="res://vn_authoring.tscn"
+[rendering]
+renderer/rendering_method="gl_compatibility"
+[editor_plugins]
+enabled=PackedStringArray("res://addons/neoncoffee/plugin.cfg")

@@ -1,31 +1,6 @@
-/*
- * @NAME@ - the smallest possible PS2 texture test
- *
- * This exists to bisect a black screen, not to be a game.
- *
- * The first round told us a lot: NCPAD (an untextured box) runs, and this
- * cleared to blue but drew no logo. So the GS comes up, the frame loop runs,
- * DMA works, untextured rectangles work -- and only the textured quad shows
- * nothing.
- *
- * Two things could cause exactly that, and rather than guess again this draws
- * the same texture four times, differing only in those two:
- *
- *   TOP LEFT      texel coordinates (0..128),   alpha test on
- *   TOP RIGHT     normalised coordinates (0..1), alpha test on
- *   BOTTOM LEFT   texel coordinates,             alpha test off
- *   BOTTOM RIGHT  normalised coordinates,        alpha test off
- *
- * Whichever quadrant shows the logo is the answer. Each sits on its own dark
- * plate -- an untextured rectangle, which is already known to work -- so an
- * empty quadrant is visibly empty rather than merely blue.
- *
- * The leading suspect is the coordinate convention. texrect_t carries a union
- * that is both s/t and u/v, and if draw_rect_textured emits normalised ST then
- * feeding it 0..128 samples far off the edge of the texture; clamped, that is
- * the transparent border, which the alpha test then discards -- producing
- * precisely a clean blue screen.
-  */
+/* Texture diagnostic: four panels compare texel/normalized UVs and alpha testing.
+ * Hardware validation is pending. A static screen alone does not identify the cause.
+ */
 
 #include <kernel.h>
 #include <stdio.h>
@@ -40,8 +15,8 @@
 
 #define SCREEN_W 640
 #define SCREEN_H 448
-#define OFF_X (2048 - (SCREEN_W / 2))
-#define OFF_Y (2048 - (SCREEN_H / 2))
+#define OFF_X (-(SCREEN_W / 2))
+#define OFF_Y (-(SCREEN_H / 2))
 
 extern unsigned int nc_logo[];
 extern const int nc_logo_width, nc_logo_height;
@@ -64,6 +39,10 @@ int main(void)
     int frames = 0;
     int height = 256;
     int width = nc_logo_used_w * height / nc_logo_used_h;
+
+    /* Initialize GIF and select it for dma_wait_fast, as in PS2SDK samples. */
+    dma_channel_initialize(DMA_CHANNEL_GIF, NULL, 0);
+    dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
     printf("@NAME@: PS2 texture test starting\n");
 
@@ -103,7 +82,7 @@ int main(void)
     /* --- environment ------------------------------------------------- */
     q = packet->data;
     q = draw_setup_environment(q, 0, &frame, &z);
-    q = draw_primitive_xyoffset(q, 0, OFF_X, OFF_Y);
+    q = draw_primitive_xyoffset(q, 0, 2048 + OFF_X, 2048 + OFF_Y);
 
     atest.enable = DRAW_ENABLE;
     atest.method = ATEST_METHOD_GREATER;
@@ -160,13 +139,7 @@ int main(void)
         q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, frame.height,
                        0x20, 0x38, 0x70);
 
-        /* Build marker. draw_clear is the one call already proven to reach the
-         * screen, so it paints this bar -- and it is drawn in a different place
-         * and colour in every build. Two of these hardware tests were spent
-         * arguing about whether the running binary was the new one; a stripe
-         * that changes settles that before any other question is asked.
-         *
-         * BUILD B: one orange bar across the top. */
+        /* Diagnostic marker: absence alone cannot identify a stale binary. */
         q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, 24,
                        0xFF, 0xB0, 0x3A);
 

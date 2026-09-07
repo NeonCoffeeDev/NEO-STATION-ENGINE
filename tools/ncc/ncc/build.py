@@ -341,6 +341,9 @@ def new(args):
         print("\n  Edit script.ncs for the logic and scene.json for what exists")
         print("  (or open godot/ and press \"Export to NC\"). Everything under")
         print("  src/ is the engine and needs no editing.")
+    elif os.path.isfile(os.path.join(dest, "vn.json")):
+        print("\n  Open godot/vn_authoring.tscn; edit VN resources in the Inspector.")
+        print("  NC dock: export, check, build. See docs/VN-ESSENTIALS.md.")
     else:
         print("\n  Edit src/main.c to change the game; the other files in src/")
         print("  are the engine.")
@@ -434,6 +437,11 @@ def _build_ps2(src):
     """
     name = os.path.basename(src)
     print(f"Building {name}  [PS2]")
+    from .vn import compile_content
+    try:
+        compile_content(src)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"ncc: vn.json: {exc}")
 
     cc = tc.ps2_cc()
     if not cc:
@@ -449,7 +457,10 @@ def _build_ps2(src):
             "     winget install ezwinports.make")
 
     env = tc.ps2_build_env()
-    r = subprocess.run([make], cwd=src, env=env, capture_output=True, text=True)
+    command = [make]
+    if os.name == "nt":
+        command.append("SHELL=" + env["SHELL"])
+    r = subprocess.run(command, cwd=src, env=env, capture_output=True, text=True)
     sys.stdout.write(r.stdout)
     if r.returncode != 0:
         sys.stderr.write(r.stderr)
@@ -662,6 +673,21 @@ def run(args):
 def clean(args):
     """Remove both configurations -- 'clean' should mean clean."""
     src = _resolve(getattr(args, "path", None))
+    if project_meta(src)["target"] == "ps2":
+        # Remove only generated objects and the linked ELF inside this project.
+        root = os.path.realpath(src)
+        outputs = [os.path.join(root, "game.elf")]
+        for directory, _, files in os.walk(os.path.join(root, "src")):
+            outputs.extend(os.path.join(directory, f) for f in files if f.endswith(".o"))
+        for output in outputs:
+            resolved = os.path.realpath(output)
+            if os.path.commonpath([root, resolved]) != root:
+                raise SystemExit("ncc: refusing to clean an output outside the project")
+        for output in outputs:
+            if os.path.isfile(output):
+                os.remove(output)
+                print(f"Removed {output}")
+        return 0
     removed = False
     for config in ("Debug", "Release"):
         build_dir, _ = tc.build_dir_for(src, config)

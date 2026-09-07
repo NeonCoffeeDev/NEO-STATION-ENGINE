@@ -313,6 +313,17 @@ def check_ps2(path):
     from . import build as build_mod
     from .targets import TARGETS
 
+    vn_path = os.path.join(path, "vn.json")
+    if os.path.isfile(vn_path):
+        from .vn import compile_content
+        try:
+            compile_content(path)
+        except (OSError, ValueError) as exc:
+            print(f"VN cannot export: {exc}")
+            return 1
+        print("VN references/font/texture limits passed. Budget excludes stack and runtime allocations.")
+        return 0
+
     t = TARGETS["ps2"]
     name = os.path.basename(path)
     elf = os.path.join(path, "game.elf")

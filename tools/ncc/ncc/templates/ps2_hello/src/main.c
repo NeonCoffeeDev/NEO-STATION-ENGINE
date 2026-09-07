@@ -49,10 +49,10 @@
 #define SCREEN_W 640
 #define SCREEN_H 448
 
-/* The GS addresses primitives in a 4096-wide space with the screen centred in
- * it, so every on-screen coordinate carries this offset. */
-#define OFFSET_X (2048 - (SCREEN_W / 2))
-#define OFFSET_Y (2048 - (SCREEN_H / 2))
+/* libdraw adds the GS origin internally. Convert screen pixels to centred
+ * coordinates here; only XYOFFSET receives the 2048 hardware origin. */
+#define OFFSET_X (-(SCREEN_W / 2))
+#define OFFSET_Y (-(SCREEN_H / 2))
 
 /* The Neon Coffee ground, the same colour the PS1 side clears to. */
 #define CLEAR_R 0x14
@@ -133,7 +133,7 @@ static void init_screen(framebuffer_t *frame, zbuffer_t *z, packet_t *packet)
 
     q = packet->data;
     q = draw_setup_environment(q, 0, frame, z);
-    q = draw_primitive_xyoffset(q, 0, OFFSET_X, OFFSET_Y);
+    q = draw_primitive_xyoffset(q, 0, 2048 + OFFSET_X, 2048 + OFFSET_Y);
     q = draw_finish(q);
     dma_channel_send_normal(DMA_CHANNEL_GIF, packet->data,
                             q - packet->data, 0, 0);
@@ -157,6 +157,10 @@ int main(void)
     int colour = 0;
     int frames = 0;
 
+    /* Initialize GIF and select it for dma_wait_fast, as in PS2SDK samples. */
+    dma_channel_initialize(DMA_CHANNEL_GIF, NULL, 0);
+    dma_channel_fast_waits(DMA_CHANNEL_GIF);
+
     printf("@NAME@: Neon Coffee, PlayStation 2\n");
     printf("@NAME@: d-pad moves, X recolours, L1/R1 resize, START resets\n");
 
@@ -167,7 +171,8 @@ int main(void)
     if (!have_pad)
         printf("@NAME@: no controller in port 1 -- the box will just sit there\n");
 
-    packet = packet_init(60, PACKET_NORMAL);
+    packet = packet_init(256, PACKET_NORMAL);
+    if (packet == NULL) return 1;
     init_screen(&frame, &z, packet);
 
     while (1) {
@@ -215,11 +220,7 @@ int main(void)
 
         {
             rect_t box;
-            /* Plain pixels. draw_rect_filled applies ftoi4 itself, and
-             * pre-applying it too multiplies every coordinate by sixteen --
-             * which pushed every quad off screen and cost three hardware
-             * tests to find, because draw_clear does NOT do that, so the
-             * background kept working while nothing else drew. */
+            /* libdraw adds 2048 internally; supply centred pixel coordinates. */
             box.v0.x = (float)(OFFSET_X + x - size / 2);
             box.v0.y = (float)(OFFSET_Y + y - size / 2);
             box.v0.z = 0;
