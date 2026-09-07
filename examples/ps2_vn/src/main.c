@@ -71,6 +71,18 @@ static zbuffer_t z;
 static texbuffer_t logo_tex, font_tex;
 static packet_t *packet;
 
+/* How many quadwords a frame may build. A textured rect costs several, and a
+ * screen of text is hundreds of them -- the story scene alone is over six
+ * hundred glyphs. Sizing this by eye is how you get a packet that overruns its
+ * buffer, writes through whatever follows it in memory, and leaves a console
+ * showing nothing at all. 8192 qwords is 128 KB, which is nothing against
+ * 32 MB, and the guard below means overshooting drops primitives instead of
+ * corrupting memory. */
+#define DRAW_QWORDS 8192
+#define QWORD_MARGIN 16
+
+static qword_t *packet_limit;
+
 /* Which texture the GS is currently set to sample. Switching costs a packet, so
  * runs of text are drawn together rather than interleaved with the logo. */
 static texbuffer_t *bound;
@@ -168,6 +180,12 @@ static void init_gs(void)
 static void upload(void *pixels, int w, int h, texbuffer_t *tex)
 {
     qword_t *q = packet->data;
+
+    /* The DMA reads main memory directly and knows nothing about the EE cache,
+     * so anything the CPU has touched has to be written back first. Texture
+     * data that is never read back looks fine on an emulator and uploads
+     * garbage -- or nothing -- on hardware. */
+    FlushCache(0);
     q = draw_texture_transfer(q, pixels, w, h, GS_PSM_32,
                               tex->address, tex->width);
     q = draw_texture_flush(q);
@@ -241,6 +259,10 @@ static qword_t *sprite(qword_t *q, int x, int y, int w, int h,
 {
     texrect_t r;
 
+    /* Refusing to draw is always better than writing past the buffer. */
+    if (q + QWORD_MARGIN >= packet_limit)
+        return q;
+
     r.v0.x = ftoi4(OFF_X + x);
     r.v0.y = ftoi4(OFF_Y + y);
     r.v0.z = 0;
@@ -308,6 +330,9 @@ static qword_t *panel(qword_t *q, int x, int y, int w, int h,
                       int r, int g, int b)
 {
     rect_t box;
+
+    if (q + QWORD_MARGIN >= packet_limit)
+        return q;
 
     /* A flat rectangle needs no texture, and leaving the font bound while
      * drawing one would sample a glyph across the whole panel. */
@@ -433,7 +458,12 @@ int main(void)
     if (!have_pad)
         printf("ps2_vn: no controller in port 1\n");
 
-    packet = packet_init(400, PACKET_NORMAL);
+    packet = packet_init(DRAW_QWORDS, PACKET_NORMAL);
+    if (packet == NULL) {
+        printf("ps2_vn: could not allocate the draw packet\n");
+        SleepThread();
+    }
+    packet_limit = packet->data + DRAW_QWORDS;
     init_gs();
     init_environment();
 

@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(_HERE, "..", "ncc"))
 from theme import (AMBER, BG, BORDER, CYAN, DIM, FG, GREEN, MONO, MONO_SM, PANEL,
                    PANEL_HI, RED, SUNKEN, UI, UI_BOLD, Button, field, group)
 from editor import ScriptEditor
+from scenepanel import ScenePanel
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -325,6 +326,8 @@ class Studio:
         else:
             self.log("  use it with:  \"texture\": \"%s\"" % name, DIM)
         self.set_status("added %s '%s'" % (kind, name), GREEN)
+        if getattr(self, "scene_panel", None):
+            self.scene_panel.load(p, force=True)
 
     def _build_hardware(self, parent):
         g = group(parent, "hardware profile", CYAN)
@@ -341,7 +344,7 @@ class Studio:
         strip.pack(fill="x")
         self.tabs = {}
         for key, label in (("console", "CONSOLE"), ("tty", "PS1 TTY"),
-                           ("script", "SCRIPT")):
+                           ("script", "SCRIPT"), ("scene", "SCENE")):
             lb = tk.Label(strip, text=f"  {label}  ", bg=PANEL, fg=DIM,
                           font=UI_BOLD, pady=4, cursor="hand2")
             lb.pack(side="left", padx=(0, 2))
@@ -368,6 +371,13 @@ class Studio:
         self.editor = ScriptEditor(self.panes, on_save=self.save_script,
                                    on_run=self.save_and_run)
         self.editor.group = self.editor
+
+        # The scene drawer: assets, scenes in order, and the objects in each.
+        # Until there is a viewport in the manager this is the closest thing to
+        # one, and it is where draw order and asset indices are visible at all.
+        self.scene_panel = ScenePanel(self.panes, on_log=self.log,
+                                      on_add=self.add_asset)
+        self.scene_panel.group = self.scene_panel
 
         self.show_tab("console")
 
@@ -420,13 +430,15 @@ class Studio:
             on = k == key
             lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
         for k, w in (("console", self.text), ("tty", self.tty),
-                     ("script", self.editor)):
+                     ("script", self.editor), ("scene", self.scene_panel)):
             if k == key:
                 w.group.pack(fill="both", expand=True)
             else:
                 w.group.pack_forget()
         if key == "script":
             self.editor.text.focus_set()
+        elif key == "scene":
+            self.scene_panel.load(self.selected_project())
 
     # ---- state ----------------------------------------------------------
 
@@ -533,6 +545,8 @@ class Studio:
             # than leave PS1 selected while you edit a PS2 game.
             self.set_target(project_meta(p)["target"], from_project=True)
         self.sync_editor()
+        if getattr(self, "scene_panel", None):
+            self.scene_panel.load(p)
 
     def sync_editor(self):
         """Keep the SCRIPT tab showing the selected project's script.
