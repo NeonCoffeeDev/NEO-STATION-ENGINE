@@ -29,6 +29,7 @@ from scenepanel import ScenePanel
 from designpanel import DesignPanel
 from roompanel import RoomPanel
 from kitpanel import KitPanel
+from flowpanel import FlowPanel
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -366,12 +367,22 @@ class Studio:
         outer = tk.Frame(parent, bg=BG)
         outer.pack(side="left", fill="both", expand=True)
 
+        split = tk.PanedWindow(outer, orient="vertical", bg=BORDER, sashwidth=7)
+        split.pack(fill="both", expand=True)
+        top = tk.Frame(split, bg=BG)
+        bottom = tk.Frame(split, bg=BG)
+        split.add(top, minsize=180, stretch="always")
+        split.add(bottom, minsize=140, height=240)
+        topstrip = tk.Frame(top, bg=BG)
+        topstrip.pack(fill="x")
+        self.main_panes = tk.Frame(top, bg=BG)
+        self.main_panes.pack(fill="both", expand=True)
         # Custom tab strip. ttk.Notebook cannot be themed convincingly on Windows.
-        strip = tk.Frame(outer, bg=BG)
+        strip = tk.Frame(bottom, bg=BG)
         strip.pack(fill="x")
         self.tabs = {}
         for key in self.TAB_ORDER:
-            lb = tk.Label(strip, text="  %s  " % self.TAB_LABELS[key], bg=PANEL,
+            lb = tk.Label(topstrip if key in ("room", "flow") else strip, text="  %s  " % self.TAB_LABELS[key], bg=PANEL,
                           fg=DIM, font=UI_BOLD, pady=4, cursor="hand2")
             lb.pack(side="left", padx=(0, 2))
             lb.bind("<Button-1>", lambda _e, k=key: self.show_tab(k))
@@ -386,7 +397,7 @@ class Studio:
         self.cb_scroll.pack(side="right", padx=(0, 6))
         Button(ctl, "CLEAR", self.clear_log, DIM).pack(side="right", padx=(0, 6))
 
-        self.panes = tk.Frame(outer, bg=BG)
+        self.panes = tk.Frame(bottom, bg=BG)
         self.panes.pack(fill="both", expand=True)
 
         self.text = self._make_pane()
@@ -405,10 +416,12 @@ class Studio:
                                       on_add=self.add_asset)
         self.scene_panel.group = self.scene_panel
         self.design_panel = DesignPanel(self.panes, self.log, self.open_godot)
-        self.room_panel = RoomPanel(self.panes, self.log)
+        self.room_panel = RoomPanel(self.main_panes, self.log)
+        self.flow_panel = FlowPanel(self.main_panes)
         self.kit_panel = KitPanel(self.panes)
 
         self.show_tab("console")
+        self.show_tab("room")
 
     def _make_pane(self):
         g = group(self.panes, "output", CYAN)
@@ -457,14 +470,20 @@ class Studio:
     def show_tab(self, key):
         self.active_tab = key
         for k, lb in self.tabs.items():
+            if (k in ("room", "flow")) != (key in ("room", "flow")):
+                continue
             on = k == key
             lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
         for k, w in (("console", self.text), ("tty", self.tty),
-                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel), ("kits", self.kit_panel)):
+                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel), ("kits", self.kit_panel), ("flow", self.flow_panel)):
+            if (k in ("room", "flow")) != (key in ("room", "flow")):
+                continue
             if k == key:
                 w.group.pack(fill="both", expand=True)
             else:
                 w.group.pack_forget()
+        if key == "flow":
+            self.flow_panel.load(self.selected_project())
         if key == "kits":
             self.kit_panel.load(self.selected_project())
         if key == "script":
@@ -483,11 +502,11 @@ class Studio:
 
     # Which console each tab belongs to. ROOM and CONSOLE are common ground;
     # everything else is specific to one machine's toolchain.
-    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room", "kits")
+    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room", "kits", "flow")
     TAB_LABELS = {"console": "CONSOLE", "tty": "PS1 TTY", "script": "SCRIPT",
-                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM", "kits": "KITS"}
+                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM", "kits": "KITS", "flow": "EVENTS"}
     TAB_TARGETS = {"console": ("ps1", "ps2"), "tty": ("ps1",), "script": ("ps1",),
-                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2")}
+                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2"), "flow": ("ps1", "ps2")}
 
     def set_mode(self, key):
         """Filter the manager down to one console, or open it up to both.
@@ -629,6 +648,7 @@ class Studio:
             # than leave PS1 selected while you edit a PS2 game.
             self.set_target(project_meta(p)["target"], from_project=True)
         self.kit_panel.load(p)
+        self.flow_panel.load(p)
         self.sync_editor()
         if getattr(self, "room_panel", None):
             self.room_panel.load(p)
@@ -705,6 +725,7 @@ class Studio:
             return
 
         self.kit_panel.load(p)
+        self.flow_panel.load(p)
         self.sync_editor()
         if self.editor.path != path:
             return

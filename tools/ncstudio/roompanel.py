@@ -122,6 +122,12 @@ class RoomPanel(tk.Frame):
             self.save()
             if self.dirty:
                 return
+        self.scene.set('')
+        self.scene['values'] = []
+        self.actor.set('')
+        self.actor['values'] = []
+        self.vn = False
+        self.selected = 0
         self.project = project
         self.doc = None
         self.history = []
