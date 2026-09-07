@@ -82,6 +82,25 @@ int  nc_s_sprite_frame(int id, int u, int v);
 int  nc_s_sprite_show(int id);
 int  nc_s_sprite_hide(int id);
 
+/* --- 2D physics ---
+ *
+ * Velocity is 20.12 fixed point: 4096 is one pixel per frame. Positions are
+ * whole pixels; the remainder lives in the sprite so that fractional speeds
+ * accumulate instead of rounding to nothing.
+ */
+int  nc_s_sprite_set_solid(int id, int on);
+int  nc_s_sprite_set_vel(int id, int vx, int vy);
+int  nc_s_sprite_vx(int id);
+int  nc_s_sprite_vy(int id);
+int  nc_s_move_and_slide(int id, int dx, int dy);
+int  nc_s_physics_step(int id);
+int  nc_s_on_floor(int id);
+int  nc_s_on_ceiling(int id);
+int  nc_s_on_wall(int id);
+int  nc_s_set_gravity(int g);
+int  nc_s_set_terminal(int v);
+int  nc_s_touching(int a, int b);
+
 /* --- camera --- */
 int  nc_s_camera_set(int x, int y, int z, int rx, int ry, int rz);
 int  nc_s_camera_move(int dx, int dy, int dz);

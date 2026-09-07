@@ -134,6 +134,16 @@ flicker or sort wrongly. Break big flat things into smaller pieces.
 | Screen space, 320x240 | No camera applies. |
 | Drawn **over** 3D, **under** text | Fixed ordering-table depth. |
 
+### Collision and gravity
+
+| Rule | Why |
+|---|---|
+| Axis-aligned **boxes only** | No rotation, no slopes. This is what 2D games of the era used. |
+| **No sub-stepping** | A sprite moving faster than a wall is thick passes through it in one frame. Sweeping every mover against every solid costs frame time this machine does not have. |
+| Every solid is tested | Cost is movers x solids per frame. Fine for a screenful; a thousand tiles would not be. |
+| Velocity is **20.12 fixed point** | No FPU. `4096` is one pixel per frame. |
+| The collision box is **separate from the art** | A 16-pixel character in a 32-pixel cell would otherwise stop short of every wall. Set `"box": [x, y, w, h]`. |
+
 **Guidance.** Everything that will ever appear must exist in `scene.json` from
 the start — there is no way to create a sprite at run time. Allocate a pool
 (say 8 bullets), hide them, and show them as needed. The `shooter` template does

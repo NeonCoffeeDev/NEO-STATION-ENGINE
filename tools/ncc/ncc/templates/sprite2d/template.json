@@ -1,7 +1,7 @@
 {
   "name": "sprite2d",
-  "title": "2D sprites",
+  "title": "2D platformer",
   "order": 6,
-  "description": "A 2D game: sprite sheet, animation, screen-space movement. No 3D.",
-  "detail": "Sprites are textured quads drawn straight in screen space, skipping the GTE entirely -- which is why 2D runs so comfortably on this hardware. Frames come from one sheet by moving the UV window."
+  "description": "Gravity, jumping and solid ground. Sprite sheet, animation, screen-space movement. No 3D.",
+  "detail": "Sprites are textured quads drawn straight in screen space, skipping the GTE entirely -- which is why 2D runs so comfortably on this hardware. A sprite marked \"solid\" in scene.json is ground, a platform or a wall; physics_step() does gravity, movement and collision in one call."
 }

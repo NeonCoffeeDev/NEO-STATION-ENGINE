@@ -131,6 +131,7 @@ ENGINE_FILES = [
     os.path.join("src", "nc_gfx.c"),
     os.path.join("src", "nc_input.c"),
     os.path.join("src", "nc_pkg.c"),
+    os.path.join("src", "nc_phys.c"),
     os.path.join("src", "nc_scene.c"),
     os.path.join("src", "nc_script.c"),
     os.path.join("src", "nc_audio.c"),

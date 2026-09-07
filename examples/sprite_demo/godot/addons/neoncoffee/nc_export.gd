@@ -202,9 +202,12 @@ static func export_scene(root: Node) -> Dictionary:
 
 
 static func _total_instances(scenes: Array) -> int:
+	## Sprites count as objects too -- a 2D scene reporting "0 objects" would
+	## look like the export had failed.
 	var n := 0
 	for s in scenes:
 		n += s["instances"].size()
+		n += s["sprites"].size()
 	return n
 
 
@@ -478,9 +481,53 @@ static func _collect_sprites(group: Node, _origin: Transform3D, textures: Array,
 			x -= w / 2
 			y -= h / 2
 
-		sprites.append({
+		var entry := {
 			"texture": tex_name, "x": x, "y": y,
 			"w": w, "h": h, "u": u, "v": v,
-		})
+		}
+
+		# Two things a sprite can be told in the Godot inspector, under the
+		# node's Metadata: "solid" makes it ground and walls for the physics,
+		# and "fixed" exempts it from screen shake. Metadata is used rather than
+		# a custom node type so any Sprite2D works, including ones you already
+		# have.
+		if node.has_meta("solid") and bool(node.get_meta("solid")):
+			entry["solid"] = true
+		if node.has_meta("fixed") and bool(node.get_meta("fixed")):
+			entry["fixed"] = true
+
+		# A CollisionShape2D or Area2D child with a RectangleShape2D becomes the
+		# collision box, so the hitbox is something you drag in the editor
+		# rather than four numbers typed into JSON.
+		var box := _sprite_box(node, x, y)
+		if not box.is_empty():
+			entry["box"] = box
+
+		sprites.append(entry)
 
 	return sprites
+
+
+static func _sprite_box(node: Sprite2D, sx: int, sy: int) -> Array:
+	## The first rectangular collision shape under a sprite, relative to it.
+	for child in node.get_children():
+		var shape_node := child
+		if child is Area2D or child is CollisionObject2D:
+			for grandchild in child.get_children():
+				if grandchild is CollisionShape2D:
+					shape_node = grandchild
+					break
+		if not (shape_node is CollisionShape2D):
+			continue
+		var shape = shape_node.shape
+		if not (shape is RectangleShape2D):
+			continue
+		var size: Vector2 = shape.size
+		var centre: Vector2 = shape_node.global_position
+		return [
+			int(round(centre.x - size.x / 2.0)) - sx,
+			int(round(centre.y - size.y / 2.0)) - sy,
+			int(round(size.x)),
+			int(round(size.y)),
+		]
+	return []

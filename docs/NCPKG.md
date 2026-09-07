@@ -64,7 +64,7 @@ ChunkEntry (16 bytes)
 `FNT0` is not optional: every package carries one, and it lands in the strip of
 VRAM between the framebuffers and the texture slots, so it costs no texture slot.
 
-**This page is the original draft.** The shipped format is version 7, and it
+**This page is the original draft.** The shipped format is version 8, and it
 differs -- chunks are 8-aligned rather than 2048, `CLUT` is folded into `TEX0`,
 and `ANIM`/`STRT` do not exist yet. The reasons are in the module docstring of
 `tools/ncc/ncc/ncpkg.py`, which is the authority.

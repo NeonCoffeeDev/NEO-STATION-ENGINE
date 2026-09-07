@@ -1,89 +1,187 @@
 {
-  "meshes": [],
-  "name": "Game",
-  "scenes": [
-    {
-      "camera": {
-        "pos": [
-          0,
-          0,
-          0
-        ],
-        "rot": [
-          0,
-          0,
-          0
-        ]
-      },
-      "clear": [
-        18,
-        14,
-        34
-      ],
-      "instances": [],
-      "name": "Game",
-      "sprites": [
-        {
-          "h": 32,
-          "texture": "tex0",
-          "u": 0,
-          "v": 0,
-          "w": 32,
-          "x": 144,
-          "y": 100
-        },
-        {
-          "h": 32,
-          "texture": "tex0",
-          "u": 0,
-          "v": 32,
-          "w": 32,
-          "x": 32,
-          "y": 190
-        },
-        {
-          "h": 32,
-          "texture": "tex0",
-          "u": 32,
-          "v": 32,
-          "w": 32,
-          "x": 64,
-          "y": 190
-        },
-        {
-          "h": 32,
-          "texture": "tex0",
-          "u": 0,
-          "v": 32,
-          "w": 32,
-          "x": 96,
-          "y": 190
-        },
-        {
-          "h": 32,
-          "texture": "tex0",
-          "u": 32,
-          "v": 32,
-          "w": 32,
-          "x": 192,
-          "y": 190
-        },
-        {
-          "h": 32,
-          "texture": "tex0",
-          "u": 32,
-          "v": 32,
-          "w": 32,
-          "x": 128,
-          "y": 60
-        }
-      ]
-    }
-  ],
+  "name": "@NAME@",
   "textures": [
     {
-      "file": "textures/tex0.png",
-      "name": "tex0"
+      "name": "sheet",
+      "file": "textures/sheet.png"
+    }
+  ],
+  "meshes": [],
+  "scenes": [
+    {
+      "_comment": "Sprite 0 is the player. Every other sprite is 'solid', which is the whole of what makes it ground or a wall.",
+      "clear": [
+        14,
+        12,
+        28
+      ],
+      "sprites": [
+        {
+          "texture": "sheet",
+          "x": 24,
+          "y": 176,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 0,
+          "box": [
+            8,
+            4,
+            16,
+            25
+          ]
+        },
+        {
+          "texture": "sheet",
+          "x": 0,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 32,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 64,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 96,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 128,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 192,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 224,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 256,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 288,
+          "y": 208,
+          "w": 32,
+          "h": 32,
+          "u": 0,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 64,
+          "y": 176,
+          "w": 32,
+          "h": 32,
+          "u": 32,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 96,
+          "y": 144,
+          "w": 32,
+          "h": 32,
+          "u": 32,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 128,
+          "y": 144,
+          "w": 32,
+          "h": 32,
+          "u": 32,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 224,
+          "y": 176,
+          "w": 32,
+          "h": 32,
+          "u": 32,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 256,
+          "y": 144,
+          "w": 32,
+          "h": 32,
+          "u": 32,
+          "v": 32,
+          "solid": true
+        },
+        {
+          "texture": "sheet",
+          "x": 288,
+          "y": 112,
+          "w": 32,
+          "h": 32,
+          "u": 32,
+          "v": 32,
+          "solid": true
+        }
+      ]
     }
   ]
 }

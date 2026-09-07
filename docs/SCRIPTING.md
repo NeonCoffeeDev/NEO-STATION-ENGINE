@@ -172,6 +172,52 @@ A game can be entirely 2D: a package with no meshes at all is fine.
 | `scene()` | Which scene is running, from 0. |
 | `scene_count()` | How many the package holds. |
 
+### 2D physics
+| | |
+|---|---|
+| `physics_step(s)` | Gravity, then velocity, then collision. One call per actor per frame. |
+| `move_and_slide(s, dx, dy)` | Move by whole pixels, stopping against solids. No gravity — this is the top-down call. |
+| `sprite_set_vel(s, vx, vy)` | Set velocity. **4096 = one pixel per frame.** |
+| `sprite_vx(s)` `sprite_vy(s)` | Read it back. |
+| `on_floor(s)` `on_ceiling(s)` `on_wall(s)` | What the last move ran into. |
+| `set_gravity(g)` `set_terminal(v)` | Same units. Defaults: `1300` and `24576`. |
+| `sprite_set_solid(s, on)` | Make a sprite block movers at run time. |
+| `touching(a, b)` | Do two sprites' boxes overlap? |
+
+A sprite is ground, a platform or a wall because `scene.json` says `"solid":
+true`. Nothing else declares the level:
+
+```json
+{ "texture": "sheet", "x": 64, "y": 176, "w": 32, "h": 32,
+  "u": 32, "v": 32, "solid": true }
+```
+
+**Velocity is 20.12 fixed point** — the same convention as the 3D side — where
+`4096` is one pixel per frame. Positions stay whole pixels, because that is what
+the GPU draws, and the leftover fraction is carried inside the sprite. Without
+that, any speed under a pixel a frame would round to standing still.
+
+**Give a character a hitbox.** Art has margins: a 16-pixel character drawn in a
+32-pixel cell will stop seven pixels short of every wall unless you say where it
+actually is.
+
+```json
+"box": [8, 4, 16, 25]
+```
+
+Four numbers, relative to the sprite. Defaults to the whole sprite, which is
+right for a solid block and wrong for almost any character.
+
+**Size the level to the jump, not by eye.** With `JUMP_SPEED` upward and
+gravity `g`, the apex is `JUMP_SPEED * JUMP_SPEED / (2 * g)` — the `sprite2d`
+template's defaults give about 39 pixels, so a 32-pixel step is comfortable and
+a 64-pixel one is impossible. A platform the player cannot reach reads as a
+broken jump.
+
+There is **no sub-stepping**: a sprite moving faster than a wall is thick passes
+through it in one frame. Keep speeds below your wall thickness. There are no
+slopes, and no rotation.
+
 ### Saving
 | | |
 |---|---|

@@ -68,6 +68,23 @@ FUNCTIONS = {
     "sprite_show":    {"c": "nc_s_sprite_show",    "args": 1},
     "sprite_hide":    {"c": "nc_s_sprite_hide",    "args": 1},
 
+    # --- 2D physics ---
+    # Velocity is 20.12 fixed point: 4096 is one pixel per frame. Positions stay
+    # whole pixels and the sprite carries the remainder, so half a pixel per
+    # frame moves you one pixel every other frame rather than never.
+    "sprite_set_solid": {"c": "nc_s_sprite_set_solid", "args": 2},
+    "sprite_set_vel":   {"c": "nc_s_sprite_set_vel",   "args": 3},
+    "sprite_vx":        {"c": "nc_s_sprite_vx",        "args": 1},
+    "sprite_vy":        {"c": "nc_s_sprite_vy",        "args": 1},
+    "move_and_slide":   {"c": "nc_s_move_and_slide",   "args": 3},
+    "physics_step":     {"c": "nc_s_physics_step",     "args": 1},
+    "on_floor":         {"c": "nc_s_on_floor",         "args": 1},
+    "on_ceiling":       {"c": "nc_s_on_ceiling",       "args": 1},
+    "on_wall":          {"c": "nc_s_on_wall",          "args": 1},
+    "set_gravity":      {"c": "nc_s_set_gravity",      "args": 1},
+    "set_terminal":     {"c": "nc_s_set_terminal",     "args": 1},
+    "touching":         {"c": "nc_s_touching",         "args": 2},
+
     # --- camera ---
     "camera_set":    {"c": "nc_s_camera_set",   "args": 6},
     "camera_move":   {"c": "nc_s_camera_move",  "args": 3},

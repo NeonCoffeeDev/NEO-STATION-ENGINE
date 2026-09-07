@@ -426,3 +426,97 @@ int nc_s_cos(int angle)
 {
     return icos((angle << 5) & 131071);
 }
+
+
+/* --- 2D physics ---
+ *
+ * Velocities are 20.12 fixed point: 4096 is one pixel per frame. Positions stay
+ * whole pixels, and the sprite carries the remainder, so a speed of half a
+ * pixel per frame really does move you a pixel every other frame.
+ */
+
+int nc_s_sprite_set_solid(int id, int on)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp)
+        sp->solid = on ? 1 : 0;
+    return 0;
+}
+
+
+int nc_s_sprite_set_vel(int id, int vx, int vy)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp) {
+        sp->vx = vx;
+        sp->vy = vy;
+    }
+    return 0;
+}
+
+
+int nc_s_sprite_vx(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return sp ? sp->vx : 0;
+}
+
+
+int nc_s_sprite_vy(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return sp ? sp->vy : 0;
+}
+
+
+int nc_s_move_and_slide(int id, int dx, int dy)
+{
+    return nc_phys_move(id, dx, dy);
+}
+
+
+int nc_s_physics_step(int id)
+{
+    return nc_phys_step(id);
+}
+
+
+int nc_s_on_floor(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return (sp && (sp->touch & NC_TOUCH_FLOOR)) ? 1 : 0;
+}
+
+
+int nc_s_on_ceiling(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return (sp && (sp->touch & NC_TOUCH_CEILING)) ? 1 : 0;
+}
+
+
+int nc_s_on_wall(int id)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    return (sp && (sp->touch & (NC_TOUCH_LEFT | NC_TOUCH_RIGHT))) ? 1 : 0;
+}
+
+
+int nc_s_set_gravity(int g)
+{
+    nc_phys_set_gravity(g);
+    return 0;
+}
+
+
+int nc_s_set_terminal(int v)
+{
+    nc_phys_set_terminal(v);
+    return 0;
+}
+
+
+int nc_s_touching(int a, int b)
+{
+    return nc_phys_overlap(a, b);
+}

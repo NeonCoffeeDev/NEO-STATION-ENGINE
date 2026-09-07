@@ -14,7 +14,7 @@
 
 #include "nc.h"
 
-#define NC_PKG_VERSION 7
+#define NC_PKG_VERSION 8
 
 /* Mirrors the writer's layout exactly. Both sides must change together, which
  * is what the version field is for. */

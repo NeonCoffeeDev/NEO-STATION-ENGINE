@@ -75,6 +75,14 @@ int nc_scene_load(const NC_Package *pkg, int index)
         sp->u = sd->u;  sp->v = sd->v;
         sp->visible = 1;
         sp->fixed = (sd->flags & NC_SPRITE_FIXED) ? 1 : 0;
+        sp->solid = (sd->flags & NC_SPRITE_SOLID) ? 1 : 0;
+        sp->bx = sd->bx;  sp->by = sd->by;
+        sp->bw = sd->bw;  sp->bh = sd->bh;
+        /* Physics state is per-run, not per-package: reloading a scene should
+         * put a character back where it started, standing still. */
+        sp->vx = sp->vy = 0;
+        sp->sub_x = sp->sub_y = 0;
+        sp->touch = 0;
         if (sd->tex_slot < NC_MAX_TEXTURES) {
             sp->tpage = pkg->textures[sd->tex_slot].tpage;
             sp->clut = pkg->textures[sd->tex_slot].clut;

@@ -255,3 +255,45 @@ Still open:
 1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
 2. **Per-object scripts**, 4-bit textures, LTO.
 3. **PS2.** Untouched -- see M6.
+
+
+## Update, 2026-09-06 (collision and gravity)
+
+The 2D template had no collision at all: the character walked through the
+scenery, because the scenery was scenery. That is now a real feature rather
+than a helper each game rewrites.
+
+- **Solid sprites.** `"solid": true` in scene.json is the whole of what makes a
+  sprite ground, a platform or a wall. Nothing else declares the level.
+- **`physics_step(s)`** does gravity, velocity and collision in one call;
+  `move_and_slide(s, dx, dy)` is the same collision without gravity, for
+  top-down games. `on_floor` / `on_ceiling` / `on_wall` report what was hit.
+- **Velocity is 20.12 fixed point**, the same convention as the 3D side: 4096 is
+  one pixel per frame. Positions stay whole pixels and the sprite carries the
+  remainder, so a speed under a pixel a frame accumulates instead of rounding to
+  standing still.
+- **Collision boxes are separate from the art.** A 16-pixel character in a
+  32-pixel cell would otherwise stop seven pixels short of every wall, which
+  reads as broken collision rather than as padding. `"box": [x, y, w, h]`, and
+  in Godot a RectangleShape2D under the sprite exports as one.
+- **The floor is probed, not inferred from collisions.** Standing still, gravity
+  adds a fraction of a pixel, the sprite does not move, nothing is hit -- and a
+  floor flag set only by collisions would flicker off, so jumps would fail every
+  other frame. A one-pixel downward probe is what makes `on_floor` trustworthy.
+- **The `sprite2d` template is a platformer**: a floor with a gap, two
+  staircases, coyote time, and a respawn if you fall in the pit. The level is
+  laid out against the jump arc -- apex is `v*v/(2g)`, about 39 pixels with the
+  defaults -- because a platform the player cannot reach reads as a broken jump.
+
+What this is not: no sub-stepping, so a sprite moving faster than a wall is
+thick passes through it in one frame. No slopes, no rotation. Both are choices
+about where the frame budget goes on a 33 MHz machine, and both are written
+down in LIMITS.md rather than left to be discovered.
+
+Package version 8 -- the sprite record grew a collision box. `ncc sync`.
+
+Still open:
+
+1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+2. **Per-object scripts**, 4-bit textures, LTO.
+3. **PS2.** Untouched -- see M6.

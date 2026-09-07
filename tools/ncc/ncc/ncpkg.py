@@ -29,7 +29,7 @@ from . import fontgen as font_mod
 from . import textures as tex_mod
 
 MAGIC = b"NCPK"
-VERSION = 7
+VERSION = 8
 TARGET_PS1 = 1
 
 HEADER = struct.Struct("<4sHHII")          # magic, version, target, count, total
@@ -273,14 +273,30 @@ def build_scene(scene, mesh_ids, tex_slots=None):
                 f"texture page. UVs are page-relative.")
 
         # "fixed" sprites ignore screen shake -- panels and HUD.
+        # "solid" sprites block anything moved by the physics calls.
         flags = 1 if sp.get("fixed") else 0
+        if sp.get("solid"):
+            flags |= 2
+        # The collision box, relative to the sprite. Defaults to the whole
+        # sprite; give it explicitly when the art has margins, so a character
+        # does not stop short of every wall by the width of its own padding.
+        box = sp.get("box", [0, 0, w, h])
+        if len(box) != 4:
+            raise NcpkgError(
+                f"sprite {n}: 'box' needs 4 numbers [x, y, w, h] relative to "
+                f"the sprite, got {len(box)}")
+
         out += struct.pack(
-            "<HHhhhhHH", info["slot"], flags,
+            "<HHhhhhHHhhhh", info["slot"], flags,
             _clamp_short(int(sp.get("x", 0)), "sprite x"),
             _clamp_short(int(sp.get("y", 0)), "sprite y"),
             _clamp_short(w, "sprite width"),
             _clamp_short(h, "sprite height"),
-            u & 0xFF, v & 0xFF)
+            u & 0xFF, v & 0xFF,
+            _clamp_short(int(box[0]), "sprite box x"),
+            _clamp_short(int(box[1]), "sprite box y"),
+            _clamp_short(int(box[2]), "sprite box width"),
+            _clamp_short(int(box[3]), "sprite box height"))
 
     return bytes(out)
 

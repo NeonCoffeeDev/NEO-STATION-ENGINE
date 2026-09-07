@@ -146,14 +146,20 @@ typedef struct {
     int16_t  pad0, pad1;
 } NC_Instance;
 
-/* A sprite as it appears in the package. 16 bytes; the writer must agree. */
+/* A sprite as it appears in the package. 24 bytes; the writer must agree. */
 #define NC_SPRITE_FIXED 1        /* ignore screen shake: panels, HUD */
+#define NC_SPRITE_SOLID 2        /* other sprites cannot move through it */
 
 typedef struct {
     uint16_t tex_slot;
     uint16_t flags;
     int16_t  x, y, w, h;
     uint16_t u, v;
+    /* Collision box, relative to x,y. Defaults to the whole sprite. It is
+     * separate because art has margins: a 32x32 cell holding a 16-wide
+     * character would otherwise stop that character seven pixels short of every
+     * wall, and nothing looks more like broken collision than that. */
+    int16_t  bx, by, bw, bh;
 } NC_SpriteDef;
 
 typedef struct {
@@ -247,6 +253,12 @@ typedef struct {
     int visible;
 } NC_Object;
 
+/* What a sprite bumped into on its last physics move. */
+#define NC_TOUCH_LEFT    1
+#define NC_TOUCH_RIGHT   2
+#define NC_TOUCH_CEILING 4
+#define NC_TOUCH_FLOOR   8
+
 /* A sprite in the live scene. Screen coordinates, so 0,0 is the top-left of the
  * 320x240 display and there is no camera involved. */
 typedef struct {
@@ -256,7 +268,39 @@ typedef struct {
     int u, v;                 /* which part of the texture to show           */
     int visible;
     int fixed;                /* immune to screen shake                      */
+
+    /* Physics. Velocity and the sub-pixel remainder are 20.12 fixed point, the
+     * same convention as the 3D side: 4096 is one pixel per frame. Positions
+     * stay whole pixels because that is what the GPU draws -- the remainder is
+     * what stops a speed of half a pixel per frame from rounding away to zero. */
+    int vx, vy;
+    int sub_x, sub_y;
+    int bx, by, bw, bh;       /* collision box, relative to x,y              */
+    int solid;                /* other sprites cannot move through it        */
+    int touch;                /* NC_TOUCH_* bits from the last move          */
 } NC_Sprite;
+
+/* ---- 2D physics ---------------------------------------------------------
+ *
+ * Deliberately small: axis-separated movement against axis-aligned boxes, which
+ * is what nearly every 2D game of this era actually used. No rotation, no
+ * slopes, no swept continuous collision. Moving a long way in one frame is
+ * resolved by snapping to the blocker's edge rather than by sub-stepping, so a
+ * projectile crossing a wall in a single frame would still pass through it --
+ * keep speeds below the width of your walls.
+ */
+
+/* Move by whole pixels, stopping against solids and sliding along them.
+ * Returns the NC_TOUCH_* bits, which are also left on the sprite. */
+int  nc_phys_move(int index, int dx, int dy);
+
+/* Gravity, then velocity, then the move. This is the one call a platformer
+ * needs per actor per frame. Landing and hitting a ceiling both zero vy. */
+int  nc_phys_step(int index);
+
+void nc_phys_set_gravity(int g);      /* 20.12 pixels per frame per frame    */
+void nc_phys_set_terminal(int v);     /* fastest downward speed, 20.12       */
+int  nc_phys_overlap(int a, int b);   /* two sprites' boxes, 1 or 0          */
 
 int  nc_scene_load(const NC_Package *pkg, int index);
 void nc_scene_advance(void);      /* apply per-object spin, once per frame  */

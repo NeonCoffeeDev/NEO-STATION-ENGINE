@@ -1,57 +1,136 @@
-# @NAME@ - a 2D game
+# @NAME@ - a 2D platformer
 #
-# Sprites are flat textured quads drawn in screen space: no camera, no GTE, no
-# depth sorting. Coordinates are pixels on the 320x240 display, 0,0 top-left.
+# Sprites are flat textured quads in screen space: no camera, no GTE, no depth
+# sorting. Coordinates are pixels on the 320x240 display, 0,0 top-left.
 #
-# Sprite 0 is the player. The others are scenery, in the order they appear in
-# scene.json.
+# Sprite 0 is the player. Every other sprite in scene.json carries "solid":
+# true, and that is the whole of what makes it ground, a platform or a wall.
+# Nothing else declares the level.
+#
+#   D-pad   move
+#   X       jump
 
 
-var speed = 2
+# ---- units ------------------------------------------------------------------
+# Velocities are 20.12 fixed point: 4096 is ONE PIXEL PER FRAME. Positions stay
+# whole pixels -- that is what the GPU draws -- and the leftover fraction is
+# carried inside the sprite, so a speed of half a pixel per frame really does
+# move you one pixel every other frame instead of rounding away to nothing.
+
+var PIXEL = 4096
+
+var RUN_SPEED = 8192          # 2 px/frame
+var JUMP_SPEED = 20480        # 5 px/frame, applied upward
+var GRAVITY = 1300            # about a third of a pixel per frame, per frame
+var TERMINAL = 24576          # 6 px/frame: fast, but not through a 32px block
+
+# Coyote time: a few frames of grace after walking off a ledge during which a
+# jump still counts. Every platformer worth playing has this. Without it, a jump
+# pressed one frame after leaving the ground silently does nothing, and players
+# read that as the controls being broken rather than as their own timing.
+var COYOTE_FRAMES = 6
+
+var PLAYER = 0
+
+# Where a fall ends. The floor has a gap in it, and without this the player
+# lands in the pit and stays there -- a demo you can get permanently stuck in
+# teaches the wrong thing about the physics.
+var START_X = 24
+var START_Y = 176
+var PIT_Y = 200
+
+
+# ---- state ------------------------------------------------------------------
+
 var anim = 0
-var facing = 0
 var steps = 0
+var coyote = 0
+var airborne = 0
 
 
 func _ready():
-    print("2D demo -- D-pad to move")
+    set_gravity(GRAVITY)
+    set_terminal(TERMINAL)
+    print("platformer -- D-pad to move, X to jump")
 
 
 func _update():
-    var dx = 0
-    var dy = 0
+    var vx = 0
 
     if btn_held(BTN_LEFT):
-        dx = 0 - speed
+        vx = 0 - RUN_SPEED
     if btn_held(BTN_RIGHT):
-        dx = speed
-    if btn_held(BTN_UP):
-        dy = 0 - speed
-    if btn_held(BTN_DOWN):
-        dy = speed
+        vx = RUN_SPEED
 
-    sprite_move(0, dx, dy)
+    # Horizontal speed is set outright every frame rather than accumulated.
+    # That is what makes the character stop the instant you let go, which is the
+    # feel a 2D platformer wants; momentum belongs to ice levels.
+    sprite_set_vel(PLAYER, vx, sprite_vy(PLAYER))
 
-    # Keep the player on screen. The sprite is 32 wide, so the right edge is
-    # 320 - 32.
-    sprite_set_pos(0,
-                   clamp(sprite_x(0), 0, 288),
-                   clamp(sprite_y(0), 0, 208))
-
-    # Animate only while moving. The four frames sit side by side in the sheet,
-    # so stepping the UV window across by 32 picks the next one.
-    if dx == 0 and dy == 0:
-        anim = 0
+    if on_floor(PLAYER) == 1:
+        coyote = COYOTE_FRAMES
     else:
-        steps = steps + 1
-        if steps > 5:
-            steps = 0
-            anim = anim + 1
-            if anim > 3:
-                anim = 0
+        if coyote > 0:
+            coyote = coyote - 1
 
-    sprite_frame(0, anim * 32, 0)
+    if btn_pressed(BTN_CROSS) and coyote > 0:
+        sprite_set_vel(PLAYER, sprite_vx(PLAYER), 0 - JUMP_SPEED)
+        coyote = 0
 
-    draw_text(8, 8, "2D SPRITES")
-    draw_text(8, 222, "D-PAD TO MOVE")
-    draw_num(280, 8, sprite_x(0))
+    # Gravity, then velocity, then the collision. One call.
+    physics_step(PLAYER)
+
+    # The screen edges are not solid, so hold the player inside them by hand.
+    sprite_set_pos(PLAYER,
+                   clamp(sprite_x(PLAYER), 0, 288),
+                   clamp(sprite_y(PLAYER), 0, 208))
+
+    if sprite_y(PLAYER) > PIT_Y:
+        respawn()
+
+    animate(vx)
+    draw_hud()
+
+
+func respawn():
+    sprite_set_pos(PLAYER, START_X, START_Y)
+    sprite_set_vel(PLAYER, 0, 0)
+    return 0
+
+
+func animate(vx):
+    # In the air, hold one frame -- a walk cycle playing while falling looks
+    # like the character is running on nothing.
+    if on_floor(PLAYER) == 0:
+        airborne = 1
+        anim = 2
+    else:
+        airborne = 0
+        if vx == 0:
+            anim = 0
+        else:
+            steps = steps + 1
+            if steps > 5:
+                steps = 0
+                anim = anim + 1
+                if anim > 3:
+                    anim = 0
+
+    # The four frames sit side by side in the sheet, so stepping the UV window
+    # across by 32 picks the next one.
+    sprite_frame(PLAYER, anim * 32, 0)
+    return 0
+
+
+func draw_hud():
+    draw_text(8, 8, "2D PLATFORMER")
+    draw_text(8, 222, "D-PAD MOVE   X JUMP")
+
+    if on_floor(PLAYER) == 1:
+        draw_text(232, 8, "GROUND")
+    else:
+        draw_text(240, 8, "AIR")
+
+    if on_wall(PLAYER) == 1:
+        draw_text(232, 20, "WALL")
+    return 0
