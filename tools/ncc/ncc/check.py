@@ -302,8 +302,52 @@ def _check_package(path, doc, r):
                "under 1 MB")
 
 
+def check_ps2(path):
+    """What can honestly be said about a PS2 project today.
+
+    The PS1 checker knows every budget because the PS1 runtime owns every
+    resource. The PS2 runtime does not exist yet, so there is nothing to be
+    authoritative about beyond the executable itself -- and inventing budgets
+    for a renderer nobody has written would be worse than saying so.
+    """
+    from . import build as build_mod
+    from .targets import TARGETS
+
+    t = TARGETS["ps2"]
+    name = os.path.basename(path)
+    elf = os.path.join(path, "game.elf")
+
+    print()
+    print("  Checking %s  [PlayStation 2]" % name)
+    print()
+    print("  HARDWARE   %dx%d, %d MB RAM, %d MB VRAM, FPU"
+          % (t.width, t.height, t.ram_bytes // (1024 * 1024),
+             t.vram_bytes // (1024 * 1024)))
+
+    if os.path.isfile(elf):
+        size = os.path.getsize(elf)
+        share = size * 100.0 / t.ram_bytes
+        print("  EXECUTABLE %d bytes (%.0f KB), %.1f%% of main RAM"
+              % (size, size / 1024.0, share))
+    else:
+        print("  EXECUTABLE not built yet -- ncc build %s" % name)
+
+    print()
+    print("  There are no asset budgets to report: the NC runtime is PS1-only")
+    print("  so far, and a PS2 project owns its own main.c. See M6 in")
+    print("  docs/ROADMAP.md for what that milestone actually involves.")
+    print()
+    return 0
+
+
 def run(args):
     path = os.path.abspath(getattr(args, "path", ".") or ".")
+
+    from . import build as build_mod
+    if os.path.isfile(os.path.join(path, build_mod.PROJECT_FILE)):
+        if build_mod.project_meta(path)["target"] == "ps2":
+            return check_ps2(path)
+
     if not os.path.isfile(os.path.join(path, "CMakeLists.txt")):
         raise SystemExit(f"ncc: {path} is not a Neon Coffee project")
 

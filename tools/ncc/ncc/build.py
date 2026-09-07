@@ -591,7 +591,44 @@ def _close_running_emulator():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def _run_ps2(src):
+    """Launch a PS2 build, or explain why it cannot be launched here.
+
+    PCSX2 needs a PS2 BIOS, and unlike the PS1 there is no open replacement for
+    it -- so this cannot be made to work by installing something. Saying so, and
+    saying what to do instead, is the useful thing.
+    """
+    elf = os.path.join(src, "game.elf")
+    pcsx2 = tc.find_pcsx2()
+    bios = tc.pcsx2_bios()
+
+    if pcsx2 and bios:
+        print("  launching PCSX2")
+        subprocess.Popen([pcsx2, "-fastboot", "--", elf], cwd=os.path.dirname(elf))
+        return 0
+
+    print()
+    if not pcsx2:
+        print("  PCSX2 is not installed, so there is nothing to run this in here.")
+    else:
+        print("  PCSX2 is installed but has no BIOS, and it will not boot without")
+        print("  one. A PS2 BIOS is copyrighted and has no open replacement the")
+        print("  way OpenBIOS covers the PS1 -- dump it from your own console")
+        print("  (FreeMcBoot ships a dumper) into:")
+        print("    %s" % tc.pcsx2_bios_dir())
+    print()
+    print("  On hardware, which needs none of that:")
+    print("    copy this to a FAT32 USB stick and launch it from uLaunchELF or OPL")
+    print("    %s" % elf)
+    return 0
+
+
 def run(args):
+    src = _resolve(getattr(args, "path", None))
+    if project_meta(src)["target"] == "ps2":
+        rc = _build_ps2(src)
+        return rc if rc else _run_ps2(src)
+
     _close_running_emulator()
 
     rc = build(args)

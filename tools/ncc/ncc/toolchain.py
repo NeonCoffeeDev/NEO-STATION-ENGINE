@@ -236,3 +236,32 @@ def ps2_build_env():
     dirs = [d for d in dirs if os.path.isdir(d)]
     env["PATH"] = os.pathsep.join(dirs + [env.get("PATH", "")])
     return env
+
+
+def pcsx2_bios_dir():
+    """Where PCSX2 looks for a BIOS on this platform."""
+    docs = os.path.join(os.path.expanduser("~"), "Documents", "PCSX2", "bios")
+    return docs
+
+
+def pcsx2_bios():
+    """A PS2 BIOS image, or None. PCSX2 will not boot anything without one."""
+    d = pcsx2_bios_dir()
+    if not os.path.isdir(d):
+        return None
+    for f in sorted(os.listdir(d)):
+        if os.path.splitext(f)[1].lower() in (".bin", ".rom0", ".rom", ""):
+            p = os.path.join(d, f)
+            # A real BIOS image is about 4 MB; the cache files that live near
+            # it are not, and matching one of those would be a confusing pass.
+            if os.path.isfile(p) and os.path.getsize(p) > 2 * 1024 * 1024:
+                return p
+    return None
+
+
+def find_pcsx2():
+    for p in (r"C:/Program Files/PCSX2/pcsx2-qt.exe",
+              r"C:/Program Files (x86)/PCSX2/pcsx2-qt.exe"):
+        if os.path.isfile(p):
+            return p
+    return shutil.which("pcsx2-qt") or shutil.which("pcsx2")

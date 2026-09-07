@@ -64,7 +64,10 @@ def save_settings(data):
 
 
 def find_projects(root):
-    """Any directory holding a CMakeLists.txt, at the root or under examples/."""
+    """Any Neon Coffee project, at the root or under examples/.
+
+    A PS1 project is a CMake project and a PS2 project is a Makefile one, so
+    nc.json is what identifies both."""
     found = []
     for base in (root, os.path.join(root, "examples")):
         if not os.path.isdir(base):
@@ -75,7 +78,10 @@ def find_projects(root):
             continue
         for name in names:
             p = os.path.join(base, name)
-            if os.path.isdir(p) and os.path.isfile(os.path.join(p, "CMakeLists.txt")):
+            if not os.path.isdir(p):
+                continue
+            if (os.path.isfile(os.path.join(p, "CMakeLists.txt"))
+                    or os.path.isfile(os.path.join(p, "nc.json"))):
                 found.append(p)
     return found
 
@@ -366,12 +372,18 @@ class Studio:
                               bg=AMBER if k == key else PANEL_HI)
         self.show_hardware(key)
         self._sync_target_buttons(key)
-        if key != "ps1" and (changed or not from_project):
-            t = TARGETS[key]
-            self.log("%s: the backend is not implemented yet -- roadmap M6."
-                     % t.name, AMBER)
-            self.log("  the hardware profile and  are "
-                     "real; building is not." % key, DIM)
+        if key == "ps2" and (changed or not from_project):
+            self.log("PlayStation 2: builds a real .elf. The NC runtime itself "
+                     "is still PS1-only -- roadmap M6.", AMBER)
+            self.log("  run it from a USB stick on a FreeMcBoot console; PCSX2 "
+                     "needs a BIOS you dump yourself.", DIM)
+        elif key not in self.BUILDABLE and (changed or not from_project):
+            self.log("%s: no backend yet -- roadmap M6." % TARGETS[key].name,
+                     AMBER)
+
+    # Targets ncc can actually build today. PS2 joined this list when the
+    # toolchain landed; the list exists so the manager never has to guess.
+    BUILDABLE = ("ps1", "ps2")
 
     def _sync_target_buttons(self, key):
         """Grey out what cannot work for this target.
@@ -379,7 +391,7 @@ class Studio:
         A BUILD button that always fails is worse than one that is visibly
         unavailable: the first looks like a bug in your project.
         """
-        buildable = key == "ps1"
+        buildable = key in self.BUILDABLE
         for b in (self.b_run, self.b_build, self.b_doc):
             b.set_enabled(buildable and not self.running)
 
@@ -420,7 +432,11 @@ class Studio:
         self.projects = find_projects(self.repo)
         self.plist.delete(0, "end")
         for p in self.projects:
-            self.plist.insert("end", "  " + os.path.relpath(p, self.repo))
+            # Tag the machine. With two targets in one list, which console a
+            # project is for stops being obvious from its name alone.
+            tag = project_meta(p)["target"].upper()
+            self.plist.insert("end", "  %-5s %s"
+                              % (tag, os.path.relpath(p, self.repo)))
         if not self.projects:
             self.set_status("no projects found -- press NEW...", AMBER)
             return
@@ -723,7 +739,7 @@ class Studio:
     def set_buttons(self, on):
         # Whether a build is running and whether this target can build at all
         # are two different reasons to be unavailable; both have to hold.
-        buildable = self.target.get() == "ps1"
+        buildable = self.target.get() in self.BUILDABLE
         for b in (self.b_run, self.b_build, self.b_doc):
             b.set_enabled(on and buildable)
         self.b_clean.set_enabled(on)
