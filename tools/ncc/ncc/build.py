@@ -450,7 +450,9 @@ def _build_ps2(src):
     from .audio import AudioError
     from .sfxbank import build as build_audio
     try:
-        build_audio(src, os.path.join(src, "src", "audio"))
+        build_audio(src, os.path.join(src, "src", "audio"),
+                    irx=os.path.join(tc.ps2dev_root() or "", "ps2sdk", "iop",
+                                     "irx", "audsrv.irx"))
     except AudioError as exc:
         raise SystemExit(f"ncc: audio: {exc}")
 
