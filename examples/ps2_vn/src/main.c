@@ -715,6 +715,22 @@ int main(void)
         if (scene == SCENE_PAUSE)
             q = draw_options(q);
 
+        /* Visible until the audio is running. On a console there is no TTY to
+         * read, so the stage has to be on the television or it may as well not
+         * be recorded at all. */
+        if (nc_audio_step != NC_AUDIO_DONE) {
+            char line[48];
+            sprintf(line, "AUDIO %d/5 %s%s", nc_audio_step + 1,
+                    NC_AUDIO_STAGE[nc_audio_step],
+                    nc_audio_step == NC_AUDIO_FAILED ? "" : " ...");
+            q = text(q, 24, SCREEN_H - 26, line, 0x80);
+            if (nc_audio_step == NC_AUDIO_FAILED) {
+                sprintf(line, "AT %s  CODE %d", NC_AUDIO_STAGE[nc_audio_failed_at],
+                        nc_audio_detail);
+                q = text(q, 24, SCREEN_H - 46, line, 0x80);
+            }
+        }
+
         q = draw_finish(q);
 
         dma_wait_fast();
@@ -723,13 +739,14 @@ int main(void)
         draw_wait_finish();
         graph_wait_vsync();
 
-        /* Sound starts once a picture is already on screen. Bringing up the
-         * IOP's audio driver touches the one part of this program that can
-         * hang a console outright, and doing it before the first frame makes
-         * that indistinguishable from a game that does not boot -- which is
-         * exactly what happened when the loader patch was missing. */
-        if (frames == 2) {
-            if (nc_audio_init())
+        /* Sound starts once a picture is already on screen, one step per frame.
+         * Bringing up the IOP's audio driver touches the only part of this
+         * program that can hang a console outright, and the stage is drawn
+         * before the step runs -- so whatever is on screen when it stops is
+         * the thing that stopped it. */
+        if (frames > 2 && nc_audio_busy()) {
+            nc_audio_advance();
+            if (!nc_audio_busy() && nc_audio_step == NC_AUDIO_DONE)
                 nc_music_play(0);
         }
         nc_audio_pump();

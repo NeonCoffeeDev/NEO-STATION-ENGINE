@@ -182,65 +182,103 @@ static int nc_voice_next(NCVoice *voice, int twice)
 }
 
 
-static int nc_audio_init(void)
+/* Start-up, one step per frame.
+ *
+ * Doing this as a single blocking call was a mistake twice over. Two of these
+ * steps can hang rather than return -- SifExecModuleBuffer against an unpatched
+ * loader, and audsrv_init, which spins binding its RPC until the module answers
+ * and never gives up if it never will. A hang inside one call is invisible: the
+ * console simply stops, and every step looks equally guilty.
+ *
+ * Split up, the step number is on screen before the step runs. Whatever is
+ * showing when it stops is the thing that stopped it, and one boot identifies
+ * it instead of a round of guesses.
+ */
+enum {
+    NC_AUDIO_PATCH, NC_AUDIO_LIBSD, NC_AUDIO_IRX, NC_AUDIO_START,
+    NC_AUDIO_FORMAT, NC_AUDIO_DONE, NC_AUDIO_FAILED
+};
+
+static int nc_audio_step = NC_AUDIO_PATCH;
+static int nc_audio_detail;             /* whatever the failing step returned */
+static int nc_audio_failed_at;          /* the step that failed, not FAILED */
+
+static const char *const NC_AUDIO_STAGE[] = {
+    "PATCH LOADER", "LOAD LIBSD", "SEND AUDSRV", "START AUDSRV",
+    "SET FORMAT", "READY", "FAILED"
+};
+
+
+/* Performs one step. Call once a frame until it stops changing. */
+static void nc_audio_advance(void)
 {
     int result = 0;
 
-    /* SifInitRpc has already been called for the pad. Calling it a second time
-     * re-initialises RPC underneath a pad library that is already using it. */
+    switch (nc_audio_step) {
+    case NC_AUDIO_PATCH:
+        /* The IOP loader will not take a module from a buffer as it ships; the
+         * entry point is disabled. Without this, SifExecModuleBuffer hangs. */
+        nc_audio_detail = sbv_patch_enable_lmb();
+        if (nc_audio_detail < 0) { nc_audio_failed_at = nc_audio_step; nc_audio_step = NC_AUDIO_FAILED; return; }
+        nc_audio_step = NC_AUDIO_LIBSD;
+        return;
 
-    /* The IOP's loader will not accept a module from a buffer as it ships: the
-     * entry point for it is disabled, and SifExecModuleBuffer either fails or
-     * hangs depending on how it is reached. sbv_patch_enable_lmb puts it back.
-     * This is the step whose absence stopped the game booting at all, and it is
-     * why every PS2 homebrew that carries its own IRX calls it first. */
-    if (sbv_patch_enable_lmb() < 0) {
-        printf("nc_audio: could not enable load-module-from-buffer\n");
-        return 0;
-    }
+    case NC_AUDIO_LIBSD:
+        /* libsd is in the console's own ROM, so it is the one module that does
+         * not have to be carried. */
+        nc_audio_detail = SifLoadModule("rom0:LIBSD", 0, NULL);
+        if (nc_audio_detail < 0) { nc_audio_failed_at = nc_audio_step; nc_audio_step = NC_AUDIO_FAILED; return; }
+        nc_audio_step = NC_AUDIO_IRX;
+        return;
 
-    /* libsd lives in the console's own ROM on every retail machine, so it is
-     * the one module that does not have to be carried. */
-    if (SifLoadModule("rom0:LIBSD", 0, NULL) < 0) {
-        printf("nc_audio: rom0:LIBSD would not load\n");
-        return 0;
-    }
-    /* audsrv does not, and a USB-booted ELF has no working directory to find it
-     * in, so it is compiled in and handed straight to the IOP.
-     *
-     * The transfer is a DMA out of main memory, which does not see the EE's
-     * cache. The module arrived here as part of the executable and is never
-     * written afterwards, but it may still be sitting in cache from the load,
-     * and half a module reaching the IOP is not a failure that announces
-     * itself. Writing back first costs nothing and removes the question. */
-    FlushCache(0);
-    if (SifExecModuleBuffer(nc_audsrv_irx,
-                            (unsigned int)(nc_audsrv_irx_end - nc_audsrv_irx),
-                            0, NULL, &result) < 0) {
-        printf("nc_audio: audsrv.irx would not start\n");
-        return 0;
-    }
-    if (audsrv_init() != 0) {
-        printf("nc_audio: audsrv_init: %s\n", audsrv_get_error_string());
-        return 0;
-    }
+    case NC_AUDIO_IRX:
+        /* An ELF launched from a USB stick has no working directory to load
+         * audsrv from, so it travels inside the executable. The transfer is a
+         * DMA out of main memory and does not see the EE's cache. */
+        FlushCache(0);
+        nc_audio_detail = SifExecModuleBuffer(
+            nc_audsrv_irx, (unsigned int)(nc_audsrv_irx_end - nc_audsrv_irx),
+            0, NULL, &result);
+        /* `result` is the module's own verdict. A module that loaded but
+         * refused to stay resident leaves audsrv_init spinning on an RPC that
+         * will never be answered, so it is checked here rather than there. */
+        if (nc_audio_detail < 0 || result == 1) {
+            nc_audio_failed_at = nc_audio_step;
+            nc_audio_step = NC_AUDIO_FAILED;
+            return;
+        }
+        nc_audio_step = NC_AUDIO_START;
+        return;
 
-    {
+    case NC_AUDIO_START:
+        nc_audio_detail = audsrv_init();
+        if (nc_audio_detail != 0) { nc_audio_failed_at = nc_audio_step; nc_audio_step = NC_AUDIO_FAILED; return; }
+        nc_audio_step = NC_AUDIO_FORMAT;
+        return;
+
+    case NC_AUDIO_FORMAT: {
         struct audsrv_fmt_t format;
         format.freq = NC_MUSIC_RATE;
         format.bits = 16;
         format.channels = 1;
-        if (audsrv_set_format(&format) != 0) {
-            printf("nc_audio: %d Hz mono refused\n", NC_MUSIC_RATE);
-            return 0;
-        }
+        nc_audio_detail = audsrv_set_format(&format);
+        if (nc_audio_detail != 0) { nc_audio_failed_at = nc_audio_step; nc_audio_step = NC_AUDIO_FAILED; return; }
+        audsrv_set_volume(MAX_VOLUME);
+        nc_roles_resolve();
+        nc_audio_ready = 1;
+        nc_audio_step = NC_AUDIO_DONE;
+        return;
     }
-    audsrv_set_volume(MAX_VOLUME);
-    nc_roles_resolve();
-    nc_audio_ready = 1;
-    printf("nc_audio: %d effects, %d tracks, mixing at %d Hz\n",
-           NC_SFX_COUNT, NC_MUSIC_COUNT, NC_MUSIC_RATE);
-    return 1;
+
+    default:
+        return;
+    }
+}
+
+
+static int nc_audio_busy(void)
+{
+    return nc_audio_step < NC_AUDIO_DONE;
 }
 
 
