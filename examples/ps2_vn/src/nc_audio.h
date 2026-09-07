@@ -32,6 +32,7 @@
 #include <audsrv.h>
 #include <kernel.h>
 #include <loadfile.h>
+#include <sbv_patches.h>
 #include <sifrpc.h>
 #include <string.h>
 
@@ -185,7 +186,19 @@ static int nc_audio_init(void)
 {
     int result = 0;
 
-    SifInitRpc(0);
+    /* SifInitRpc has already been called for the pad. Calling it a second time
+     * re-initialises RPC underneath a pad library that is already using it. */
+
+    /* The IOP's loader will not accept a module from a buffer as it ships: the
+     * entry point for it is disabled, and SifExecModuleBuffer either fails or
+     * hangs depending on how it is reached. sbv_patch_enable_lmb puts it back.
+     * This is the step whose absence stopped the game booting at all, and it is
+     * why every PS2 homebrew that carries its own IRX calls it first. */
+    if (sbv_patch_enable_lmb() < 0) {
+        printf("nc_audio: could not enable load-module-from-buffer\n");
+        return 0;
+    }
+
     /* libsd lives in the console's own ROM on every retail machine, so it is
      * the one module that does not have to be carried. */
     if (SifLoadModule("rom0:LIBSD", 0, NULL) < 0) {

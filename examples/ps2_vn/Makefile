@@ -10,7 +10,7 @@
 EE_BIN  = game.elf
 EE_OBJS = src/main.o src/logo_data.o src/font_data.o src/audio/audio_data.o
 
-EE_LIBS = -ldraw -lgraph -lmath3d -lpacket -ldma -lpad -laudsrv
+EE_LIBS = -ldraw -lgraph -lmath3d -lpacket -ldma -lpad -laudsrv -lpatches
 
 all: $(EE_BIN)
 

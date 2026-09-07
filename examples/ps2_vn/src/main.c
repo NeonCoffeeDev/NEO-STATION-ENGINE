@@ -616,10 +616,6 @@ int main(void)
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
     if (!vn_init()) return 1;
     text_speed = VN_SPEED;
-    /* Silence is survivable; a game that will not start because the sound
-     * card is unhappy is not. */
-    if (nc_audio_init())
-        nc_music_play(0);
 
     while (1) {
         qword_t *q;
@@ -727,6 +723,15 @@ int main(void)
         draw_wait_finish();
         graph_wait_vsync();
 
+        /* Sound starts once a picture is already on screen. Bringing up the
+         * IOP's audio driver touches the one part of this program that can
+         * hang a console outright, and doing it before the first frame makes
+         * that indistinguishable from a game that does not boot -- which is
+         * exactly what happened when the loader patch was missing. */
+        if (frames == 2) {
+            if (nc_audio_init())
+                nc_music_play(0);
+        }
         nc_audio_pump();
         frames++;
     }
