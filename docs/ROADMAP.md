@@ -337,3 +337,37 @@ Still open:
 1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
 2. **Per-object scripts**, 4-bit textures, LTO.
 3. **PS2.** Untouched -- see M6.
+
+
+## Update, 2026-09-06 (prototyping kit, and the manager follows the project)
+
+- **A 2D view.** `scroll_set/by/follow` and `scroll_x/y`. Sprites are
+  screen-space, so a level larger than the screen is an offset subtracted at
+  draw time rather than a camera: positions stay in world coordinates and
+  collision never has to know the view moved. Fixed sprites are exempt, which is
+  what keeps a HUD still while the world slides. `scroll_follow` uses a dead
+  zone, because a view that tracks exactly is nauseating to play.
+- **Sprite mirroring.** `sprite_set_flip` swaps which end of the texture each
+  corner samples. Facing both ways costs no extra art and no extra VRAM.
+- **Prototyping helpers**: `draw_text_center`, `approach`, `sign`, `lerp`,
+  `rand_range`, `dist`, `every`. Nothing clever -- these are where the sign
+  errors come from when every game writes them again.
+
+- **Projects declare their target.** `nc.json` records name, template and
+  target. NC Studio reads it on selection and reconfigures around it: the target
+  buttons, the hardware profile, and whether building is possible at all. A
+  BUILD button that always fails is worse than one that is visibly unavailable,
+  because the first looks like a bug in your project.
+- **`ncc build` refuses a non-PS1 project by name**, naming what does exist for
+  that target, rather than failing three layers down inside cmake with a missing
+  compiler.
+- **A `ps2_hello` template** that declares target ps2 and does not pretend to
+  build. It exists so the PS2 path is a real, selectable thing with a hardware
+  profile and a toolchain check rather than a promise.
+
+Still open:
+
+1. **The PS2 renderer** -- M6, and it is a second renderer rather than a port.
+   No ordering table, a depth buffer, a real FPU, two vector units.
+2. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+3. **Per-object scripts**, 4-bit textures, LTO.

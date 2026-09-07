@@ -11,6 +11,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "nc_script.h"
 
@@ -519,4 +520,106 @@ int nc_s_set_terminal(int v)
 int nc_s_touching(int a, int b)
 {
     return nc_phys_overlap(a, b);
+}
+
+
+/* --- the 2D view, sprite mirroring, and prototyping helpers --- */
+
+int nc_s_scroll_set(int x, int y)
+{
+    nc_scroll_set(x, y);
+    return 0;
+}
+
+
+int nc_s_scroll_by(int dx, int dy)
+{
+    nc_scroll_by(dx, dy);
+    return 0;
+}
+
+
+int nc_s_scroll_x(void) { return nc_scroll_x(); }
+int nc_s_scroll_y(void) { return nc_scroll_y(); }
+
+
+int nc_s_scroll_follow(int id, int dead_w, int dead_h)
+{
+    nc_scroll_follow(id, dead_w, dead_h);
+    return 0;
+}
+
+
+int nc_s_sprite_set_flip(int id, int on)
+{
+    NC_Sprite *sp = nc_scene_sprite(id);
+    if (sp)
+        sp->flip = on ? 1 : 0;
+    return 0;
+}
+
+
+int nc_s_draw_text_center(int y, const char *msg)
+{
+    /* Centring by hand means counting the characters and halving, every time
+     * the wording changes. The runtime already knows how wide the font is. */
+    nc_text((NC_SCREEN_W - nc_text_width(msg)) / 2, y, msg);
+    return 0;
+}
+
+
+int nc_s_sign(int v)
+{
+    return (v > 0) - (v < 0);
+}
+
+
+int nc_s_approach(int value, int target, int step)
+{
+    /* Move toward a target without overshooting it. This is the whole of
+     * acceleration, friction, fading and any other easing a prototype needs,
+     * and doing it by hand is where sign errors come from. */
+    if (step < 0)
+        step = -step;
+    if (value < target)
+        return (target - value <= step) ? target : value + step;
+    if (value > target)
+        return (value - target <= step) ? target : value - step;
+    return value;
+}
+
+
+int nc_s_lerp(int a, int b, int t)
+{
+    /* t is 20.12 fixed point: 4096 is all the way there. */
+    if (t < 0) t = 0;
+    if (t > 4096) t = 4096;
+    return a + ((b - a) * t) / 4096;
+}
+
+
+int nc_s_rand_range(int lo, int hi)
+{
+    if (hi <= lo)
+        return lo;
+    return lo + (int)(rand() % (unsigned)(hi - lo + 1));
+}
+
+
+int nc_s_dist(int x1, int y1, int x2, int y2)
+{
+    /* The octagonal approximation: max + min/2, within about 6% of the true
+     * distance and no square root. On a machine with no FPU that difference
+     * is worth more than the accuracy is. */
+    int dx = x1 > x2 ? x1 - x2 : x2 - x1;
+    int dy = y1 > y2 ? y1 - y2 : y2 - y1;
+    return (dx > dy) ? (dx + dy / 2) : (dy + dx / 2);
+}
+
+
+int nc_s_every(int n)
+{
+    if (n <= 0)
+        return 0;
+    return (nc_s_frame() % n) == 0;
 }

@@ -11,6 +11,7 @@ import time
 from . import ncpkg
 from . import ncscript
 from . import toolchain as tc
+from .targets import TARGETS
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 COMMON_DIR = os.path.join(TEMPLATES_DIR, "_common")
@@ -138,6 +139,38 @@ ENGINE_FILES = [
     os.path.join("src", "nc_music.c"),
     os.path.join("src", "nc_save.c"),
 ]
+
+
+PROJECT_FILE = "nc.json"
+
+
+def project_meta(root):
+    """What a project says about itself.
+
+    A project has to record its own target, because the manager cannot guess it
+    from the sources -- and picking a project should reconfigure the tool around
+    it rather than leave PS1 selected while you edit a PS2 game.
+    """
+    meta = {"format": 1, "target": "ps1", "template": "", "name": ""}
+    path = os.path.join(root, PROJECT_FILE)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            meta.update(json.load(fh))
+    except (OSError, ValueError):
+        # A project made before nc.json existed is a PS1 project; that is what
+        # the default says, and there is nothing to warn about.
+        pass
+    if meta.get("target") not in TARGETS:
+        meta["target"] = "ps1"
+    return meta
+
+
+def write_project_meta(root, name, template, target):
+    path = os.path.join(root, PROJECT_FILE)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"format": 1, "name": name, "template": template,
+                   "target": target}, fh, indent=2)
+        fh.write(chr(10))
 
 
 def _project_name(root):
@@ -281,6 +314,15 @@ def new(args):
         shutil.copytree(GODOT_ADDON_DIR, os.path.join(godot_dir, "addons"),
                         dirs_exist_ok=True)
 
+    meta = {}
+    meta_path = os.path.join(tpl_dir, "template.json")
+    try:
+        with open(meta_path, encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError):
+        pass
+    write_project_meta(dest, name, template, meta.get("target", "ps1"))
+
     _substitute(dest, name)
 
     print(f"Created {dest}")
@@ -377,6 +419,21 @@ def _config_of(args):
 
 def build(args):
     src = _resolve(getattr(args, "path", None))
+
+    target = project_meta(src)["target"]
+    if target != "ps1":
+        # Refusing here, by name, beats letting cmake fail three layers down
+        # with a missing compiler.
+        t = TARGETS[target]
+        raise SystemExit(
+            f"ncc: {os.path.basename(src)} targets {t.name}, and the {target} "
+            f"backend is not implemented yet." + chr(10) +
+            f"     Its renderer shares nothing with the PS1 one -- see M6 in "
+            f"docs/ROADMAP.md." + chr(10) +
+            f"     What exists today: the hardware profile, the toolchain "
+            f"check (ncc doctor --target {target})," + chr(10) +
+            f"     and this project's own declaration of what it is.")
+
     config = _config_of(args)
     build_dir, redirected = tc.build_dir_for(src, config)
     env = tc.build_env()

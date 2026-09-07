@@ -85,6 +85,26 @@ FUNCTIONS = {
     "set_terminal":     {"c": "nc_s_set_terminal",     "args": 1},
     "touching":         {"c": "nc_s_touching",         "args": 2},
 
+    # --- the 2D view ---
+    # Sprites are screen-space, so a level bigger than the screen is an offset
+    # subtracted at draw time rather than a camera. Positions stay in world
+    # coordinates and collision never has to know the view moved.
+    "scroll_set":       {"c": "nc_s_scroll_set",       "args": 2},
+    "scroll_by":        {"c": "nc_s_scroll_by",        "args": 2},
+    "scroll_x":         {"c": "nc_s_scroll_x",         "args": 0},
+    "scroll_y":         {"c": "nc_s_scroll_y",         "args": 0},
+    "scroll_follow":    {"c": "nc_s_scroll_follow",    "args": 3},
+    "sprite_set_flip":  {"c": "nc_s_sprite_set_flip",  "args": 2},
+
+    # --- prototyping helpers ---
+    "draw_text_center": {"c": "nc_s_draw_text_center", "args": 2},
+    "sign":             {"c": "nc_s_sign",             "args": 1},
+    "approach":         {"c": "nc_s_approach",         "args": 3},
+    "lerp":             {"c": "nc_s_lerp",             "args": 3},
+    "rand_range":       {"c": "nc_s_rand_range",       "args": 2},
+    "dist":             {"c": "nc_s_dist",             "args": 4},
+    "every":            {"c": "nc_s_every",            "args": 1},
+
     # --- camera ---
     "camera_set":    {"c": "nc_s_camera_set",   "args": 6},
     "camera_move":   {"c": "nc_s_camera_move",  "args": 3},

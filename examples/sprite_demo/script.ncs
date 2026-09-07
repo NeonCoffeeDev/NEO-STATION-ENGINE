@@ -44,6 +44,7 @@ var PIT_Y = 200
 
 var anim = 0
 var steps = 0
+var facing = 0
 var coyote = 0
 var airborne = 0
 
@@ -59,8 +60,14 @@ func _update():
 
     if btn_held(BTN_LEFT):
         vx = 0 - RUN_SPEED
+        facing = 1
     if btn_held(BTN_RIGHT):
         vx = RUN_SPEED
+        facing = 0
+
+    # Mirroring costs nothing -- the same art sampled the other way round --
+    # so there is no reason to draw a second set of frames facing left.
+    sprite_set_flip(PLAYER, facing)
 
     # Horizontal speed is set outright every frame rather than accumulated.
     # That is what makes the character stop the instant you let go, which is the
@@ -124,7 +131,7 @@ func animate(vx):
 
 func draw_hud():
     draw_text(8, 8, "2D PLATFORMER")
-    draw_text(8, 222, "D-PAD MOVE   X JUMP")
+    draw_text_center(222, "D-PAD MOVE   X JUMP")
 
     if on_floor(PLAYER) == 1:
         draw_text(232, 8, "GROUND")

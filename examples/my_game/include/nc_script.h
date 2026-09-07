@@ -101,6 +101,26 @@ int  nc_s_set_gravity(int g);
 int  nc_s_set_terminal(int v);
 int  nc_s_touching(int a, int b);
 
+/* --- the 2D view and sprite mirroring --- */
+int  nc_s_scroll_set(int x, int y);
+int  nc_s_scroll_by(int dx, int dy);
+int  nc_s_scroll_x(void);
+int  nc_s_scroll_y(void);
+int  nc_s_scroll_follow(int id, int dead_w, int dead_h);
+int  nc_s_sprite_set_flip(int id, int on);
+
+/* --- prototyping helpers ---
+ *
+ * None of these is clever. They are here because writing them by hand in every
+ * game is where the sign errors and the off-by-ones come from. */
+int  nc_s_draw_text_center(int y, const char *msg);
+int  nc_s_sign(int v);
+int  nc_s_approach(int value, int target, int step);
+int  nc_s_lerp(int a, int b, int t);
+int  nc_s_rand_range(int lo, int hi);
+int  nc_s_dist(int x1, int y1, int x2, int y2);
+int  nc_s_every(int n);
+
 /* --- camera --- */
 int  nc_s_camera_set(int x, int y, int z, int rx, int ry, int rz);
 int  nc_s_camera_move(int dx, int dy, int dz);

@@ -62,7 +62,25 @@ int   nc_text_width(const char *text);   /* pixels, for centring            */
 /* Draw a textured quad in SCREEN space -- no GTE, no transform, no depth sort.
  * This is the 2D path: sprites are just quads the GPU draws where you say. */
 void  nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
-                     int u, int v, int fixed);
+                     int u, int v, int fixed, int flip);
+
+/* ---- the 2D world -------------------------------------------------------
+ *
+ * Sprites are screen-space, which is what makes them cheap. A level larger than
+ * one screen is therefore not a camera in any 3D sense -- it is an offset
+ * subtracted from every sprite as it is drawn. Positions stay in world
+ * coordinates, so collision and script logic never have to know the view moved.
+ *
+ * Sprites marked fixed are exempt: that is what keeps a HUD and side panels
+ * still while the world slides underneath them.
+ */
+void nc_scroll_set(int x, int y);
+void nc_scroll_by(int dx, int dy);
+int  nc_scroll_x(void);
+int  nc_scroll_y(void);
+/* Keep a sprite inside a box in the middle of the screen, moving the view only
+ * when it leaves. A camera that tracks exactly is nauseating to play. */
+void nc_scroll_follow(int index, int dead_w, int dead_h);
 
 /* ---- screen shake -------------------------------------------------------
  *
@@ -278,6 +296,7 @@ typedef struct {
     int bx, by, bw, bh;       /* collision box, relative to x,y              */
     int solid;                /* other sprites cannot move through it        */
     int touch;                /* NC_TOUCH_* bits from the last move          */
+    int flip;                 /* draw mirrored, for facing the other way     */
 } NC_Sprite;
 
 /* ---- 2D physics ---------------------------------------------------------

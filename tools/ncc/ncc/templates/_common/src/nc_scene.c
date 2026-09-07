@@ -26,6 +26,11 @@ static int pending_scene = -1;
 static VECTOR  cam_pos;
 static SVECTOR cam_rot;
 
+/* The 2D view offset. Sprites live in world coordinates and this is subtracted
+ * as they are drawn, so a level can be larger than the screen without collision
+ * or script logic ever knowing the view moved. */
+static int scroll_x, scroll_y;
+
 
 int nc_scene_load(const NC_Package *pkg, int index)
 {
@@ -76,6 +81,7 @@ int nc_scene_load(const NC_Package *pkg, int index)
         sp->visible = 1;
         sp->fixed = (sd->flags & NC_SPRITE_FIXED) ? 1 : 0;
         sp->solid = (sd->flags & NC_SPRITE_SOLID) ? 1 : 0;
+        sp->flip = 0;
         sp->bx = sd->bx;  sp->by = sd->by;
         sp->bw = sd->bw;  sp->bh = sd->bh;
         /* Physics state is per-run, not per-package: reloading a scene should
@@ -94,6 +100,7 @@ int nc_scene_load(const NC_Package *pkg, int index)
 
     cam_pos = sc->cam_pos;
     cam_rot = sc->cam_rot;
+    scroll_x = scroll_y = 0;      /* a new scene starts at the origin */
     nc_gfx_set_clear(sc->clear_r, sc->clear_g, sc->clear_b);
 
     return 1;
@@ -146,10 +153,17 @@ void nc_scene_draw(void)
      * sit in front of whatever the 3D pass produced. */
     for (i = 0; i < sprite_count; i++) {
         const NC_Sprite *sp = &sprites[i];
+        int x = sp->x, y = sp->y;
         if (!sp->visible)
             continue;
-        nc_sprite_draw(sp->tpage, sp->clut, sp->x, sp->y, sp->w, sp->h,
-                       sp->u, sp->v, sp->fixed);
+        /* World to screen. Fixed sprites are exempt, which is what keeps a HUD
+         * and side panels still while the world slides underneath them. */
+        if (!sp->fixed) {
+            x -= scroll_x;
+            y -= scroll_y;
+        }
+        nc_sprite_draw(sp->tpage, sp->clut, x, y, sp->w, sp->h,
+                       sp->u, sp->v, sp->fixed, sp->flip);
     }
 }
 
@@ -241,4 +255,56 @@ int nc_scene_camera_get(int axis)
 void nc_scene_set_clear(int r, int g, int b)
 {
     nc_gfx_set_clear(r, g, b);
+}
+
+
+/* ---- the 2D view -------------------------------------------------------- */
+
+void nc_scroll_set(int x, int y)
+{
+    scroll_x = x;
+    scroll_y = y;
+}
+
+
+void nc_scroll_by(int dx, int dy)
+{
+    scroll_x += dx;
+    scroll_y += dy;
+}
+
+
+int nc_scroll_x(void) { return scroll_x; }
+int nc_scroll_y(void) { return scroll_y; }
+
+
+void nc_scroll_follow(int index, int dead_w, int dead_h)
+{
+    const NC_Sprite *sp = nc_scene_sprite(index);
+    int cx, cy, half_w, half_h, want_x, want_y;
+
+    if (!sp)
+        return;
+
+    /* Where the sprite sits on screen right now, and how far it is allowed to
+     * stray from the middle before the view starts moving. Tracking exactly is
+     * nauseating to play; a dead zone is what makes it feel like a camera
+     * rather than like the world being dragged. */
+    cx = sp->x + sp->w / 2 - scroll_x;
+    cy = sp->y + sp->h / 2 - scroll_y;
+    half_w = dead_w / 2;
+    half_h = dead_h / 2;
+
+    want_x = NC_SCREEN_W / 2;
+    want_y = NC_SCREEN_H / 2;
+
+    if (cx > want_x + half_w)
+        scroll_x += cx - (want_x + half_w);
+    else if (cx < want_x - half_w)
+        scroll_x -= (want_x - half_w) - cx;
+
+    if (cy > want_y + half_h)
+        scroll_y += cy - (want_y + half_h);
+    else if (cy < want_y - half_h)
+        scroll_y -= (want_y - half_h) - cy;
 }

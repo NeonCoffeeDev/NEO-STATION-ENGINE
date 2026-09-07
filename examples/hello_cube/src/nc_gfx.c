@@ -292,7 +292,7 @@ int nc_shake_y(void) { return shake_oy; }
 
 
 void nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
-                    int u, int v, int fixed)
+                    int u, int v, int fixed, int flip)
 {
     POLY_FT4 *poly = (POLY_FT4 *)nc_gfx_alloc(sizeof(POLY_FT4));
     if (!poly)
@@ -314,11 +314,20 @@ void nc_sprite_draw(uint16_t tpage, uint16_t clut, int x, int y, int w, int h,
     poly->x2 = (short)x;         poly->y2 = (short)(y + h);
     poly->x3 = (short)(x + w);   poly->y3 = (short)(y + h);
 
-    setUV4(poly,
-           u,             v,
-           u + w - 1,     v,
-           u,             v + h - 1,
-           u + w - 1,     v + h - 1);
+    /* Mirroring is free: swap which end of the texture each corner samples.
+     * A character facing both ways costs no extra art and no extra VRAM. */
+    if (flip)
+        setUV4(poly,
+               u + w - 1,     v,
+               u,             v,
+               u + w - 1,     v + h - 1,
+               u,             v + h - 1);
+    else
+        setUV4(poly,
+               u,             v,
+               u + w - 1,     v,
+               u,             v + h - 1,
+               u + w - 1,     v + h - 1);
     poly->tpage = tpage;
     poly->clut = clut;
 

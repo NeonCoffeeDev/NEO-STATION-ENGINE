@@ -26,7 +26,7 @@ from theme import (AMBER, BG, BORDER, CYAN, DIM, FG, GREEN, MONO, MONO_SM, PANEL
 from editor import ScriptEditor
 
 from ncc import toolchain as tc
-from ncc.build import DEFAULT_TEMPLATE, list_templates
+from ncc.build import DEFAULT_TEMPLATE, list_templates, project_meta
 from ncc.targets import TARGETS
 
 
@@ -356,16 +356,32 @@ class Studio:
     def set_status(self, msg, color=DIM):
         self.status.configure(text=msg, fg=color)
 
-    def set_target(self, key):
+    def set_target(self, key, from_project=False):
         if key not in TARGETS:
             key = "ps1"
+        changed = self.target.get() != key
         self.target.set(key)
         for k, b in self.tbuttons.items():
             b.label.configure(fg=BG if k == key else AMBER,
                               bg=AMBER if k == key else PANEL_HI)
         self.show_hardware(key)
-        if key == "ps2":
-            self.log("PS2 backend is not implemented yet -- roadmap M6.", AMBER)
+        self._sync_target_buttons(key)
+        if key != "ps1" and (changed or not from_project):
+            t = TARGETS[key]
+            self.log("%s: the backend is not implemented yet -- roadmap M6."
+                     % t.name, AMBER)
+            self.log("  the hardware profile and  are "
+                     "real; building is not." % key, DIM)
+
+    def _sync_target_buttons(self, key):
+        """Grey out what cannot work for this target.
+
+        A BUILD button that always fails is worse than one that is visibly
+        unavailable: the first looks like a bug in your project.
+        """
+        buildable = key == "ps1"
+        for b in (self.b_run, self.b_build, self.b_doc):
+            b.set_enabled(buildable and not self.running)
 
     def toggle_config(self):
         if self.running:
@@ -424,6 +440,11 @@ class Studio:
         p = self.selected_project()
         if p:
             self.set_status(os.path.relpath(p, self.repo))
+            # A project knows what machine it is for. Selecting it should
+            # reconfigure the whole window around that -- the target, the
+            # hardware budgets, and whether building is even possible -- rather
+            # than leave PS1 selected while you edit a PS2 game.
+            self.set_target(project_meta(p)["target"], from_project=True)
         self.sync_editor()
 
     def sync_editor(self):
@@ -700,8 +721,12 @@ class Studio:
         self.root.after(1000, self._poll_tty)
 
     def set_buttons(self, on):
-        for b in (self.b_run, self.b_build, self.b_clean, self.b_doc):
-            b.set_enabled(on)
+        # Whether a build is running and whether this target can build at all
+        # are two different reasons to be unavailable; both have to hold.
+        buildable = self.target.get() == "ps1"
+        for b in (self.b_run, self.b_build, self.b_doc):
+            b.set_enabled(on and buildable)
+        self.b_clean.set_enabled(on)
         self.b_stop.set_enabled(not on)
 
     # ---- running ncc ----------------------------------------------------

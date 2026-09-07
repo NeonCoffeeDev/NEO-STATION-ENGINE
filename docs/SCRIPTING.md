@@ -218,6 +218,38 @@ There is **no sub-stepping**: a sprite moving faster than a wall is thick passes
 through it in one frame. Keep speeds below your wall thickness. There are no
 slopes, and no rotation.
 
+### The 2D view
+| | |
+|---|---|
+| `scroll_set(x, y)` `scroll_by(dx, dy)` | Move the view. |
+| `scroll_x()` `scroll_y()` | Read it back. |
+| `scroll_follow(s, dead_w, dead_h)` | Track a sprite, moving only when it leaves a box in the middle of the screen. |
+| `sprite_set_flip(s, on)` | Draw mirrored. Facing the other way costs no extra art. |
+
+Sprites are screen-space, so a level bigger than the screen is **not a camera**:
+it is an offset subtracted as each sprite is drawn. Positions stay in world
+coordinates, so collision and your own logic never have to know the view moved.
+Sprites marked `"fixed"` are exempt, which is what keeps a HUD still while the
+world slides underneath it.
+
+Use a dead zone with `scroll_follow`. A view that tracks exactly is nauseating
+to play; `scroll_follow(PLAYER, 64, 48)` is a reasonable starting point.
+
+### Prototyping helpers
+
+None of these is clever. They exist because writing them by hand in every game
+is where the sign errors and the off-by-ones come from.
+
+| | |
+|---|---|
+| `draw_text_center(y, "TEXT")` | Centred horizontally, without counting characters. |
+| `approach(value, target, step)` | Move toward a target without overshooting. Acceleration, friction and fades are all this. |
+| `sign(v)` | -1, 0 or 1. |
+| `lerp(a, b, t)` | `t` is 20.12: `4096` is all the way there. |
+| `rand_range(lo, hi)` | Inclusive. |
+| `dist(x1, y1, x2, y2)` | Approximate distance, no square root — within about 6%, which is what you want with no FPU. |
+| `every(n)` | True on every `n`th frame. Spawners and blinking text. |
+
 ### Saving
 | | |
 |---|---|
