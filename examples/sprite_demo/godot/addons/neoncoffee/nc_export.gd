@@ -388,6 +388,13 @@ static func _texture_for(node: MeshInstance3D, textures: Array, cache: Dictionar
 	return _export_texture(tex, textures, cache, warnings, node.name)
 
 
+static func _name_taken(textures: Array, name: String) -> bool:
+	for t in textures:
+		if t.get("name", "") == name:
+			return true
+	return false
+
+
 static func _export_texture(tex: Texture2D, textures: Array, cache: Dictionary,
 		warnings: Array, owner: String) -> String:
 	var key := str(tex.get_rid())
@@ -421,7 +428,27 @@ static func _export_texture(tex: Texture2D, textures: Array, cache: Dictionary,
 			% [owner, w] + "VRAM cell, so it must be even.")
 		return ""
 
+	# Name the texture after the file it came from. "tex0" tells you nothing
+	# when you open scene.json a week later; "sheet" tells you everything.
 	var name := "tex%d" % textures.size()
+	var source: String = tex.resource_path
+	if source != "":
+		var base := source.get_file().get_basename()
+		var cleaned := ""
+		for i in base.length():
+			var c: String = base[i]
+			var ok := (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") \
+				or (c >= "0" and c <= "9") or c == "_"
+			cleaned += c if ok else "_"
+		if cleaned != "":
+			name = cleaned
+			# Two different textures with the same filename would otherwise
+			# collide and the second would silently overwrite the first.
+			var suffix := 1
+			while _name_taken(textures, name):
+				name = "%s_%d" % [cleaned, suffix]
+				suffix += 1
+
 	DirAccess.make_dir_recursive_absolute(
 		ProjectSettings.globalize_path(TEXTURE_DIR))
 	var path := "%s/%s.png" % [TEXTURE_DIR, name]

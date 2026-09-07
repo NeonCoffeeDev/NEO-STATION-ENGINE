@@ -1,21 +1,29 @@
-; Neon Coffee - Godot 2D frontend for sprite_demo
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
 ;
-; The viewport is 320x240 to match the PlayStation exactly, so what you lay out
-; here is what appears on the TV, pixel for pixel. Godot's 2D origin is the
-; top-left with +Y down, which is also how the PS1 addresses the screen -- so
-; positions map across with no conversion at all.
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
+
 config/name="sprite_demo (NC 2D frontend)"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.3", "Forward Plus")
+config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]
+
 window/size/viewport_width=320
 window/size/viewport_height=240
 window/stretch/mode="viewport"
 
 [editor_plugins]
+
 enabled=PackedStringArray("res://addons/neoncoffee/plugin.cfg")

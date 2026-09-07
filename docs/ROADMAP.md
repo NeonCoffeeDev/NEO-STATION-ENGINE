@@ -297,3 +297,43 @@ Still open:
 1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
 2. **Per-object scripts**, 4-bit textures, LTO.
 3. **PS2.** Untouched -- see M6.
+
+
+## Update, 2026-09-06 (the Godot side)
+
+Godot is still not forked. All of this is a plain editor plugin.
+
+- **A dock.** Export, export+build, export+build+run, and check budgets, with
+  `ncc` output in the dock. The loop no longer leaves the editor, and a texture
+  that is too big is something you find out about while looking at the editor
+  rather than in a terminal you were not watching.
+- **Buttons for the sprite flags.** MARK SOLID and MARK FIXED set the metadata
+  the physics and the shake read, on whatever sprites are selected. Metadata
+  rather than a custom node type, so any Sprite2D works -- including ones from a
+  scene you already had.
+- **Collision boxes are dragged, not typed.** An Area2D with a RectangleShape2D
+  under a sprite exports as its `"box"`. Verified by round trip: the Godot
+  export of the platformer level is byte-for-byte the same scene as the
+  hand-written scene.json, `solid` flags and hitbox included.
+- **Textures keep their names.** They exported as tex0, tex1; they now carry the
+  name of the file they came from, because "tex0" tells you nothing when you
+  open scene.json a week later.
+- **An editor theme that matches NC Studio.** Project > Tools > apply. It writes
+  Godot's own editor settings -- the same knobs the Editor Settings dialog
+  writes -- so nothing is patched and nothing breaks on upgrade. Those settings
+  are per user rather than per project, which is Godot's design and not a choice
+  made here, so the previous values are saved and there is a restore that puts
+  them back exactly.
+
+One detail that cost time and is worth recording: Godot renamed several theme
+settings across 4.x -- `interface/theme/preset` split into `color_preset` and
+`spacing_preset`, and the font settings moved under `fonts/`. A plugin that
+hard-codes one spelling silently does nothing on the versions using the other,
+so each setting is a list of candidate names and the first one this Godot
+actually has is used.
+
+Still open:
+
+1. **Semi-transparent blending.** Alpha-keyed holes work; 50%% blending does not.
+2. **Per-object scripts**, 4-bit textures, LTO.
+3. **PS2.** Untouched -- see M6.

@@ -1,41 +1,125 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Texture2D" path="res://art/sheet.png" id="1_sheet"]
+
+[sub_resource type="RectangleShape2D" id="1_playerbox"]
+size = Vector2(16, 25)
 
 [node name="Game" type="Node2D"]
 
 [node name="Player" type="Sprite2D" parent="."]
-position = Vector2(160, 116)
+position = Vector2(40, 192)
 texture = ExtResource("1_sheet")
 region_enabled = true
 region_rect = Rect2(0, 0, 32, 32)
 
+[node name="Hitbox" type="Area2D" parent="Player"]
+
+[node name="Shape" type="CollisionShape2D" parent="Player/Hitbox"]
+position = Vector2(0, 0.5)
+shape = SubResource("1_playerbox")
+
 [node name="Floor1" type="Sprite2D" parent="."]
-position = Vector2(48, 206)
+position = Vector2(16, 224)
 texture = ExtResource("1_sheet")
 region_enabled = true
 region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
 
 [node name="Floor2" type="Sprite2D" parent="."]
-position = Vector2(80, 206)
-texture = ExtResource("1_sheet")
-region_enabled = true
-region_rect = Rect2(32, 32, 32, 32)
-
-[node name="Floor3" type="Sprite2D" parent="."]
-position = Vector2(112, 206)
+position = Vector2(48, 224)
 texture = ExtResource("1_sheet")
 region_enabled = true
 region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
+
+[node name="Floor3" type="Sprite2D" parent="."]
+position = Vector2(80, 224)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
 
 [node name="Floor4" type="Sprite2D" parent="."]
-position = Vector2(208, 206)
+position = Vector2(112, 224)
 texture = ExtResource("1_sheet")
 region_enabled = true
-region_rect = Rect2(32, 32, 32, 32)
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
 
-[node name="Ledge" type="Sprite2D" parent="."]
-position = Vector2(144, 76)
+[node name="Floor5" type="Sprite2D" parent="."]
+position = Vector2(144, 224)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
+
+[node name="Floor6" type="Sprite2D" parent="."]
+position = Vector2(208, 224)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
+
+[node name="Floor7" type="Sprite2D" parent="."]
+position = Vector2(240, 224)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
+
+[node name="Floor8" type="Sprite2D" parent="."]
+position = Vector2(272, 224)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
+
+[node name="Floor9" type="Sprite2D" parent="."]
+position = Vector2(304, 224)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(0, 32, 32, 32)
+metadata/solid = true
+
+[node name="Platform1" type="Sprite2D" parent="."]
+position = Vector2(80, 192)
 texture = ExtResource("1_sheet")
 region_enabled = true
 region_rect = Rect2(32, 32, 32, 32)
+metadata/solid = true
+
+[node name="Platform2" type="Sprite2D" parent="."]
+position = Vector2(112, 160)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+metadata/solid = true
+
+[node name="Platform3" type="Sprite2D" parent="."]
+position = Vector2(144, 160)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+metadata/solid = true
+
+[node name="Platform4" type="Sprite2D" parent="."]
+position = Vector2(240, 192)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+metadata/solid = true
+
+[node name="Platform5" type="Sprite2D" parent="."]
+position = Vector2(272, 160)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+metadata/solid = true
+
+[node name="Platform6" type="Sprite2D" parent="."]
+position = Vector2(304, 128)
+texture = ExtResource("1_sheet")
+region_enabled = true
+region_rect = Rect2(32, 32, 32, 32)
+metadata/solid = true

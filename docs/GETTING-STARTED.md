@@ -157,15 +157,52 @@ Anything else -- a sphere, an imported model -- is exported as triangles padded
 into degenerate quads. It draws, but it wastes GPU time and gets flat per-face
 lighting. Real triangle support is a known gap; see `docs/ROADMAP.md`.
 
-Also not yet supported, and worth knowing before you build something around them:
+Worth knowing before you build something around it:
 
-- **No textures.** Everything is flat-lit Gouraud.
-- **No runtime camera.** The viewpoint is baked at export time and cannot move.
 - **Compound rotations are approximate.** Godot and the PS1's `RotMatrix` use
   different Euler orders. A rotation about one axis is exact; combining two drifts.
 - **Watch the budget.** The exporter warns past ~256 vertices per mesh or ~900
   quads total. Those are where it stops being plausible on real hardware, not
   hard limits.
+
+### The Neon Coffee dock
+
+The plugin adds a dock on the right, and it is the whole loop without leaving
+the editor:
+
+| | |
+|---|---|
+| **EXPORT TO NC** | Write `../scene.json`. |
+| **EXPORT + BUILD** | ...then compile it. |
+| **EXPORT + BUILD + RUN** | ...then boot it in DuckStation. |
+| **CHECK BUDGETS** | `ncc check`, in the dock. |
+
+`ncc` output lands in the dock's OUTPUT pane, so a texture that is too big is
+something you find out about in the editor rather than in a terminal you were
+not looking at.
+
+Two buttons set the flags the runtime cares about on whatever `Sprite2D` nodes
+you have selected:
+
+- **MARK SOLID** — the sprite becomes ground, a platform or a wall.
+- **MARK FIXED** — the sprite ignores screen shake. Panels and HUD.
+
+They are stored as node metadata, so any `Sprite2D` works, including ones from a
+scene you already had.
+
+For a **collision box** that is not the whole cell — which is almost always what
+a character wants — add an `Area2D` with a `CollisionShape2D` and a
+`RectangleShape2D` under the sprite, and drag it to fit. The exporter reads it.
+
+### Making Godot look like the rest of it
+
+**Project > Tools > Neon Coffee: apply editor theme** restyles the editor to
+match NC Studio: the same palette, monospace throughout, square corners.
+
+It writes Godot's own editor settings, so it applies to **every** Godot project
+on the machine, not just this one — that is how Godot stores them. The previous
+values are saved first, and **Neon Coffee: restore Godot theme** puts them back
+exactly.
 
 ## 3b. Textures and text
 
@@ -245,6 +282,10 @@ the console exactly, and Godot's 2D origin is the top-left with +Y down -- the
 same as the PS1 screen -- so positions map across with no conversion. Lay out
 `Sprite2D` nodes, use **region** to pick a frame from the sheet, and press
 Export to NC.
+
+Select the ground and platforms and press **MARK SOLID** in the dock, and they
+become collision for `physics_step()`. See docs/SCRIPTING.md for the physics
+calls, and LIMITS.md for what the collision does and does not do.
 
 ### Debug and release
 
