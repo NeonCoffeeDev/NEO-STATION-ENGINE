@@ -160,6 +160,13 @@ def style_ttk(root):
     style.map("TEntry", bordercolor=[("focus", AMBER)])
 
     style.configure("TFrame", background=PANEL)
+    style.configure("Treeview", background=SUNKEN, fieldbackground=SUNKEN,
+                    foreground=FG, rowheight=24, bordercolor=BORDER)
+    style.map("Treeview", background=[("selected", AMBER)],
+              foreground=[("selected", BG)])
+    style.configure("Treeview.Heading", background=PANEL_HI, foreground=CYAN,
+                    relief="flat")
+    style.map("Treeview.Heading", background=[("active", BORDER_HI)])
     style.configure("TLabel", background=PANEL, foreground=FG, font=UI)
     style.configure("TLabelframe", background=PANEL, bordercolor=BORDER)
     style.configure("TLabelframe.Label", background=PANEL, foreground=CYAN, font=UI_BOLD)

@@ -9,6 +9,7 @@ from ncc.build import project_meta
 from ncc import eventflow, ncscript, ps2flow, flowkits
 
 class FlowPanel(tk.Frame):
+    filename = "event-flow.json"
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
         self.group=self; self.project=None; self.nodes=[]; self.edges=[]
@@ -40,7 +41,7 @@ class FlowPanel(tk.Frame):
         self.enabled=False
         self.project=project; self.nodes=[];self.edges=[];self.selected=None;self.source=None;self.readonly=False
         if project:
-            self.target=project_meta(project)['target']; p=Path(project)/'event-flow.json'
+            self.target=project_meta(project)['target']; p=Path(project)/self.filename
             try:
                 if p.exists():
                     d=json.loads(p.read_text())
@@ -125,7 +126,7 @@ class FlowPanel(tk.Frame):
 
     def save(self):
         if not self.project or self.readonly:return
-        p=Path(self.project)/'event-flow.json';tmp=p.with_suffix('.json.tmp')
+        p=Path(self.project)/self.filename;tmp=p.with_suffix('.json.tmp')
         tmp.write_text(json.dumps(dict(version=1,target=self.target,status='enabled' if getattr(self,'enabled',False) else 'draft',nodes=self.nodes,edges=self.edges),indent=2)+'\n');tmp.replace(p)
 
     def disable(self):

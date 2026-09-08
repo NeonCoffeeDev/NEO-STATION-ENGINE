@@ -31,6 +31,8 @@ from roompanel import RoomPanel
 from kitpanel import KitPanel
 from flowpanel import FlowPanel
 from assetpanel import AssetPanel
+from structurepanel import StructurePanel
+from viewportpanel import ViewportPanel
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -383,7 +385,7 @@ class Studio:
         strip.pack(fill="x")
         self.tabs = {}
         for key in self.TAB_ORDER:
-            lb = tk.Label(topstrip if key in ("room", "flow") else strip, text="  %s  " % self.TAB_LABELS[key], bg=PANEL,
+            lb = tk.Label(topstrip if key in ("room", "flow", "structure", "viewport") else strip, text="  %s  " % self.TAB_LABELS[key], bg=PANEL,
                           fg=DIM, font=UI_BOLD, pady=4, cursor="hand2")
             lb.pack(side="left", padx=(0, 2))
             lb.bind("<Button-1>", lambda _e, k=key: self.show_tab(k))
@@ -419,6 +421,8 @@ class Studio:
         self.design_panel = DesignPanel(self.panes, self.log, self.open_godot)
         self.room_panel = RoomPanel(self.main_panes, self.log)
         self.flow_panel = FlowPanel(self.main_panes)
+        self.structure_panel = StructurePanel(self.main_panes)
+        self.viewport_panel = ViewportPanel(self.main_panes)
         self.asset_panel = AssetPanel(self.panes)
         self.kit_panel = KitPanel(self.panes)
 
@@ -472,18 +476,22 @@ class Studio:
     def show_tab(self, key):
         self.active_tab = key
         for k, lb in self.tabs.items():
-            if (k in ("room", "flow")) != (key in ("room", "flow")):
+            if (k in ("room", "flow", "structure", "viewport")) != (key in ("room", "flow", "structure", "viewport")):
                 continue
             on = k == key
             lb.configure(bg=PANEL_HI if on else PANEL, fg=AMBER if on else DIM)
         for k, w in (("console", self.text), ("tty", self.tty),
-                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel), ("kits", self.kit_panel), ("flow", self.flow_panel), ("assets", self.asset_panel)):
-            if (k in ("room", "flow")) != (key in ("room", "flow")):
+                     ("script", self.editor), ("scene", self.scene_panel), ("design", self.design_panel), ("room", self.room_panel), ("kits", self.kit_panel), ("flow", self.flow_panel), ("assets", self.asset_panel), ("structure", self.structure_panel), ("viewport", self.viewport_panel)):
+            if (k in ("room", "flow", "structure", "viewport")) != (key in ("room", "flow", "structure", "viewport")):
                 continue
             if k == key:
                 w.group.pack(fill="both", expand=True)
             else:
                 w.group.pack_forget()
+        if key == "structure":
+            self.structure_panel.load(self.selected_project())
+        if key == "viewport":
+            self.viewport_panel.load(self.selected_project())
         if key == "assets":
             self.asset_panel.load(self.selected_project())
         if key == "flow":
@@ -506,11 +514,11 @@ class Studio:
 
     # Which console each tab belongs to. ROOM and CONSOLE are common ground;
     # everything else is specific to one machine's toolchain.
-    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room", "kits", "flow", "assets")
+    TAB_ORDER = ("console", "tty", "script", "scene", "design", "room", "kits", "flow", "assets", "structure", "viewport")
     TAB_LABELS = {"console": "CONSOLE", "tty": "PS1 TTY", "script": "SCRIPT",
-                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM", "kits": "KITS", "flow": "EVENTS", "assets": "ASSETS"}
+                  "scene": "SCENE", "design": "DESIGN", "room": "ROOM", "kits": "KITS", "flow": "EVENTS", "assets": "ASSETS", "structure": "GAME FLOW", "viewport": "VIEWPORT"}
     TAB_TARGETS = {"console": ("ps1", "ps2"), "tty": ("ps1",), "script": ("ps1",),
-                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2"), "flow": ("ps1", "ps2"), "assets": ("ps1", "ps2")}
+                   "scene": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2"), "flow": ("ps1", "ps2"), "assets": ("ps1", "ps2"), "structure": ("ps1", "ps2"), "viewport": ("ps1", "ps2")}
 
     def set_mode(self, key):
         """Filter the manager down to one console, or open it up to both.
@@ -654,6 +662,8 @@ class Studio:
         self.kit_panel.load(p)
         self.flow_panel.load(p)
         self.asset_panel.load(p)
+        self.structure_panel.load(p)
+        self.viewport_panel.load(p)
         self.sync_editor()
         if getattr(self, "room_panel", None):
             self.room_panel.load(p)
@@ -732,6 +742,8 @@ class Studio:
         self.kit_panel.load(p)
         self.flow_panel.load(p)
         self.asset_panel.load(p)
+        self.structure_panel.load(p)
+        self.viewport_panel.load(p)
         self.sync_editor()
         if self.editor.path != path:
             return

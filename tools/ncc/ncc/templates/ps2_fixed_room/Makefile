@@ -23,4 +23,4 @@ clean:
 include $(PS2SDK)/samples/Makefile.pref
 include $(PS2SDK)/samples/Makefile.eeglobal
 
-src/main.o: src/nc_events.h
+src/main.o: src/nc_events.h src/nc_room_layout.h

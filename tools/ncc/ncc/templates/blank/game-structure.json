@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "target": "ps1",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "Initialize",
+      "value": "Target: ps1",
+      "x": 30,
+      "y": 30
+    },
+    {
+      "id": 2,
+      "kind": "Splash",
+      "value": "Disclaimer (planned)",
+      "x": 220,
+      "y": 30
+    },
+    {
+      "id": 3,
+      "kind": "Menu",
+      "value": "Entry / menu (planned)",
+      "x": 410,
+      "y": 30
+    },
+    {
+      "id": 4,
+      "kind": "Play",
+      "value": "blank",
+      "x": 30,
+      "y": 130
+    },
+    {
+      "id": 5,
+      "kind": "Results",
+      "value": "Outcome (planned)",
+      "x": 220,
+      "y": 130
+    },
+    {
+      "id": 6,
+      "kind": "Ending",
+      "value": "Restart / exit (planned)",
+      "x": 410,
+      "y": 130
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      6
+    ]
+  ]
+}

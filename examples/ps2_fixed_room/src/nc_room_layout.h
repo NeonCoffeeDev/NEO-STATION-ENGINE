@@ -1,0 +1,8 @@
+/* Generated from room-layout.json. */
+#define ROOM_PLAYER_X -2.00000000f
+#define ROOM_PLAYER_Z 0.00000000f
+#define ROOM_KEY_X -2.00000000f
+#define ROOM_KEY_Z 1.50000000f
+#define ROOM_DOOR_X 2.00000000f
+#define ROOM_DOOR_Z 0.00000000f
+#define ROOM_CAMERA_YAW {0.45000000f, -0.65000000f, 0.00000000f}

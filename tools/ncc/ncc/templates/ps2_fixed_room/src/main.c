@@ -101,7 +101,8 @@ static void init_screen(framebuffer_t *frame, zbuffer_t *z, packet_t *packet)
 
 /* Object animation and fixed-camera adapter. Wireframe geometry is intentional:
  * no hidden-surface or skeletal-animation support is implied by this test. */
-static float player_x=-2, player_z=0, door_angle=0;
+#include "nc_room_layout.h"
+static float player_x=ROOM_PLAYER_X, player_z=ROOM_PLAYER_Z, door_angle=0;
 static int camera_id=0, has_key=0, door_open=0, won=0;
 static float move_start_x, move_start_z, move_goal_x, move_goal_z;
 static int move_frame, move_duration;
@@ -113,15 +114,15 @@ static void nc_move_to(float x, float z, int frames) {
 static void nc_action(int action, int value) {
     if(action==3) {move_duration=0;nc_move_arrived=0;}
     if(action==0) camera_id=value;
-    if(action==2) {nc_move_arrived=0;move_duration=0;player_x=-2;player_z=0;camera_id=0;has_key=door_open=won=0;door_angle=0;}
+    if(action==2) {nc_move_arrived=0;move_duration=0;player_x=ROOM_PLAYER_X;player_z=ROOM_PLAYER_Z;camera_id=0;has_key=door_open=won=0;door_angle=0;}
     if(action==1) {
-        if(!has_key && fabsf(player_x+2)<0.8f && fabsf(player_z-1.5f)<0.8f) has_key=1;
-        if(has_key && fabsf(player_x-2)<0.9f && fabsf(player_z)<1.0f) door_open=1;
+        if(!has_key && fabsf(player_x-ROOM_KEY_X)<0.8f && fabsf(player_z-ROOM_KEY_Z)<0.8f) has_key=1;
+        if(has_key && fabsf(player_x-ROOM_DOOR_X)<0.9f && fabsf(player_z-ROOM_DOOR_Z)<1.0f) door_open=1;
     }
 }
 #include "nc_events.h"
 static int project_point(float x,float y,float z,float *sx,float *sy) {
-    static const float yaw[3]={0.45f,-0.65f,0.0f};
+    static const float yaw[3]=ROOM_CAMERA_YAW;
     float a=yaw[camera_id],rx=x*cosf(a)+z*sinf(a),rz=-x*sinf(a)+z*cosf(a);
     float pitch=0.5f,ry=y*cosf(pitch)-rz*sinf(pitch);
     float depth=y*sinf(pitch)+rz*cosf(pitch)+10;
@@ -174,7 +175,7 @@ int main(void) {
         zone=player_x>0?1:0;
         nc_events(0,pressed,zone!=previous_zone?zone:-1);previous_zone=zone;
         if(door_open&&door_angle<1.5f)door_angle+=0.025f;
-        if(door_angle>1.4f&&player_x>2.7f&&fabsf(player_z)<0.6f)won=1;
+        if(door_angle>1.4f&&player_x>ROOM_DOOR_X+0.7f&&fabsf(player_z-ROOM_DOOR_Z)<0.6f)won=1;
         /* Wait before drawing into the single displayed buffer. A future
          * textured renderer should use explicit double buffering. */
         graph_wait_vsync();
@@ -182,8 +183,8 @@ int main(void) {
         q=draw_clear(q,0,OFFSET_X,OFFSET_Y,frame.width,frame.height,won?20:CLEAR_R,won?60:CLEAR_G,CLEAR_B);
         q=wire(q,0,-0.5f,0,3.2f,0.02f,2.2f,0,0);
         q=wire(q,player_x,moving?0.05f*sinf(tick*0.3f):0,player_z,0.22f,0.5f,0.22f,0,2);
-        if(!has_key)q=wire(q,-2,0,1.5f,0.15f,0.15f,0.15f,tick*0.03f,1);
-        q=wire(q,2,0.3f,0,0.08f,0.8f,0.65f,door_angle,has_key?2:3);
+        if(!has_key)q=wire(q,ROOM_KEY_X,0,ROOM_KEY_Z,0.15f,0.15f,0.15f,tick*0.03f,1);
+        q=wire(q,ROOM_DOOR_X,0.3f,ROOM_DOOR_Z,0.08f,0.8f,0.65f,door_angle,has_key?2:3);
         q=draw_finish(q);dma_wait_fast();dma_channel_send_normal(DMA_CHANNEL_GIF,packet->data,q-packet->data,0,0);draw_wait_finish();tick++;
     }
 }

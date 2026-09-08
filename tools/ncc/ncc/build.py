@@ -439,6 +439,12 @@ def _build_ps2(src):
     fragile part of the toolchain in our hands for no gain.
     """
     name = os.path.basename(src)
+    if project_meta(src).get("event_adapter") == "fixed_room_v1":
+        from . import roomlayout
+        try:
+            roomlayout.compile_project(src)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise SystemExit(f"ncc: room-layout.json -- {exc}")
     print(f"Building {name}  [PS2]")
     from .vn import compile_content
     try:
