@@ -1,11 +1,17 @@
 /* Generated PS2 fixed-room events. Do not edit. */
 static void nc_events(int start, unsigned int pressed, int zone) {
     (void)start; (void)pressed; (void)zone;
+    static unsigned int tick;
+    if (start) tick = 0; else if (tick < 0xffffffffu) tick++;
+    static unsigned int next_15;
+    if (start) next_15 = 0;
     if (start) {
         nc_action(2, 0);
     }
     if (pressed & PAD_CROSS) {
+        if (tick >= next_15) { next_15 = tick + 20;
         nc_action(1, 0);
+        }
     }
     if (pressed & PAD_START) {
         nc_action(2, 0);

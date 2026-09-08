@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from theme import BG, FG, CYAN, AMBER, Button
 from ncc.build import project_meta
-from ncc import eventflow, ncscript, ps2flow
+from ncc import eventflow, ncscript, ps2flow, flowkits
 
 class FlowPanel(tk.Frame):
     def __init__(self, parent):
@@ -17,6 +17,10 @@ class FlowPanel(tk.Frame):
         self.kind.current(0); self.kind.pack(side='left')
         for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('SAVE',self.save),('ENABLE',self.enable),('DRAFT',self.disable)]:
             Button(bar,label,fn,CYAN).pack(side='left',padx=2)
+        kitbar=tk.Frame(self,bg=BG);kitbar.pack(fill='x')
+        self.kit_choice=ttk.Combobox(kitbar,state='readonly',width=34)
+        self.kit_choice.pack(side='left')
+        Button(kitbar,'INSERT KIT',self.insert_kit,CYAN).pack(side='left',padx=4)
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=850)
         self.note.pack(fill='x')
         self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
@@ -31,6 +35,7 @@ class FlowPanel(tk.Frame):
 
     def load(self,project):
         if self.project==project:return
+        self.kit_choice.set('');self.kit_choice['values']=[]
         self.enabled=False
         self.project=project; self.nodes=[];self.edges=[];self.selected=None;self.source=None;self.readonly=False
         if project:
@@ -47,10 +52,12 @@ class FlowPanel(tk.Frame):
                 messagebox.showerror('Flow',str(e),parent=self)
         if project:
             meta=project_meta(project)
+            self.kit_choice['values']=list(flowkits.available(meta))
+            if self.kit_choice['values']:self.kit_choice.current(0)
             if self.target=='ps1':
                 kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect']
             elif meta.get('event_adapter')=='fixed_room_v1':
-                kinds=['On start','On button','On zone','Set camera','Interact','Reset game']
+                kinds=['On start','On button','On zone','After frames','Every frames','Once','Cooldown','Set camera','Interact','Reset game']
             else:
                 kinds=['On start','On button']
             self.kind['values']=kinds;self.kind.current(0)
@@ -126,3 +133,12 @@ class FlowPanel(tk.Frame):
             self.enabled=False;self.save()
             messagebox.showerror('Cannot enable flow',str(exc),parent=self);return
         messagebox.showinfo('Flow enabled','Events will run on the next build for this project. Authored script was not changed.',parent=self)
+
+    def insert_kit(self):
+        if not self.project or self.readonly:return
+        recipe=flowkits.available(project_meta(self.project)).get(self.kit_choice.get())
+        if not recipe:return
+        flowkits.insert(self.nodes,self.edges,recipe)
+        self.enabled=False
+        self.save();self.draw();self.canvas.yview_moveto(1.0)
+        self.note.configure(text='Kit inserted as a DRAFT. Edit parameters and check for duplicate input handlers, then ENABLE. Existing nodes are preserved.')

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "target": "ps1",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On button",
+      "value": "TRIANGLE",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "Play effect",
+      "value": "0",
+      "x": 210,
+      "y": 20
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ]
+  ]
+}

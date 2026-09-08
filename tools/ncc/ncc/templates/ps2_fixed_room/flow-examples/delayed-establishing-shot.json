@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "After frames",
+      "value": "180",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "Set camera",
+      "value": "2",
+      "x": 210,
+      "y": 20
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ]
+  ]
+}

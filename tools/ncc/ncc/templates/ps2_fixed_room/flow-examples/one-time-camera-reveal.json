@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On zone",
+      "value": "1",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "Once",
+      "value": "",
+      "x": 210,
+      "y": 20
+    },
+    {
+      "id": 3,
+      "kind": "Set camera",
+      "value": "1",
+      "x": 400,
+      "y": 20
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ]
+  ]
+}
