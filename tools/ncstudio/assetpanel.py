@@ -38,7 +38,7 @@ class AssetPanel(tk.Frame):
             for name in sorted(files):
                 p=Path(folder)/name
                 if self.search.get().lower() not in p.relative_to(root).as_posix().lower():continue
-                if p.suffix.lower() not in ('.png','.jpg','.jpeg','.wav','.ogg','.mp3','.tim','.obj','.gltf','.glb','.ncs','.tscn'):continue
+                if p.suffix.lower() not in ('.png','.jpg','.jpeg','.wav','.ogg','.mp3','.tim','.obj','.gltf','.glb','.ncs','.tscn','.json','.md'):continue
                 try: size=p.stat().st_size
                 except OSError:continue
                 item=self.tree.insert('', 'end',text=p.relative_to(root).as_posix(),values=(p.suffix,round(size/1024,1)))

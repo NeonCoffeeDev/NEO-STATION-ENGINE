@@ -7,12 +7,18 @@ from ncc import flowkits
 
 class StructurePanel(FlowPanel):
     filename='game-structure.json'
+    def __init__(self,parent,on_open=None):
+        super().__init__(parent);self.on_open=on_open
+        self.canvas.bind('<Double-Button-1>',lambda e:self.open_events())
+    def open_events(self):
+        stage=next((n for n in self.nodes if n['id']==self.selected),None)
+        if stage and self.on_open:self.on_open(stage)
     def load(self,project):
         super().load(project)
         self.kind['values']=['Initialize','Splash','Intro','Menu','Load room','Play','Results','Ending']
         self.kind.current(0)
         self.kit_choice['values']=['Project learning map'];self.kit_choice.current(0)
-        self.note.configure(text='GAME FLOW: design/reference map, not runtime routing. INSERT KIT creates a starter using this project’s rooms. Double-click nodes to label them; drag/connect to plan progression.')
+        self.note.configure(text='GAME FLOW: design/reference map, not runtime routing. INSERT KIT creates a starter using this project’s rooms. Double-click opens event chunks; EDIT changes labels; drag/connect to plan progression.')
     def enable(self):
         messagebox.showinfo('Game structure','This is a design map. Use EVENTS for executable actions. Game-state routing is not generated from this map yet.',parent=self)
     def save(self):

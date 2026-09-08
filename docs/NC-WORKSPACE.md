@@ -41,3 +41,20 @@ channel count. Reference-safe renaming and replacement are still pending.
 
 Viewport controls: mouse wheel zooms, FIT restores framing, POSITION edits exact
 coordinates, and UNDO restores up to 40 snapshots in the current project session.
+
+## Structure drill-down and event editing
+
+Double-click an Initialize stage to inspect startup chains, or the first Play
+stage to inspect existing gameplay chains. Other stages start empty unless you
+add nodes to their editing group. ALL EVENTS restores the complete graph;
+GAME FLOW returns to the structure map. EDIT changes the stage label.
+
+Groups organize editing only: the compiler still executes the project's enabled
+root events globally. A Menu group is not a menu-active condition. No runtime
+scene scope is inferred from the structure diagram.
+
+DUPLICATE copies a selected node without connections; UNDO restores up to 40
+snapshots within the current project session. Adding/editing/connecting nodes
+returns executable graphs to Draft so changes must be enabled again.
+PROJECT WALKTHROUGH opens the selected example's guide inside Studio. New
+projects inherit their template guide and authoring/reference files.

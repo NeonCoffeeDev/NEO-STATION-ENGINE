@@ -288,6 +288,7 @@ class Studio:
 
         self.b_godot = Button(body, "EDIT SCENE IN GODOT", self.open_godot, GREEN)
         self.b_godot.pack(fill="x", pady=(4, 0))
+        Button(body, "PROJECT WALKTHROUGH", self.open_walkthrough, CYAN).pack(fill="x", pady=(4, 0))
 
     def _build_assets(self, parent):
         g = group(parent, "add asset", CYAN)
@@ -421,7 +422,8 @@ class Studio:
         self.design_panel = DesignPanel(self.panes, self.log, self.open_godot)
         self.room_panel = RoomPanel(self.main_panes, self.log)
         self.flow_panel = FlowPanel(self.main_panes)
-        self.structure_panel = StructurePanel(self.main_panes)
+        self.flow_panel.on_back = lambda: self.show_tab("structure")
+        self.structure_panel = StructurePanel(self.main_panes,self.open_stage_events)
         self.viewport_panel = ViewportPanel(self.main_panes)
         self.asset_panel = AssetPanel(self.panes)
         self.kit_panel = KitPanel(self.panes)
@@ -722,6 +724,35 @@ class Studio:
             self.log("could not open %s: %s" % (path, err), RED)
 
     # ---- open buttons ---------------------------------------------------
+
+    def open_stage_events(self,stage):
+        self.flow_panel.load(self.selected_project())
+        nodes=self.flow_panel.nodes
+        # Existing graphs have no stage groups: expose boot at Initialize and
+        # gameplay roots at the first Play stage, without inventing runtime scope.
+        explicit=[n['id'] for n in nodes if n.get('section_id')==stage['id']]
+        first_play=next((n['id'] for n in self.structure_panel.nodes if n['kind']=='Play'),None)
+        roots=explicit
+        if stage['kind']=='Initialize':
+            roots += [n['id'] for n in nodes if n['kind']=='On start' and n.get('section_id') is None]
+        elif stage['id']==first_play:
+            roots += [n['id'] for n in nodes if n.get('section_id') is None and (n['kind'].startswith('On ') or n['kind'] in ('After frames','Every frames')) and n['kind']!='On start']
+        self.show_tab('flow');self.flow_panel.focus_stage(stage,roots)
+    def open_walkthrough(self):
+        project = self.selected_project()
+        if not project:return
+        path = os.path.join(project, "WORKFLOW.md")
+        try:
+            with open(path, encoding="utf-8") as source:content=source.read()
+        except OSError:
+            content="This project has no WORKFLOW.md yet. Existing projects are preserved; new templates include their walkthrough."
+        win=tk.Toplevel(self.root);win.title(os.path.basename(project)+" — Walkthrough")
+        win.geometry("780x600");win.configure(bg=BG)
+        text=tk.Text(win,bg=BG,fg=FG,insertbackground=AMBER,wrap="word",font=MONO_SM,padx=16,pady=16)
+        scroll=tk.Scrollbar(win,command=text.yview);scroll.pack(side="right",fill="y")
+        text.configure(yscrollcommand=scroll.set);text.pack(fill="both",expand=True)
+        text.insert("1.0",content);text.configure(state="disabled")
+
 
     def open_script(self):
         """script.ncs -- the game logic, for projects that have one.

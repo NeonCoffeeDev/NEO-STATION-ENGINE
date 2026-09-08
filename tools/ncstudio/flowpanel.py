@@ -1,5 +1,6 @@
 """Console-scoped visual flow drafts; deliberately not an execution backend."""
 import json
+import copy
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
@@ -14,6 +15,7 @@ class FlowPanel(tk.Frame):
         super().__init__(parent, bg=BG)
         self.group=self; self.project=None; self.nodes=[]; self.edges=[]
         self.selected=None; self.source=None; self.readonly=False
+        self.history=[];self.focus_roots=None;self.section_id=None;self.enabled=False
         bar=tk.Frame(self,bg=BG); bar.pack(fill='x')
         self.kind=ttk.Combobox(bar,state='readonly',values=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Run kit'])
         self.kind.current(0); self.kind.pack(side='left')
@@ -23,6 +25,10 @@ class FlowPanel(tk.Frame):
         self.kit_choice=ttk.Combobox(kitbar,state='readonly',width=34)
         self.kit_choice.pack(side='left')
         Button(kitbar,'INSERT KIT',self.insert_kit,CYAN).pack(side='left',padx=4)
+        Button(kitbar,'DUPLICATE',self.duplicate,CYAN).pack(side='left',padx=2)
+        Button(kitbar,'UNDO',self.undo,CYAN).pack(side='left',padx=2)
+        Button(kitbar,'ALL EVENTS',self.show_all,CYAN).pack(side='left',padx=2)
+        Button(kitbar,'GAME FLOW',lambda:getattr(self,'on_back',lambda:None)(),CYAN).pack(side='left',padx=2)
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=850)
         self.note.pack(fill='x')
         self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
@@ -37,6 +43,7 @@ class FlowPanel(tk.Frame):
 
     def load(self,project):
         if self.project==project:return
+        self.history=[];self.focus_roots=None;self.section_id=None
         self.kit_choice.set('');self.kit_choice['values']=[]
         self.enabled=False
         self.project=project; self.nodes=[];self.edges=[];self.selected=None;self.source=None;self.readonly=False
@@ -69,10 +76,12 @@ class FlowPanel(tk.Frame):
     def draw(self):
         self.canvas.configure(scrollregion=(0,0,1500,max([n.get('y',0)+150 for n in self.nodes],default=700)))
         c=self.canvas;c.delete('all');byid={n['id']:n for n in self.nodes}
+        visible=self.visible_ids()
         for a,b in self.edges:
-            if a in byid and b in byid:
+            if a in visible and b in visible and a in byid and b in byid:
                 x,y=byid[a],byid[b];c.create_line(x['x']+160,x['y']+30,y['x'],y['y']+30,arrow='last',fill=CYAN,width=2)
         for n in self.nodes:
+            if n['id'] not in visible:continue
             tag='node:'+str(n['id']);x=n['x'];y=n['y']
             c.create_rectangle(x,y,x+160,y+60,fill='#233139',outline=AMBER if n['id']==self.selected else CYAN,tags=tag)
             c.create_text(x+8,y+16,text=n['kind'],anchor='w',fill=CYAN,tags=tag)
@@ -80,10 +89,14 @@ class FlowPanel(tk.Frame):
 
     def add(self):
         if not self.project or self.readonly:return
+        self.checkpoint()
         i=max([n['id'] for n in self.nodes],default=0)+1
-        self.nodes.append(dict(id=i,kind=self.kind.get(),value='',x=30+(len(self.nodes)%3)*190,y=30+(len(self.nodes)//3)*90));self.draw();self.save()
+        self.nodes.append(dict(id=i,kind=self.kind.get(),value='',x=30+(len(self.nodes)%3)*190,y=30+(len(self.nodes)//3)*90,section_id=self.section_id))
+        if self.focus_roots is not None:self.focus_roots.append(i)
+        self.enabled=False;self.draw();self.save()
 
     def pick(self,e):
+        self.checkpoint()
         tags=self.canvas.gettags('current'); self.selected=next((int(t[5:]) for t in tags if t.startswith('node:')),None)
         if self.source is not None and self.selected is not None:
             if self.source==-1:
@@ -91,7 +104,7 @@ class FlowPanel(tk.Frame):
                 self.note.configure(text='Now click the destination node.')
             else:
                 edge=[self.source,self.selected]
-                if edge[0]!=edge[1] and edge not in self.edges:self.edges.append(edge)
+                if edge[0]!=edge[1] and edge not in self.edges:self.edges.append(edge);self.enabled=False
                 self.source=None;self.save()
         if self.selected is not None and self.source is None:
             n=next(n for n in self.nodes if n['id']==self.selected)
@@ -117,10 +130,11 @@ class FlowPanel(tk.Frame):
                 if n['kind']=='Move to':v=MoveDialog(self,n.get('value','')).result
                 elif n['kind'] in ('Set variable','Add variable','If equal','If at least'):v=VariableDialog(self,n['kind'],n.get('value','')).result
                 else:v=simpledialog.askstring(n['kind'],HELP.get(n['kind'],'Existing project object index:'),initialvalue=n.get('value',''),parent=self)
-                if v is not None:n['value']=v;self.draw();self.save()
+                if v is not None:self.checkpoint();n['value']=v;self.enabled=False;self.draw();self.save()
 
     def delete(self):
         if self.readonly:return
+        self.checkpoint();self.enabled=False
         self.nodes=[n for n in self.nodes if n['id']!=self.selected]
         self.edges=[e for e in self.edges if self.selected not in e];self.selected=None;self.draw();self.save()
 
@@ -149,13 +163,50 @@ class FlowPanel(tk.Frame):
         if not self.project or self.readonly:return
         recipe=flowkits.available(project_meta(self.project)).get(self.kit_choice.get())
         if not recipe:return
-        flowkits.insert(self.nodes,self.edges,recipe)
+        self.checkpoint()
+        added=flowkits.insert(self.nodes,self.edges,recipe)
+        for n in self.nodes:
+            if n['id'] in added:n['section_id']=self.section_id
+        if self.focus_roots is not None:self.focus_roots.extend(added)
         self.enabled=False
         self.save();self.draw();self.canvas.yview_moveto(1.0)
         self.note.configure(text='Kit inserted as a DRAFT. Edit parameters and check for duplicate input handlers, then ENABLE. Existing nodes are preserved.')
 
     def unlink(self):
         if self.readonly or self.selected is None:return
+        self.checkpoint()
         self.edges=[e for e in self.edges if self.selected not in e]
         self.enabled=False;self.draw();self.save()
         self.note.configure(text='Selected node disconnected. Reconnect and ENABLE when ready.')
+
+    def checkpoint(self):
+        self.history.append(copy.deepcopy((self.nodes,self.edges,self.enabled)))
+        self.history=self.history[-40:]
+    def undo(self):
+        if not self.history or self.readonly:return
+        self.nodes,self.edges,self.enabled=self.history.pop()
+        self.draw();self.save()
+    def duplicate(self):
+        if self.readonly or self.selected is None:return
+        original=next((n for n in self.nodes if n['id']==self.selected),None)
+        if not original:return
+        self.checkpoint();node=copy.deepcopy(original)
+        node['id']=max(n['id'] for n in self.nodes)+1;node['x']+=35;node['y']+=80
+        self.nodes.append(node);self.selected=node['id'];self.enabled=False
+        if self.focus_roots is not None:self.focus_roots.append(node['id'])
+        self.draw();self.save()
+        self.note.configure(text='Node duplicated without connections. Reconnect and ENABLE when ready.')
+    def visible_ids(self):
+        if self.focus_roots is None:return {n['id'] for n in self.nodes}
+        visible=set(self.focus_roots)
+        visible.update(n['id'] for n in self.nodes if n.get('section_id')==self.section_id)
+        while True:
+            expanded=visible|{b for a,b in self.edges if a in visible}
+            if expanded==visible:return visible
+            visible=expanded
+    def show_all(self):
+        self.focus_roots=None;self.section_id=None;self.draw()
+        self.note.configure(text='All project events. Stage groupings organize editing; execution remains global until state routing is implemented.')
+    def focus_stage(self,stage,roots):
+        self.section_id=stage['id'];self.focus_roots=list(roots);self.draw();self.canvas.yview_moveto(0)
+        self.note.configure(text='GAME FLOW / '+stage['kind']+' / '+stage.get('value','')+' — editing group only; events still execute globally. ALL EVENTS restores the full graph.')
