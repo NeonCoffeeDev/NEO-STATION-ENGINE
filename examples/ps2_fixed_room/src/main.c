@@ -105,13 +105,15 @@ static float player_x=-2, player_z=0, door_angle=0;
 static int camera_id=0, has_key=0, door_open=0, won=0;
 static float move_start_x, move_start_z, move_goal_x, move_goal_z;
 static int move_frame, move_duration;
+static int nc_move_arrived;
 static void nc_move_to(float x, float z, int frames) {
     move_start_x=player_x;move_start_z=player_z;
     move_goal_x=x;move_goal_z=z;move_frame=0;move_duration=frames;
 }
 static void nc_action(int action, int value) {
+    if(action==3) {move_duration=0;nc_move_arrived=0;}
     if(action==0) camera_id=value;
-    if(action==2) {move_duration=0;player_x=-2;player_z=0;camera_id=0;has_key=door_open=won=0;door_angle=0;}
+    if(action==2) {nc_move_arrived=0;move_duration=0;player_x=-2;player_z=0;camera_id=0;has_key=door_open=won=0;door_angle=0;}
     if(action==1) {
         if(!has_key && fabsf(player_x+2)<0.8f && fabsf(player_z-1.5f)<0.8f) has_key=1;
         if(has_key && fabsf(player_x-2)<0.9f && fabsf(player_z)<1.0f) door_open=1;
@@ -154,12 +156,13 @@ int main(void) {
         buttons=0;
         if((state==PAD_STATE_STABLE||state==PAD_STATE_FINDCTP1)&&padRead(0,0,&pad)) buttons=0xffff^pad.btns;
         pressed=buttons&~last;last=buttons;
+        nc_move_arrived=0;
         if (!won && move_duration>0) {
             float t=(float)(++move_frame)/(float)move_duration;
             player_x=move_start_x+(move_goal_x-move_start_x)*t;
             player_z=move_start_z+(move_goal_z-move_start_z)*t;
             moving=1;
-            if(move_frame>=move_duration) move_duration=0;
+            if(move_frame>=move_duration) {move_duration=0;nc_move_arrived=1;}
         } else if(!won) {
             if(buttons&PAD_LEFT){player_x-=0.045f;moving=1;}
             if(buttons&PAD_RIGHT){player_x+=0.045f;moving=1;}

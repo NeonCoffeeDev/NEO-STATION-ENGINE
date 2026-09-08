@@ -5,6 +5,8 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox
 
 HELP = {
+    'On arrival':'Fire once when the player completes a Move to. Cancellation does not fire it. No parameter.',
+    'Stop movement':'Cancel automatic movement and return control to the player. No parameter.',
     'Set variable':'Store a number: coins, 0. Names are shared within this graph; variables start at zero.',
     'Add variable':'Change a number: coins, 1 (or coins, -1). Values clamp to -32767..32767.',
     'If equal':'Continue only when the value matches: coins, 3. A false condition stops this branch.',
@@ -36,7 +38,7 @@ class MoveDialog(simpledialog.Dialog):
             tk.Label(master,text=label).grid(row=i,column=0,sticky='w')
             entry=tk.Entry(master);entry.insert(0,self.initial[i]);entry.grid(row=i,column=1)
             self.fields.append(entry)
-        tk.Label(master,text='Temporarily takes over D-pad movement.\nNext connected action runs immediately, not on arrival.').grid(row=3,column=0,columnspan=2)
+        tk.Label(master,text='Temporarily takes over D-pad movement.\nUse On arrival for actions that should wait for arrival.').grid(row=3,column=0,columnspan=2)
         return self.fields[0]
     def validate(self):
         try:

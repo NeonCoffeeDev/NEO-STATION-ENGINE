@@ -7,6 +7,8 @@ KITS = {
         'UI sound': [('On button','TRIANGLE'),('Play effect','0')],
     },
     'fixed_room_v1': {
+        'Interact on arrival': [('On arrival',''),('Interact','0')],
+        'Cancel automatic movement': [('On button','CIRCLE'),('Stop movement','0')],
         'Count three presses': [('On button','TRIANGLE'),('Add variable','presses, 1'),('If equal','presses, 3'),('Set camera','2')],
         'Initialize a score': [('On start',''),('Set variable','score, 0')],
         'Spend a token': [('On button','CIRCLE'),('If at least','tokens, 1'),('Add variable','tokens, -1'),('Interact','0')],

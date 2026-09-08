@@ -12,3 +12,6 @@ walk bob and door rotation. It is not a general inventory or skeletal animator.
 Wireframes have no occlusion or texture support. Hardware verification pending.
 
 SQUARE starts a 90-update walk to the key via the Move to event node.
+
+On arrival now attempts interaction automatically. Circle cancels Move to.
+Cancelling does not fire On arrival.

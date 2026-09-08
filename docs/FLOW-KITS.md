@@ -51,10 +51,13 @@ A new Move to replaces the previous destination from the current position.
 Reset game cancels movement. Bounds are X -3..3 and Z -2..2.
 
 This is not teleportation, pathfinding or collision avoidance. Following actions
-run immediately after starting movement, not upon arrival. Use it only in the
+run immediately after starting movement, not upon arrival. Use a separate On arrival event to wait for completion. Use it only in the
 updated fixed-room runtime; the compiler rejects older adapters missing the
 movement function. PS1 does not inherit this node.
 
 Select a node to read its help. CONNECT prompts for source then destination.
 UNLINK removes all connections touching the selected node and returns the graph
 to Draft. It does not delete the node. Reconnect and ENABLE before building.
+
+On arrival and Stop movement require the updated fixed-room runtime. Circle
+cancels movement in the example; Square moves to the key and then interacts.

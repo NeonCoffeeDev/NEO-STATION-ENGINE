@@ -41,4 +41,10 @@ static void nc_events(int start, unsigned int pressed, int zone) {
         nc_action(0, 2);
         }
     }
+    if (!start && nc_move_arrived) {
+        nc_action(1, 0);
+    }
+    if (pressed & PAD_CIRCLE) {
+        nc_action(3, 0);
+    }
 }

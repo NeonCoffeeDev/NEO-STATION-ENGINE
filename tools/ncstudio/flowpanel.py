@@ -58,7 +58,7 @@ class FlowPanel(tk.Frame):
             if self.target=='ps1':
                 kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect']
             elif meta.get('event_adapter')=='fixed_room_v1':
-                kinds=['On start','On button','On zone','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Set camera','Interact','Reset game']
+                kinds=['On start','On button','On zone','On arrival','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Stop movement','Set camera','Interact','Reset game']
             else:
                 kinds=['On start','On button']
             self.kind['values']=kinds;self.kind.current(0)

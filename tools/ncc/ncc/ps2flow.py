@@ -18,7 +18,7 @@ def compile_project(project):
     meta=json.loads((root/'nc.json').read_text())
     if meta.get('event_adapter')!='fixed_room_v1':
         raise ValueError('This PS2 project has no supported event adapter. Keep its graph as a draft.')
-    actions={'Set camera':(0,2),'Interact':(1,0),'Reset game':(2,0)}
+    actions={'Set camera':(0,2),'Interact':(1,0),'Reset game':(2,0),'Stop movement':(3,0)}
     nodes=doc['nodes'];lookup={n['id']:n for n in nodes}
     if len(nodes)>128 or len(lookup)!=len(nodes):raise ValueError('Too many nodes or duplicate IDs.')
     if any(type(i) is not int or i < 1 for i in lookup):raise ValueError('Node IDs must be positive integers.')
@@ -93,6 +93,8 @@ def compile_project(project):
                     output.append('        if (tick >= next_%d) { next_%d = tick + %d;'%(j,j,frames))
                 walk(j,stack|{i});output.append('        }');continue
             if n['kind'] not in actions:raise ValueError('Unsupported action: '+n['kind'])
+            if n['kind']=='Stop movement' and 'if(action==3)' not in (root/'src/main.c').read_text():
+                raise ValueError('Stop movement requires the updated fixed-room runtime.')
             opcode,limit=actions[n['kind']]
             value=int(n.get('value') or 0)
             if not 0<=value<=limit:raise ValueError('Invalid parameter for '+n['kind'])
@@ -101,6 +103,10 @@ def compile_project(project):
     for n in nodes:
         kind=n['kind']; value=n.get('value','')
         if kind=='On start':condition='start'
+        elif kind=='On arrival':
+            if 'static int nc_move_arrived;' not in (root/'src/main.c').read_text():
+                raise ValueError('On arrival requires the updated fixed-room runtime.')
+            condition='!start && nc_move_arrived'
         elif kind=='On button':
             button=value.upper().removeprefix('BTN_')
             if button not in BUTTONS:raise ValueError('Unsupported PS2 button.')

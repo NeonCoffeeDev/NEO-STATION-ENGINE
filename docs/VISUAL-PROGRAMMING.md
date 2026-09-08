@@ -41,7 +41,8 @@ prevent repeated triggers. Very large expanded graphs are rejected to bound
 generated code size. Cycles are not supported.
 
 Move to starts motion and returns immediately. A following action does not wait
-for arrival. Do not use Repeat to emulate waiting or animation. Arrival events,
-named restartable timers, general comparisons and debugging watches remain
-future work. ENABLE checks the graph before building; hardware behavior still
+for arrival. Connect a separate On arrival event to actions that should wait.
+Stop movement cancels motion without firing arrival. Do not use Repeat to emulate
+waiting or animation. Named restartable timers, general comparisons and debugging
+watches remain future work. ENABLE checks the graph before building; hardware behavior still
 needs testing after edits.
