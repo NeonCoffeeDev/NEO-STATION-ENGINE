@@ -28,4 +28,7 @@ static void nc_events(int start, unsigned int pressed, int zone) {
     if (zone == 1) {
         nc_action(0, 1);
     }
+    if (pressed & PAD_SQUARE) {
+        nc_move_to(-2.00000000f, 1.50000000f, 90);
+    }
 }

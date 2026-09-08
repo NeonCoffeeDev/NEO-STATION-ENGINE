@@ -4,6 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from theme import BG, FG, CYAN, AMBER, Button
+from nodeparams import HELP, MoveDialog
 from ncc.build import project_meta
 from ncc import eventflow, ncscript, ps2flow, flowkits
 
@@ -15,7 +16,7 @@ class FlowPanel(tk.Frame):
         bar=tk.Frame(self,bg=BG); bar.pack(fill='x')
         self.kind=ttk.Combobox(bar,state='readonly',values=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Run kit'])
         self.kind.current(0); self.kind.pack(side='left')
-        for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('SAVE',self.save),('ENABLE',self.enable),('DRAFT',self.disable)]:
+        for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('UNLINK',self.unlink),('SAVE',self.save),('ENABLE',self.enable),('DRAFT',self.disable)]:
             Button(bar,label,fn,CYAN).pack(side='left',padx=2)
         kitbar=tk.Frame(self,bg=BG);kitbar.pack(fill='x')
         self.kit_choice=ttk.Combobox(kitbar,state='readonly',width=34)
@@ -57,7 +58,7 @@ class FlowPanel(tk.Frame):
             if self.target=='ps1':
                 kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect']
             elif meta.get('event_adapter')=='fixed_room_v1':
-                kinds=['On start','On button','On zone','After frames','Every frames','Once','Cooldown','Set camera','Interact','Reset game']
+                kinds=['On start','On button','On zone','After frames','Every frames','Once','Cooldown','Move to','Set camera','Interact','Reset game']
             else:
                 kinds=['On start','On button']
             self.kind['values']=kinds;self.kind.current(0)
@@ -84,11 +85,16 @@ class FlowPanel(tk.Frame):
     def pick(self,e):
         tags=self.canvas.gettags('current'); self.selected=next((int(t[5:]) for t in tags if t.startswith('node:')),None)
         if self.source is not None and self.selected is not None:
-            if self.source==-1:self.source=self.selected
+            if self.source==-1:
+                self.source=self.selected
+                self.note.configure(text='Now click the destination node.')
             else:
                 edge=[self.source,self.selected]
                 if edge[0]!=edge[1] and edge not in self.edges:self.edges.append(edge)
                 self.source=None;self.save()
+        if self.selected is not None and self.source is None:
+            n=next(n for n in self.nodes if n['id']==self.selected)
+            self.note.configure(text=HELP.get(n['kind'],'Double-click to edit this node.') + ('  [ENABLED]' if self.enabled else '  [DRAFT]'))
         self.last=(self.canvas.canvasx(e.x),self.canvas.canvasy(e.y));self.draw()
 
     def drag(self,e):
@@ -99,13 +105,16 @@ class FlowPanel(tk.Frame):
         self.last=(self.canvas.canvasx(e.x),self.canvas.canvasy(e.y));self.draw()
 
     def connect(self):
-        if not self.readonly:self.source=-1
+        if not self.readonly:
+            self.source=-1
+            self.note.configure(text='CONNECT: click the source node, then the destination. UNLINK removes connections from the selected node.')
 
     def edit(self):
         if self.readonly:return
         for n in self.nodes:
             if n['id']==self.selected:
-                v=simpledialog.askstring(n['kind'],'Reference / parameter (draft):',initialvalue=n.get('value',''),parent=self)
+                if n['kind']=='Move to':v=MoveDialog(self,n.get('value','')).result
+                else:v=simpledialog.askstring(n['kind'],HELP.get(n['kind'],'Existing project object index:'),initialvalue=n.get('value',''),parent=self)
                 if v is not None:n['value']=v;self.draw();self.save()
 
     def delete(self):
@@ -142,3 +151,9 @@ class FlowPanel(tk.Frame):
         self.enabled=False
         self.save();self.draw();self.canvas.yview_moveto(1.0)
         self.note.configure(text='Kit inserted as a DRAFT. Edit parameters and check for duplicate input handlers, then ENABLE. Existing nodes are preserved.')
+
+    def unlink(self):
+        if self.readonly or self.selected is None:return
+        self.edges=[e for e in self.edges if self.selected not in e]
+        self.enabled=False;self.draw();self.save()
+        self.note.configure(text='Selected node disconnected. Reconnect and ENABLE when ready.')

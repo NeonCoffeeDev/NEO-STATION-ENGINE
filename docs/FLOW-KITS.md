@@ -41,3 +41,20 @@ PS1 support for its nodes.
 Runtime object spawning, general inventory layouts, animation graphs, branching
 conditions, reusable subgraph execution and reference-safe asset edits are not
 implemented by these kits. They are examples of the current executable subset.
+
+## Move to (PS2 fixed room)
+
+SQUARE -> Move to (-2, 1.5, 90) is included in the fixed-room example.
+Double-click Move to for separate X, Z and duration fields. The player moves
+linearly over that many updates; manual movement is suspended until arrival.
+A new Move to replaces the previous destination from the current position.
+Reset game cancels movement. Bounds are X -3..3 and Z -2..2.
+
+This is not teleportation, pathfinding or collision avoidance. Following actions
+run immediately after starting movement, not upon arrival. Use it only in the
+updated fixed-room runtime; the compiler rejects older adapters missing the
+movement function. PS1 does not inherit this node.
+
+Select a node to read its help. CONNECT prompts for source then destination.
+UNLINK removes all connections touching the selected node and returns the graph
+to Draft. It does not delete the node. Reconnect and ENABLE before building.

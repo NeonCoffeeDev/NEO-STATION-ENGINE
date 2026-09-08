@@ -1,5 +1,6 @@
 """PS2 flow compiler for explicitly integrated runtime adapters."""
 import json
+import math
 from pathlib import Path
 from .eventflow import BUTTONS
 
@@ -36,6 +37,16 @@ def compile_project(project):
         reached.add(i)
         for j in links[i]:
             n=lookup[j]
+            if n['kind']=='Move to':
+                if 'static void nc_move_to(' not in (root/'src/main.c').read_text():
+                    raise ValueError('Move to requires the updated fixed-room runtime. Create a new Fixed Camera Room project.')
+                parts=str(n.get('value','')).split(',')
+                if len(parts)!=3:raise ValueError('Move to needs X, Z, frames (example: 2, 0, 120).')
+                x,z=float(parts[0]),float(parts[1]);frames=int(parts[2])
+                if not math.isfinite(x) or not math.isfinite(z) or not (-3<=x<=3 and -2<=z<=2 and 1<=frames<=36000):
+                    raise ValueError('Move to: X -3..3, Z -2..2, frames 1..36000.')
+                output.append('        nc_move_to(%.8ff, %.8ff, %d);'%(x,z,frames))
+                walk(j,stack|{i});continue
             if n['kind'] in ('Once','Cooldown'):
                 if n['kind']=='Once':
                     output.append('        if (!used_%d) { used_%d = 1;'%(j,j))
@@ -65,7 +76,7 @@ def compile_project(project):
             v=int(value)
             if v not in (0,1):raise ValueError('Zone must be 0 or 1.')
             condition='zone == %d'%v
-        elif kind in actions or kind in ('Once','Cooldown'):continue
+        elif kind in actions or kind in ('Once','Cooldown','Move to'):continue
         else:raise ValueError('Unsupported PS2 node: '+kind)
         if incoming[n['id']]:raise ValueError('Events cannot have incoming links.')
         output.append('    if (%s) {'%condition);walk(n['id'],set());output.append('    }')

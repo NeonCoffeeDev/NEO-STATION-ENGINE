@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On button",
+      "value": "SQUARE",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "Move to",
+      "value": "-2, 1.5, 90",
+      "x": 210,
+      "y": 20
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ]
+  ]
+}

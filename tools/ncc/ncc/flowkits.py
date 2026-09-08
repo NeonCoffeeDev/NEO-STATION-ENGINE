@@ -7,6 +7,7 @@ KITS = {
         'UI sound': [('On button','TRIANGLE'),('Play effect','0')],
     },
     'fixed_room_v1': {
+        'Walk to the key': [('On button','SQUARE'),('Move to','-2, 1.5, 90')],
         'Interaction with cooldown': [('On button','CROSS'),('Cooldown','20'),('Interact','0')],
         'One-time camera reveal': [('On zone','1'),('Once',''),('Set camera','1')],
         'Delayed establishing shot': [('After frames','180'),('Set camera','2')],

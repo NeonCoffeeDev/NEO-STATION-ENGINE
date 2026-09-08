@@ -10,3 +10,5 @@ Set camera accepts 0..2; Interact and Reset game take 0.
 The adapter implements proximity checks, one inventory flag, key rotation,
 walk bob and door rotation. It is not a general inventory or skeletal animator.
 Wireframes have no occlusion or texture support. Hardware verification pending.
+
+SQUARE starts a 90-update walk to the key via the Move to event node.
