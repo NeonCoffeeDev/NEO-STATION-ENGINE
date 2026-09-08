@@ -1,0 +1,9 @@
+{
+  "name": "ps2_fixed_room",
+  "title": "PS2 Fixed Camera Room",
+  "target": "ps2",
+  "event_adapter": "fixed_room_v1",
+  "order": 11,
+  "description": "Camera zones, animated key and door, enabled PS2 event graph.",
+  "detail": "D-pad moves; X interacts; L1/R1 camera; START reset. Wireframe learning example, not skeletal animation."
+}

@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from theme import BG, FG, CYAN, AMBER, Button
 from ncc.build import project_meta
-from ncc import eventflow, ncscript
+from ncc import eventflow, ncscript, ps2flow
 
 class FlowPanel(tk.Frame):
     def __init__(self, parent):
@@ -15,11 +15,14 @@ class FlowPanel(tk.Frame):
         bar=tk.Frame(self,bg=BG); bar.pack(fill='x')
         self.kind=ttk.Combobox(bar,state='readonly',values=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Run kit'])
         self.kind.current(0); self.kind.pack(side='left')
-        for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('SAVE',self.save),('ENABLE PS1',self.enable),('DRAFT',self.disable)]:
+        for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('SAVE',self.save),('ENABLE',self.enable),('DRAFT',self.disable)]:
             Button(bar,label,fn,CYAN).pack(side='left',padx=2)
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=850)
         self.note.pack(fill='x')
         self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
+        scroll=tk.Scrollbar(self,command=self.canvas.yview)
+        scroll.pack(side='right',fill='y')
+        self.canvas.configure(yscrollcommand=scroll.set)
         self.canvas.pack(fill='both',expand=True)
         self.canvas.bind('<Button-1>',self.pick)
         self.canvas.bind('<B1-Motion>',self.drag)
@@ -42,10 +45,20 @@ class FlowPanel(tk.Frame):
             except (ValueError,KeyError,TypeError,OSError) as e:
                 self.nodes=[];self.edges=[];self.readonly=True
                 messagebox.showerror('Flow',str(e),parent=self)
-        self.note.configure(text='Flow DRAFT — not executed by builds yet. Drag nodes; CONNECT then click source and destination. Double-click to edit. Saved per project and console.')
+        if project:
+            meta=project_meta(project)
+            if self.target=='ps1':
+                kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect']
+            elif meta.get('event_adapter')=='fixed_room_v1':
+                kinds=['On start','On button','On zone','Set camera','Interact','Reset game']
+            else:
+                kinds=['On start','On button']
+            self.kind['values']=kinds;self.kind.current(0)
+        self.note.configure(text='ENABLE validates this project adapter. Drag nodes; CONNECT then click source and destination. Set camera: 0..2; On zone: 0..1. Scroll for more nodes.')
         self.draw()
 
     def draw(self):
+        self.canvas.configure(scrollregion=(0,0,1500,max([n.get('y',0)+150 for n in self.nodes],default=700)))
         c=self.canvas;c.delete('all');byid={n['id']:n for n in self.nodes}
         for a,b in self.edges:
             if a in byid and b in byid:
@@ -69,14 +82,14 @@ class FlowPanel(tk.Frame):
                 edge=[self.source,self.selected]
                 if edge[0]!=edge[1] and edge not in self.edges:self.edges.append(edge)
                 self.source=None;self.save()
-        self.last=(e.x,e.y);self.draw()
+        self.last=(self.canvas.canvasx(e.x),self.canvas.canvasy(e.y));self.draw()
 
     def drag(self,e):
         if self.readonly:return
         for n in self.nodes:
             if n['id']==self.selected:
-                n['x']=max(0,n['x']+e.x-self.last[0]);n['y']=max(0,n['y']+e.y-self.last[1])
-        self.last=(e.x,e.y);self.draw()
+                n['x']=max(0,n['x']+self.canvas.canvasx(e.x)-self.last[0]);n['y']=max(0,n['y']+self.canvas.canvasy(e.y)-self.last[1])
+        self.last=(self.canvas.canvasx(e.x),self.canvas.canvasy(e.y));self.draw()
 
     def connect(self):
         if not self.readonly:self.source=-1
@@ -107,8 +120,9 @@ class FlowPanel(tk.Frame):
         try:
             script=Path(self.project)/'script.ncs'
             source=script.read_text() if script.exists() else ''
-            ncscript.compile_source(eventflow.compose(self.project,self.target,source))
+            if self.target=='ps2':ps2flow.compile_project(self.project)
+            else:ncscript.compile_source(eventflow.compose(self.project,self.target,source))
         except (ValueError,KeyError,TypeError,ncscript.ScriptError) as exc:
             self.enabled=False;self.save()
             messagebox.showerror('Cannot enable flow',str(exc),parent=self);return
-        messagebox.showinfo('Flow enabled','Events will run on the next PS1 build. Authored script was not changed.',parent=self)
+        messagebox.showinfo('Flow enabled','Events will run on the next build for this project. Authored script was not changed.',parent=self)

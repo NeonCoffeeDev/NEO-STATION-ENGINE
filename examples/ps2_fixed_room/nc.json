@@ -1,0 +1,5 @@
+{
+  "target": "ps2",
+  "name": "ps2_fixed_room",
+  "event_adapter": "fixed_room_v1"
+}

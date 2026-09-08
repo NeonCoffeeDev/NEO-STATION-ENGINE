@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "enabled",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On start",
+      "value": "",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "Reset game",
+      "value": "0",
+      "x": 240,
+      "y": 20
+    },
+    {
+      "id": 3,
+      "kind": "On button",
+      "value": "CROSS",
+      "x": 20,
+      "y": 105
+    },
+    {
+      "id": 4,
+      "kind": "Interact",
+      "value": "0",
+      "x": 240,
+      "y": 105
+    },
+    {
+      "id": 5,
+      "kind": "On button",
+      "value": "START",
+      "x": 20,
+      "y": 190
+    },
+    {
+      "id": 6,
+      "kind": "Reset game",
+      "value": "0",
+      "x": 240,
+      "y": 190
+    },
+    {
+      "id": 7,
+      "kind": "On button",
+      "value": "L1",
+      "x": 20,
+      "y": 275
+    },
+    {
+      "id": 8,
+      "kind": "Set camera",
+      "value": "0",
+      "x": 240,
+      "y": 275
+    },
+    {
+      "id": 9,
+      "kind": "On button",
+      "value": "R1",
+      "x": 20,
+      "y": 360
+    },
+    {
+      "id": 10,
+      "kind": "Set camera",
+      "value": "2",
+      "x": 240,
+      "y": 360
+    },
+    {
+      "id": 11,
+      "kind": "On zone",
+      "value": "0",
+      "x": 20,
+      "y": 445
+    },
+    {
+      "id": 12,
+      "kind": "Set camera",
+      "value": "0",
+      "x": 240,
+      "y": 445
+    },
+    {
+      "id": 13,
+      "kind": "On zone",
+      "value": "1",
+      "x": 20,
+      "y": 530
+    },
+    {
+      "id": 14,
+      "kind": "Set camera",
+      "value": "1",
+      "x": 240,
+      "y": 530
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      7,
+      8
+    ],
+    [
+      9,
+      10
+    ],
+    [
+      11,
+      12
+    ],
+    [
+      13,
+      14
+    ]
+  ]
+}

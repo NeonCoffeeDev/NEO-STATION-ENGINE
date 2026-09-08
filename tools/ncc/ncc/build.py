@@ -171,8 +171,10 @@ def project_meta(root):
 def write_project_meta(root, name, template, target):
     path = os.path.join(root, PROJECT_FILE)
     with open(path, "w", encoding="utf-8") as fh:
-        json.dump({"format": 1, "name": name, "template": template,
-                   "target": target}, fh, indent=2)
+        meta = {"format": 1, "name": name, "template": template, "target": target}
+        if template == "ps2_fixed_room" and target == "ps2":
+            meta["event_adapter"] = "fixed_room_v1"
+        json.dump(meta, fh, indent=2)
         fh.write(chr(10))
 
 
@@ -503,7 +505,8 @@ def build(args):
     target = project_meta(src)["target"]
     if target == "ps2":
         try:
-            eventflow.compose(src, target, "")
+            from .ps2flow import compile_project
+            compile_project(src)
         except (ValueError, KeyError, TypeError) as exc:
             raise SystemExit(f"ncc: event-flow.json -- {exc}")
         return _build_ps2(src)
