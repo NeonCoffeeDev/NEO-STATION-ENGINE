@@ -23,8 +23,8 @@ can overlap; collision-aware placement is not implemented. Move to event nodes
 still hold explicit coordinates: moving the key does not retarget those nodes.
 Update the movement destination when changing key placement.
 
-Unsaved layouts remain in memory while switching projects; save before closing
-Studio. RELOAD discards the current viewport draft. Saving refuses to overwrite
+Unsaved layouts remain in memory while switching projects. Build and app close
+save pending viewport drafts, stopping on external-file conflicts. RELOAD discards the current viewport draft. Saving refuses to overwrite
 a file changed outside the viewport. There are no new assets, meshes, animation
 imports or arbitrary object creation tools in this initial viewport.
 
@@ -35,5 +35,9 @@ PS2 adapter and does not import its data into other targets.
 ## ASSETS
 
 The inventory uses dark rows, readable text and contrasting selection colors.
-It lists project files and can open them externally. Reference-safe renaming,
-replacement and thumbnail previews are still pending.
+It lists project files, filters by path, opens them externally, and previews
+PNG/JPEG images with dimensions. WAV inspection shows duration, sample rate and
+channel count. Reference-safe renaming and replacement are still pending.
+
+Viewport controls: mouse wheel zooms, FIT restores framing, POSITION edits exact
+coordinates, and UNDO restores up to 40 snapshots in the current project session.

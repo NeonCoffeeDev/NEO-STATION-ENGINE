@@ -1068,6 +1068,8 @@ class Studio:
         if not p:
             self.log("no project selected.", RED)
             return
+        if cmd in ("build", "run") and not self.viewport_panel.save_pending():
+            return
         if cmd in ("build", "run") and self.room_panel.dirty:
             self.room_panel.save()
             if self.room_panel.dirty:
@@ -1255,6 +1257,8 @@ class Studio:
     # ---- shutdown -------------------------------------------------------
 
     def on_close(self):
+        if not self.viewport_panel.save_pending():
+            return
         if self.running and self.proc:
             try:
                 self.proc.terminate()
