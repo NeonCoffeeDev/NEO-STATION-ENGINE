@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On button",
+      "value": "SELECT",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "Repeat",
+      "value": "3",
+      "x": 210,
+      "y": 20
+    },
+    {
+      "id": 3,
+      "kind": "Add variable",
+      "value": "tokens, 1",
+      "x": 400,
+      "y": 20
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ]
+  ]
+}

@@ -1,6 +1,7 @@
 """PS2 flow compiler for explicitly integrated runtime adapters."""
 import json
 import math
+import re
 from pathlib import Path
 from .eventflow import BUTTONS
 
@@ -31,12 +32,48 @@ def compile_project(project):
             output += ['    static int used_%d;'%n['id'], '    if (start) used_%d = 0;'%n['id']]
         elif n['kind']=='Cooldown':
             output += ['    static unsigned int next_%d;'%n['id'], '    if (start) next_%d = 0;'%n['id']]
+    variable_kinds=('Set variable','Add variable','If equal','If at least')
+    variables={}
+    for n in nodes:
+        if n['kind'] in variable_kinds:
+            parts=str(n.get('value','')).split(',')
+            if len(parts)!=2 or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,23}',parts[0].strip()):
+                raise ValueError('Variable nodes need a name and integer, e.g. coins, 1.')
+            name=parts[0].strip();value=int(parts[1])
+            if not -32767<=value<=32767:raise ValueError('Variable values must be -32767..32767.')
+            variables[n['id']]=(name,value)
+    names=sorted({name for name,value in variables.values()})
+    if len(names)>16:raise ValueError('This adapter supports up to 16 named variables.')
+    for name in names:
+        output += ['    static int var_%s;'%name,'    if(start) var_%s=0;'%name]
     reached=set()
+    expanded=0
     def walk(i,stack):
+        nonlocal expanded, output
+        expanded+=1
+        if expanded>2048:raise ValueError("Flow expands beyond 2048 steps; reduce repeats or shared branches.")
         if i in stack:raise ValueError('Event cycles are not supported.')
         reached.add(i)
         for j in links[i]:
             n=lookup[j]
+            if n['kind'] in variable_kinds:
+                name,value=variables[j];symbol='var_'+name
+                if n['kind']=='Set variable':output.append('        %s = %d;'%(symbol,value))
+                elif n['kind']=='Add variable':
+                    output += ['        %s += %d;'%(symbol,value),
+                               '        if(%s>32767) %s=32767;'%(symbol,symbol),
+                               '        if(%s< -32767) %s=-32767;'%(symbol,symbol)]
+                else:
+                    op='==' if n['kind']=='If equal' else '>='
+                    output.append('        if(%s %s %d) {'%(symbol,op,value))
+                walk(j,stack|{i})
+                if n['kind'].startswith('If '):output.append('        }')
+                continue
+            if n['kind']=='Repeat':
+                count=int(n.get('value',''))
+                if not 1<=count<=16:raise ValueError('Repeat count must be 1..16.')
+                for iteration in range(count):walk(j,stack|{i})
+                continue
             if n['kind']=='Move to':
                 if 'static void nc_move_to(' not in (root/'src/main.c').read_text():
                     raise ValueError('Move to requires the updated fixed-room runtime. Create a new Fixed Camera Room project.')
@@ -76,7 +113,7 @@ def compile_project(project):
             v=int(value)
             if v not in (0,1):raise ValueError('Zone must be 0 or 1.')
             condition='zone == %d'%v
-        elif kind in actions or kind in ('Once','Cooldown','Move to'):continue
+        elif kind in actions or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
         else:raise ValueError('Unsupported PS2 node: '+kind)
         if incoming[n['id']]:raise ValueError('Events cannot have incoming links.')
         output.append('    if (%s) {'%condition);walk(n['id'],set());output.append('    }')

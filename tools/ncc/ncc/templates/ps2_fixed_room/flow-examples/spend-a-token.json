@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On button",
+      "value": "CIRCLE",
+      "x": 20,
+      "y": 20
+    },
+    {
+      "id": 2,
+      "kind": "If at least",
+      "value": "tokens, 1",
+      "x": 210,
+      "y": 20
+    },
+    {
+      "id": 3,
+      "kind": "Add variable",
+      "value": "tokens, -1",
+      "x": 400,
+      "y": 20
+    },
+    {
+      "id": 4,
+      "kind": "Interact",
+      "value": "0",
+      "x": 590,
+      "y": 20
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ]
+  ]
+}

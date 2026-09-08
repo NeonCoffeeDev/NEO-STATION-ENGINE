@@ -4,7 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from theme import BG, FG, CYAN, AMBER, Button
-from nodeparams import HELP, MoveDialog
+from nodeparams import HELP, MoveDialog, VariableDialog
 from ncc.build import project_meta
 from ncc import eventflow, ncscript, ps2flow, flowkits
 
@@ -58,7 +58,7 @@ class FlowPanel(tk.Frame):
             if self.target=='ps1':
                 kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect']
             elif meta.get('event_adapter')=='fixed_room_v1':
-                kinds=['On start','On button','On zone','After frames','Every frames','Once','Cooldown','Move to','Set camera','Interact','Reset game']
+                kinds=['On start','On button','On zone','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Set camera','Interact','Reset game']
             else:
                 kinds=['On start','On button']
             self.kind['values']=kinds;self.kind.current(0)
@@ -114,6 +114,7 @@ class FlowPanel(tk.Frame):
         for n in self.nodes:
             if n['id']==self.selected:
                 if n['kind']=='Move to':v=MoveDialog(self,n.get('value','')).result
+                elif n['kind'] in ('Set variable','Add variable','If equal','If at least'):v=VariableDialog(self,n['kind'],n.get('value','')).result
                 else:v=simpledialog.askstring(n['kind'],HELP.get(n['kind'],'Existing project object index:'),initialvalue=n.get('value',''),parent=self)
                 if v is not None:n['value']=v;self.draw();self.save()
 

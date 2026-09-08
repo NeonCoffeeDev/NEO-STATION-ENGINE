@@ -5,6 +5,8 @@ static void nc_events(int start, unsigned int pressed, int zone) {
     if (start) tick = 0; else if (tick < 0xffffffffu) tick++;
     static unsigned int next_15;
     if (start) next_15 = 0;
+    static int var_presses;
+    if(start) var_presses=0;
     if (start) {
         nc_action(2, 0);
     }
@@ -30,5 +32,13 @@ static void nc_events(int start, unsigned int pressed, int zone) {
     }
     if (pressed & PAD_SQUARE) {
         nc_move_to(-2.00000000f, 1.50000000f, 90);
+    }
+    if (pressed & PAD_TRIANGLE) {
+        var_presses += 1;
+        if(var_presses>32767) var_presses=32767;
+        if(var_presses< -32767) var_presses=-32767;
+        if(var_presses == 3) {
+        nc_action(0, 2);
+        }
     }
 }
