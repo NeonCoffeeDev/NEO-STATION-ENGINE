@@ -1,0 +1,1 @@
+{"version":1,"target":"ps2","lights":{"Sun":{"position":[-3,5,-4],"direction":[0.5,-1,0.35],"intensity":0.8,"ambient":0.35}},"shadows":{"Cube Shadow":{"position":[0,-1.05,0],"size":[1.1,0.04,1.1]}},"objects":{}}

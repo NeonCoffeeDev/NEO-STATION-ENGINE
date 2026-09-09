@@ -107,6 +107,10 @@ class World:
                 rows[-1].update(rot=list(obj.get('rotation',[0,0,0])),scale=list(scale),material={'texture':obj.get('material','')} if obj.get('material') else {})
             if self.kind=='vn' and self.world3d.get('camera'):
                 camera=self.world3d['camera'];add('camera','Main Camera',camera['pos'],[.35,.35,.35],'3d');rows[-1]['target']=camera['target']
+            for name,light in self.world3d.get('lights',{}).items():
+                add('l:'+name,name,light.get('position',[0,4,-3]),[.3,.3,.3],'3d');rows[-1].update(light=light,editor_only=True)
+            for name,shadow in self.world3d.get('shadows',{}).items():
+                size=shadow.get('size',[1,.04,1]);add('h:'+name,name,shadow.get('position',[0,-.5,0]),size,'3d');rows[-1].update(shadow=shadow,editor_only=True)
         for t in self.triggers['triggers']:
             if t['room']==room:add('t:'+str(t['id']),t['name'],t['min'],[b-a for a,b in zip(t['min'],t['max'])],t['space'])
         if self.kind=='vn':rows.sort(key=lambda r: 3 if r['key'].startswith('t:') else 2 if r['key']=='dialogue' else 0 if r['key']=='background' else 1)
@@ -118,6 +122,10 @@ class World:
             self.screens['screens'][self.active_screen]['objects'][int(key[2:])]['rect'][:2]=list(map(int,pos));return
         if key.startswith('w:') and self.world3d:
             self.world3d['objects'][key[2:]]['position']=list(pos);return
+        if key.startswith('l:') and self.world3d:
+            self.world3d['lights'][key[2:]]['position']=list(pos);return
+        if key.startswith('h:') and self.world3d:
+            self.world3d['shadows'][key[2:]]['position']=list(pos);return
         if key.startswith('t:'):
             t=next(t for t in self.triggers['triggers'] if t['id']==int(key[2:]));size=[b-a for a,b in zip(t['min'],t['max'])]
             pos=list(map(int,pos)) if self.target=='ps1' else pos
@@ -232,6 +240,11 @@ class World:
                     if len(values)!=3 or any(type(v) not in (int,float) or not math.isfinite(v) for v in values):raise ValueError('Invalid 3D %s for %s.'%(field,name))
                 texture=obj.get('material','')
                 if texture and (Path(texture).is_absolute() or Path(texture).suffix.lower()!='.png' or not (self.root/texture).is_file()):raise ValueError('3D material must reference a project-local PNG.')
+            if len(self.world3d.get('lights',{}))>4:raise ValueError('The starter PS2 lighting budget is four lights.')
+            for name,light in self.world3d.get('lights',{}).items():
+                if len(light.get('position',[]))!=3 or len(light.get('direction',[]))!=3:raise ValueError('Light %s needs position and direction.'%name)
+                if not 0<=light.get('intensity',1)<=2 or not 0<=light.get('ambient',.3)<=1:raise ValueError('Light intensity/ambient is outside the PS2 starter range.')
+            if len(self.world3d.get('shadows',{}))>32:raise ValueError('The starter PS2 shadow budget is 32 blobs.')
         validate_triggers(self)
 
     def save(self):

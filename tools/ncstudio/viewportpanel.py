@@ -180,7 +180,7 @@ class ViewportPanel(tk.Frame):
         if not self.dragging:return
         x,y,start=self.dragging
         if self.is_perspective():
-            if start.get('readonly') or not start['key'].startswith(('o:','w:')):return
+            if start.get('readonly') or not start['key'].startswith(('o:','w:','l:','h:')):return
             axis={'X':0,'Y':1,'Z':2}[self.axis.get()]
             pixels=(e.x-x)-(e.y-y)
             if self.tool.get()=='MOVE':
@@ -388,12 +388,14 @@ class ViewportPanel(tk.Frame):
                     if pa and pb:c.create_line(pa[0],pa[1],pb[0],pb[1],fill='#263941')
         drawn=[]
         for index,r in enumerate(self.rows):
-            if self.output_mode and (r['key'].startswith('t:') or r.get('component') or r['key']=='camera'):continue
+            if r['key'].startswith('h:'):self.draw_shadow_effect(c,project,r.get('shadow',{}))
+            if self.output_mode and (r['key'].startswith('t:') or r.get('component') or r.get('editor_only') or r['key']=='camera'):continue
             color=AMBER if r['key']==self.selected else ('#bd85ff' if r['key'].startswith('t:') else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
             points,edges=self.geometry(r);screen=[project(p) for p in points]
             material=r.get('material',{}).get('texture')
             renderable=not r['key'].startswith('t:') and not r.get('component') and r['key']!='camera'
-            if renderable and material and len(screen)==8:self.draw_box_surfaces(c,screen,material,r['key'])
+            renderable=renderable and not r.get('editor_only')
+            if renderable and material and len(screen)==8:self.draw_box_surfaces(c,points,screen,material,r['key'])
             if not self.output_mode or (renderable and not material):
                 for a,b in edges:
                     if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
@@ -406,7 +408,7 @@ class ViewportPanel(tk.Frame):
         mode='GAME VIEWPORT / MAIN CAMERA' if self.game_mode else 'SCENE / EDITOR CAMERA (right orbit / middle pan / wheel dolly)'
         if not self.output_mode:c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
 
-    def draw_box_surfaces(self,canvas,screen,material,key):
+    def draw_box_surfaces(self,canvas,world_points,screen,material,key):
         """Draw a cube as filled, depth-sorted faces with sampled texture cells."""
         faces=((0,1,3,2),(4,5,7,6),(0,1,5,4),(2,3,7,6),(0,2,6,4),(1,3,7,5))
         visible=[face for face in faces if all(screen[i] for i in face)]
@@ -423,15 +425,32 @@ class ViewportPanel(tk.Frame):
         cells=1 if self.interactive else 4
         for face in visible:
             corners=[screen[i] for i in face]
+            shade=self.face_light([world_points[i] for i in face])
             if image:
                 for v in range(cells):
                     for u in range(cells):
                         points=[self.bilerp(corners,u/cells,v/cells),self.bilerp(corners,(u+1)/cells,v/cells),self.bilerp(corners,(u+1)/cells,(v+1)/cells),self.bilerp(corners,u/cells,(v+1)/cells)]
                         sample=(min(image.width-1,int((u+.5)*image.width/cells)),min(image.height-1,int((v+.5)*image.height/cells)))
-                        rgb=image.getpixel(sample);fill='#%02x%02x%02x'%rgb
+                        rgb=image.getpixel(sample);rgb=tuple(max(0,min(255,int(value*shade))) for value in rgb);fill='#%02x%02x%02x'%rgb
                         canvas.create_polygon(*[n for p in points for n in p],fill=fill,outline=fill,tags=('obj',key))
             else:
                 canvas.create_polygon(*[n for i in face for n in screen[i][:2]],fill='#29404d',outline='',tags=('obj',key))
+
+    def face_light(self,points):
+        lights=self.world.world3d.get('lights',{}) if self.world.world3d else {}
+        if not lights:return 1.0
+        light=next(iter(lights.values()));direction=self._normal(light.get('direction',[-.5,-1,.3]))
+        normal=self._normal(self._cross(self._sub(points[1],points[0]),self._sub(points[3],points[0])))
+        # The starter boxes reuse face winding on opposite sides, so absolute
+        # incidence gives stable two-sided lighting without per-face normals.
+        diffuse=abs(self._dot(normal,direction))*float(light.get('intensity',.8))
+        return max(.08,min(1.35,float(light.get('ambient',.35))+diffuse))
+
+    def draw_shadow_effect(self,canvas,project,shadow):
+        x,y,z=shadow.get('position',[0,-.5,0]);sx,_,sz=shadow.get('size',[1,.04,1])
+        points=[[x-sx,y,z-sz],[x+sx,y,z-sz],[x+sx,y,z+sz],[x-sx,y,z+sz]]
+        screen=[project(point) for point in points]
+        if all(screen):canvas.create_polygon(*[n for point in screen for n in point[:2]],fill='#080b10',outline='',stipple='gray50')
 
     @staticmethod
     def bilerp(corners,u,v):
