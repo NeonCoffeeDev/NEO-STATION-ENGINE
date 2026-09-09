@@ -15,6 +15,8 @@ class ViewportPanel(tk.Frame):
         super().__init__(parent,bg=BG);self.group=self;self.project=None;self.world=None;self.drafts={};self.history=[];self.selected=None;self.zoom=1.;self.dragging=None
         self.editor_camera={'yaw':.65,'pitch':-.42,'distance':12.0,'target':[0.0,0.0,0.0]}
         self.game_mode=False
+        self.output_mode=False
+        self.texture_cache={}
         self.camera_drag=None
         bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
         self.stage=ttk.Combobox(bar,state='readonly',width=28);self.stage.pack(side='left');self.stage.bind('<<ComboboxSelected>>',lambda e:self.change_stage())
@@ -117,29 +119,36 @@ class ViewportPanel(tk.Frame):
         if not self.world:return
         if self.is_perspective():self.draw_perspective();return
         ox,oy,scale=self.mapping();a,b=self.axes()
-        c.create_line(0,oy,c.winfo_width(),oy,fill='#33434b');c.create_line(ox,0,ox,c.winfo_height(),fill='#33434b')
+        if not self.output_mode:
+            c.create_line(0,oy,c.winfo_width(),oy,fill='#33434b');c.create_line(ox,0,ox,c.winfo_height(),fill='#33434b')
         for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
         order=list(enumerate(self.rows))
         if self.world.kind=='ps1' and self.plane.get()=='2D':order.reverse()
         order.sort(key=lambda pair:pair[1]['key'].startswith('t:'))
         for i,r in order:
+            if self.output_mode and (r['key'].startswith('t:') or r.get('component')):continue
             x,y=ox+r['pos'][a]*scale,oy+r['pos'][b]*scale
             trigger=r['key'].startswith('t:');flat=r['space']=='2d'
             w,h=r['size'][a]*scale,r['size'][b]*scale
             if not trigger and (not flat or self.world.kind=='pad2d_v1'):x-=max(6,w/2);y-=max(6,h/2)
             w,h=max(12,w),max(12,h)
             color=AMBER if r['key']==self.selected else ('#bd85ff' if trigger else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
-            c.create_rectangle(x,y,x+w,y+h,outline=color,fill='' if trigger else '#23333b',width=2,tags=('obj',r['key']))
+            ui=r.get('ui_type')
+            fill='' if trigger else ('#111923' if ui=='panel' else '#29404d' if ui=='button' else '' if ui=='text' else '#23333b')
+            outline='' if self.output_mode and ui in ('panel','text') else color
+            c.create_rectangle(x,y,x+w,y+h,outline=outline,fill=fill,width=2,tags=('obj',r['key']))
             if flat and not trigger:self.picture(r,x,y,w,h)
             if not flat and r['key'].startswith('m:'):self.mesh_preview(r,ox,oy,scale,a,b,color)
             label=r.get('text') or r['name']
-            c.create_text(x+w/2,y+h/2,text=label,anchor='center',fill=FG,tags=('obj',r['key'])) if r['key'].startswith('u:') else c.create_text(x+3,y+3,text=label,anchor='nw',fill=FG,tags=('obj',r['key']))
+            if r['key'].startswith('u:'):
+                c.create_text(x+w/2,y+h/2,text=label,anchor='center',fill=FG,font=('Segoe UI',max(9,min(28,int(h*.35))),'bold'),tags=('obj',r['key']))
+            elif not self.output_mode:c.create_text(x+3,y+3,text=label,anchor='nw',fill=FG,tags=('obj',r['key']))
             if r['key']==self.selected:self.objects.selection_set(i)
         if self.world.kind=='fixed_room_v1':
             for i,yaw in enumerate(self.world.doc['camera_yaw']):
                 x=ox-math.sin(yaw)*scale*2;y=oy-math.cos(yaw)*scale*2
                 c.create_line(x,y,ox,oy,arrow='last',fill=AMBER,dash=(3,3));c.create_text(x,y,text='Camera '+str(i),fill=FG)
-        c.create_text(10,10,anchor='nw',text=self.plane.get()+' authoring view | '+self.world.target.upper(),fill=FG)
+        if not self.output_mode:c.create_text(10,10,anchor='nw',text=self.plane.get()+' authoring view | '+self.world.target.upper(),fill=FG)
     def select(self,event=None):
         if self.objects.curselection():self.selected=self.rows[self.objects.curselection()[0]]['key'];self.draw()
     def record(self):return next((r for r in self.records() if r['key']==self.selected),None)
@@ -352,32 +361,59 @@ class ViewportPanel(tk.Frame):
     def draw_perspective(self):
         c=self.canvas;project=self.projector()
         for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
-        # Editor grid is world XZ; it is never serialized into the game.
-        for value in range(-10,11):
-            for a,b in [([-10,0,value],[10,0,value]),([value,0,-10],[value,0,10])]:
-                pa,pb=project(a),project(b)
-                if pa and pb:c.create_line(pa[0],pa[1],pb[0],pb[1],fill='#263941')
+        # Editor grid is world XZ; it is never part of the camera output.
+        if not self.output_mode:
+            for value in range(-10,11):
+                for a,b in [([-10,0,value],[10,0,value]),([value,0,-10],[value,0,10])]:
+                    pa,pb=project(a),project(b)
+                    if pa and pb:c.create_line(pa[0],pa[1],pb[0],pb[1],fill='#263941')
         drawn=[]
         for index,r in enumerate(self.rows):
             color=AMBER if r['key']==self.selected else ('#bd85ff' if r['key'].startswith('t:') else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
             points,edges=self.geometry(r);screen=[project(p) for p in points]
             material=r.get('material',{}).get('texture')
-            if material and len(screen)==8:
-                fill=self.material_color(material)
-                for face in ((0,1,3,2),(4,5,7,6),(0,1,5,4),(2,3,7,6),(0,2,6,4),(1,3,7,5)):
-                    if all(screen[i] for i in face):
-                        coords=[value for i in face for value in screen[i][:2]]
-                        c.create_polygon(*coords,fill=fill,outline='',stipple='gray25',tags=('obj',r['key']))
-            for a,b in edges:
-                if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
-                    c.create_line(screen[a][0],screen[a][1],screen[b][0],screen[b][1],fill=color,width=2,tags=('obj',r['key']))
+            if len(screen)==8:self.draw_box_surfaces(c,screen,material,r['key'])
+            if not self.output_mode:
+                for a,b in edges:
+                    if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
+                        c.create_line(screen[a][0],screen[a][1],screen[b][0],screen[b][1],fill=color,width=2,tags=('obj',r['key']))
             origin=project(r['pos'])
-            if origin:
+            if origin and not self.output_mode:
                 x,y,_=origin;c.create_line(x-5,y,x+5,y,fill=AMBER,tags=('obj',r['key']));c.create_line(x,y-5,x,y+5,fill=AMBER,tags=('obj',r['key']))
                 c.create_text(x+7,y+7,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
             if r['key']==self.selected:self.objects.selection_set(index)
         mode='GAME VIEWPORT / MAIN CAMERA' if self.game_mode else 'SCENE / EDITOR CAMERA (right orbit / middle pan / wheel dolly)'
-        c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
+        if not self.output_mode:c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
+
+    def draw_box_surfaces(self,canvas,screen,material,key):
+        """Draw a cube as filled, depth-sorted faces with sampled texture cells."""
+        faces=((0,1,3,2),(4,5,7,6),(0,1,5,4),(2,3,7,6),(0,2,6,4),(1,3,7,5))
+        visible=[face for face in faces if all(screen[i] for i in face)]
+        visible.sort(key=lambda face:sum(screen[i][2] for i in face)/4,reverse=True)
+        image=None
+        if material:
+            try:
+                image=self.texture_cache.get(material)
+                if image is None:
+                    with Image.open(self.world.root/material) as source:image=source.convert('RGB').resize((8,8),Image.Resampling.NEAREST)
+                    self.texture_cache[material]=image
+            except (OSError,ValueError):image=None
+        for face in visible:
+            corners=[screen[i] for i in face]
+            if image:
+                for v in range(8):
+                    for u in range(8):
+                        points=[self.bilerp(corners,u/8,v/8),self.bilerp(corners,(u+1)/8,v/8),self.bilerp(corners,(u+1)/8,(v+1)/8),self.bilerp(corners,u/8,(v+1)/8)]
+                        rgb=image.getpixel((u,v));fill='#%02x%02x%02x'%rgb
+                        canvas.create_polygon(*[n for p in points for n in p],fill=fill,outline=fill,tags=('obj',key))
+            else:
+                canvas.create_polygon(*[n for i in face for n in screen[i][:2]],fill='#29404d',outline='',tags=('obj',key))
+
+    @staticmethod
+    def bilerp(corners,u,v):
+        top=[corners[0][i]*(1-u)+corners[1][i]*u for i in range(2)]
+        bottom=[corners[3][i]*(1-u)+corners[2][i]*u for i in range(2)]
+        return [top[i]*(1-v)+bottom[i]*v for i in range(2)]
 
     def material_color(self,relative):
         try:
@@ -528,12 +564,12 @@ class ViewportPanel(tk.Frame):
             canvas.delete('all')
             return
         old_canvas,old_objects,old_rows=self.canvas,self.objects,getattr(self,'rows',[])
-        old_mode,old_plane,old_extent=self.game_mode,self.plane.get(),getattr(self,'extent',None)
+        old_mode,old_output,old_plane,old_extent=self.game_mode,self.output_mode,self.plane.get(),getattr(self,'extent',None)
         try:
             self.canvas=canvas;self.objects=object_sink
             records=self.records()
             is_2d=any(r['space']=='2d' for r in records)
-            self.game_mode=not is_2d
+            self.game_mode=not is_2d;self.output_mode=True
             self.plane.set('2D' if is_2d else 'PERSPECTIVE')
             if is_2d:
                 width=640 if self.world.target=='ps2' else 320
@@ -542,7 +578,7 @@ class ViewportPanel(tk.Frame):
             self.draw()
         finally:
             self.canvas=old_canvas;self.objects=old_objects;self.rows=old_rows
-            self.game_mode=old_mode;self.plane.set(old_plane)
+            self.game_mode=old_mode;self.output_mode=old_output;self.plane.set(old_plane)
             if old_extent is None:
                 self.__dict__.pop('extent',None)
             else:self.extent=old_extent

@@ -90,4 +90,14 @@ class ViewportTests(unittest.TestCase):
             self.assertEqual(second.records(0)[0]['pos'],[5,5])
             self.assertEqual(first.records(0)[0]['pos'],[99,77])
 
+    def test_boot_screen_objects_are_real_editable_project_data(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);world=self.setup_world(root)
+            world.screens['screens']['splash']={'objects':[dict(name='Logo',type='image',rect=[10,20,80,40],text='',texture='')]}
+            world.active_screen='splash'
+            self.assertEqual(world.records(0)[0]['name'],'Logo')
+            world.move(0,'u:0',[30,40]);world.save()
+            fresh=World(root);fresh.active_screen='splash'
+            self.assertEqual(fresh.records(0)[0]['pos'],[30,40])
+
 if __name__=='__main__':unittest.main()

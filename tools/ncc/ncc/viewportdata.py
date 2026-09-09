@@ -210,11 +210,13 @@ class World:
         for path,original,doc in changes:
             if (path.read_text(encoding='utf-8') if path.exists() else None)!=original:raise ValueError('External changes to '+path.name+'; reload before saving.')
         for path,original,doc in changes:
-            if original is None and not doc.get('triggers',[]):continue
+            if original is None and path==self.trigger_path and not doc.get('triggers',[]):continue
+            if original is None and path==self.screen_path and not doc.get('screens',{}):continue
             if original is not None and json.loads(original)==doc:continue
             text=json.dumps(doc,indent=2)+'\n';temp=path.with_suffix('.json.tmp');temp.write_text(text,encoding='utf-8');temp.replace(path)
             if path==self.path:self.original=text
-            else:self.trigger_original=text
+            elif path==self.trigger_path:self.trigger_original=text
+            else:self.screen_original=text
 
 
 def validate_triggers(world):
@@ -230,7 +232,9 @@ def validate_triggers(world):
         if not dimensions or len(t['min'])!=dimensions or len(t['max'])!=dimensions:raise ValueError('Trigger bounds dimension mismatch.')
         if any(type(v) not in (int,float) or not math.isfinite(v) or abs(v)>32767 for v in t['min']+t['max']):raise ValueError('Trigger bounds must be finite, within +/-32767.')
         if any(a>=b for a,b in zip(t['min'],t['max'])):raise ValueError('Trigger maximum must exceed minimum on every axis.')
-        subject=next((r for r in world.records(t['room']) if r['key']==t['subject'] and not r['key'].startswith('t:')),None)
+        active=world.active_screen;world.active_screen=None
+        try:subject=next((r for r in world.records(t['room']) if r['key']==t['subject'] and not r['key'].startswith('t:')),None)
+        finally:world.active_screen=active
         if not subject or subject['space']!=t['space'] or subject['key']=='camera':raise ValueError('Trigger needs an existing subject in the same dimension.')
         if world.kind=='vn' and not t['subject'].startswith('p:'):raise ValueError('VN spatial triggers track a portrait slot anchor; select a portrait first.')
         if world.target=='ps1' and any(type(v) is not int for v in t['min']+t['max']):raise ValueError('PS1 trigger bounds must be integers.')
