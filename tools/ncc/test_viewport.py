@@ -73,6 +73,7 @@ class ViewportTests(unittest.TestCase):
             compile_lab(root);code=(root/'src/nc_objects.h').read_text()
             self.assertIn('nc_object_rot',code)
             self.assertIn('nc_object_scale',code)
+            self.assertIn('nc_object_material[NC_OBJECT_COUNT] = {-1}',code)
             self.assertIn('NC_GAME_CAMERA_FOV 55.00000000f',code)
 
     def test_ps2_3d_rejects_component_from_other_object(self):

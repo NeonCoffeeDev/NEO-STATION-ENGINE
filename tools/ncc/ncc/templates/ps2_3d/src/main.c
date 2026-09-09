@@ -8,12 +8,14 @@
 #include <dma.h>
 #include <draw.h>
 #include <draw2d.h>
+#include <draw3d.h>
 #include <graph.h>
 #include <gs_psm.h>
 #include <libpad.h>
 #include <packet.h>
 #include <sifrpc.h>
 #include <loadfile.h>
+#include "nc_materials.h"
 
 /* 640x448 is the safe NTSC full-screen mode. The PS1 runtime's 320x240 is a
  * quarter of this, which is the most visible difference between the two
@@ -48,6 +50,7 @@ static const unsigned char palette[][3] = {
     { 0xff, 0x6b, 0x5e },
 };
 #define PALETTE_COUNT (int)(sizeof(palette) / sizeof(palette[0]))
+static texbuffer_t material_tex[NC_MATERIAL_COUNT > 0 ? NC_MATERIAL_COUNT : 1];
 
 
 static void load_pad_modules(void)
@@ -92,8 +95,8 @@ static void init_screen(framebuffer_t *frame, zbuffer_t *z, packet_t *packet)
     frame->address = graph_vram_allocate(frame->width, frame->height,
                                          frame->psm, GRAPH_ALIGN_PAGE);
 
-    /* No z-buffer. Nothing here is 3D, and allocating one would only spend
-     * VRAM to say so. */
+    /* The starter renderer uses bounded painter ordering until its double-
+     * buffered depth path is ready. */
     z->enable = DRAW_DISABLE;
     z->mask = 0;
     z->method = ZTEST_METHOD_ALLPASS;
@@ -110,6 +113,38 @@ static void init_screen(framebuffer_t *frame, zbuffer_t *z, packet_t *packet)
     dma_channel_send_normal(DMA_CHANNEL_GIF, packet->data,
                             q - packet->data, 0, 0);
     dma_wait_fast();
+}
+
+static void load_materials(void) {
+    int i;packet_t *upload=packet_init(64+NC_MATERIAL_COUNT*8,PACKET_NORMAL);qword_t *q;
+    if(!upload)return;q=upload->data;
+    for(i=0;i<NC_MATERIAL_COUNT;i++) {
+        material_tex[i].width=nc_materials[i].width;material_tex[i].psm=GS_PSM_32;
+        material_tex[i].address=graph_vram_allocate(nc_materials[i].width,nc_materials[i].height,GS_PSM_32,GRAPH_ALIGN_BLOCK);
+        material_tex[i].info.width=draw_log2(nc_materials[i].width);material_tex[i].info.height=draw_log2(nc_materials[i].height);
+        material_tex[i].info.components=TEXTURE_COMPONENTS_RGBA;material_tex[i].info.function=TEXTURE_FUNCTION_MODULATE;
+        q=draw_texture_transfer(q,nc_materials[i].pixels,nc_materials[i].width,nc_materials[i].height,GS_PSM_32,material_tex[i].address,material_tex[i].width);
+    }
+    q=draw_texture_flush(q);dma_channel_send_chain(DMA_CHANNEL_GIF,upload->data,q-upload->data,0,0);dma_wait_fast();packet_free(upload);
+}
+
+static qword_t *draw_textured_cube(qword_t *q,float *px,float *py,int *visible,int material) {
+    static const int faces[6][4]={{0,1,3,2},{4,5,7,6},{0,1,5,4},{2,3,7,6},{0,2,6,4},{1,3,7,5}};
+    static const int tri[6]={0,1,2,0,2,3};
+    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};int f,i;
+    if(material<0||material>=NC_MATERIAL_COUNT)return q;
+    lod.calculation=LOD_USE_K;lod.mag_filter=LOD_MAG_NEAREST;lod.min_filter=LOD_MIN_NEAREST;
+    clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
+    q=draw_texture_sampling(q,0,&lod);q=draw_texturebuffer(q,0,&material_tex[material],&clut);
+    prim.type=PRIM_TRIANGLE;prim.shading=PRIM_SHADE_FLAT;prim.mapping=DRAW_ENABLE;prim.mapping_type=PRIM_MAP_UV;prim.colorfix=PRIM_FIXED;
+    color.a=0x80;color.q=1.0f;
+    for(f=0;f<6;f++) {
+        u64 *dw;if(!visible[faces[f][0]]||!visible[faces[f][1]]||!visible[faces[f][2]]||!visible[faces[f][3]])continue;
+        color.r=color.g=color.b=(f==3?0x80:(f==5?0x68:0x4c));dw=(u64*)draw_prim_start(q,0,&prim,&color);
+        for(i=0;i<6;i++) {int corner=tri[i],v=faces[f][corner];int u=(corner==1||corner==2)?nc_materials[material].used_width-1:0;int t=corner>=2?nc_materials[material].used_height-1:0;texel_t uv;xyz_t xyz;
+            uv.uv=(u64)ftoi4(u)|((u64)ftoi4(t)<<32);xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=32;*dw++=uv.uv;*dw++=xyz.xyz;}
+        q=draw_prim_end((qword_t*)dw,2,DRAW_UV_REGLIST);
+    }return q;
 }
 
 
@@ -149,19 +184,19 @@ int main(void)
     dma_channel_initialize(DMA_CHANNEL_GIF, NULL, 0);
     dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
-    printf("@NAME@: Neon Coffee, PlayStation 2\n");
-    printf("@NAME@: d-pad moves, X recolours, L1/R1 resize, START resets\n");
+    printf("ps2_3d_lab: Neon Coffee, PlayStation 2\n");
+    printf("ps2_3d_lab: d-pad moves, X recolours, L1/R1 resize, START resets\n");
 
     load_pad_modules();
     padInit(0);
     padPortOpen(0, 0, pad_buffer);
     have_pad = wait_pad_ready(0, 0);
     if (!have_pad)
-        printf("@NAME@: no controller in port 1 -- the box will just sit there\n");
+        printf("ps2_3d_lab: no controller in port 1 -- the box will just sit there\n");
 
     packet = packet_init(2048, PACKET_NORMAL);
     if (packet == NULL) return 1;
-    init_screen(&frame, &z, packet);
+    init_screen(&frame, &z, packet);load_materials();
     nc_events(1,0,-1);
 
     while (1) {
@@ -253,7 +288,8 @@ int main(void)
                 px[i]=rx*(focal*((float)size/96.0f))/depth;
                 py[i]=ry*(focal*((float)size/96.0f))/depth;
             }
-            for(i=0;i<12;i++) {
+            if(nc_object_material[object]>=0)q=draw_textured_cube(q,px,py,visible,nc_object_material[object]);
+            else for(i=0;i<12;i++) {
                 line_t line = {0};
                 int a=edges[i][0], b=edges[i][1];
                 if(!visible[a]||!visible[b])continue;
@@ -277,7 +313,7 @@ int main(void)
 
         /* Once a second, so a TTY log shows it alive rather than hung. */
         if ((frames++ % 60) == 0)
-            printf("@NAME@: frame %d  box %d,%d size %d\n", frames, x, y, size);
+            printf("ps2_3d_lab: frame %d  box %d,%d size %d\n", frames, x, y, size);
     }
 
     packet_free(packet);
