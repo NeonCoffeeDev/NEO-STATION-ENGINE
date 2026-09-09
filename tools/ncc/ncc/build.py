@@ -457,6 +457,12 @@ def _build_ps2(src):
         world=World(src);world.validate()
         x,y=world.doc["objects"]["box"]
         Path(src,"src","nc_pad_layout.h").write_text(f"#define NC_PAD_X {int(x)}\n#define NC_PAD_Y {int(y)}\n",encoding="utf-8")
+    material_layout=Path(src)/'room-layout.json'
+    has_materials=os.path.exists(os.path.join(src,'world3d.json')) or (material_layout.exists() and 'materials' in material_layout.read_text(encoding='utf-8'))
+    if has_materials:
+        from .ps2materials import compile_project as compile_materials
+        try:compile_materials(src)
+        except (OSError,ValueError,KeyError,TypeError) as exc:raise SystemExit(f"ncc: PS2 materials -- {exc}")
     print(f"Building {name}  [PS2]")
     from .vn import compile_content
     try:

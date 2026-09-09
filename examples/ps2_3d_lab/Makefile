@@ -9,7 +9,7 @@
 # be subtly wrong.
 
 EE_BIN  = game.elf
-EE_OBJS = src/main.o
+EE_OBJS = src/main.o src/nc_materials.o
 
 # libdraw and libgraph are the GS drawing and display libraries; libpacket and
 # libdma build and send the GIF packets the GPU actually reads.

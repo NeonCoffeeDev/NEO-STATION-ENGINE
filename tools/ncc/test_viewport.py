@@ -7,6 +7,7 @@ import unittest
 from ncc.viewportdata import World
 from ncc.lablayout import compile_project as compile_lab
 from ncc import eventflow,ncscript
+from ncc.ps2materials import compile_project as compile_ps2_materials
 
 class ViewportTests(unittest.TestCase):
     def setup_world(self,root):
@@ -99,5 +100,15 @@ class ViewportTests(unittest.TestCase):
             world.move(0,'u:0',[30,40]);world.save()
             fresh=World(root);fresh.active_screen='splash'
             self.assertEqual(fresh.records(0)[0]['pos'],[30,40])
+
+    def test_ps2_materials_compile_to_aligned_native_data(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'src').mkdir();(root/'textures').mkdir()
+            Image.new('RGBA',(3,5),(255,64,16,255)).save(root/'textures/test.png')
+            (root/'room-layout.json').write_text(json.dumps({'materials':{'cube':{'texture':'textures/test.png'}}}))
+            count,size=compile_ps2_materials(root)
+            self.assertEqual((count,size),(1,4*8*4))
+            self.assertIn('NC_MATERIAL_o_cube 0',(root/'src/nc_materials.h').read_text())
 
 if __name__=='__main__':unittest.main()

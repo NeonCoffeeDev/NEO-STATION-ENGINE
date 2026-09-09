@@ -393,8 +393,8 @@ class ViewportPanel(tk.Frame):
             points,edges=self.geometry(r);screen=[project(p) for p in points]
             material=r.get('material',{}).get('texture')
             renderable=not r['key'].startswith('t:') and not r.get('component') and r['key']!='camera'
-            if renderable and len(screen)==8:self.draw_box_surfaces(c,screen,material,r['key'])
-            if not self.output_mode:
+            if renderable and material and len(screen)==8:self.draw_box_surfaces(c,screen,material,r['key'])
+            if not self.output_mode or (renderable and not material):
                 for a,b in edges:
                     if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
                         c.create_line(screen[a][0],screen[a][1],screen[b][0],screen[b][1],fill=color,width=2,tags=('obj',r['key']))
@@ -416,7 +416,8 @@ class ViewportPanel(tk.Frame):
             try:
                 image=self.texture_cache.get(material)
                 if image is None:
-                    with Image.open(self.world.root/material) as source:image=source.convert('RGB').resize((4,4),Image.Resampling.NEAREST)
+                    with Image.open(self.world.root/material) as source:
+                        image=source.convert('RGB');image.thumbnail((64,64),Image.Resampling.NEAREST)
                     self.texture_cache[material]=image
             except (OSError,ValueError):image=None
         cells=1 if self.interactive else 4
@@ -426,7 +427,7 @@ class ViewportPanel(tk.Frame):
                 for v in range(cells):
                     for u in range(cells):
                         points=[self.bilerp(corners,u/cells,v/cells),self.bilerp(corners,(u+1)/cells,v/cells),self.bilerp(corners,(u+1)/cells,(v+1)/cells),self.bilerp(corners,u/cells,(v+1)/cells)]
-                        sample=(min(3,int((u+.5)*4/cells)),min(3,int((v+.5)*4/cells)))
+                        sample=(min(image.width-1,int((u+.5)*image.width/cells)),min(image.height-1,int((v+.5)*image.height/cells)))
                         rgb=image.getpixel(sample);fill='#%02x%02x%02x'%rgb
                         canvas.create_polygon(*[n for p in points for n in p],fill=fill,outline=fill,tags=('obj',key))
             else:
