@@ -154,17 +154,18 @@ class Studio:
         root.bind("<F11>", lambda e: self.toggle_fullscreen())
         root.bind("<Escape>", lambda e: self.toggle_fullscreen() if self.fullscreen else None)
 
-        main = tk.Frame(root, bg=BG)
+        main = tk.PanedWindow(root, orient='horizontal', bg=BORDER, sashwidth=7,
+                              sashrelief='raised', bd=0)
         main.pack(fill="both", expand=True, padx=8, pady=(0, 6))
 
         left = tk.Frame(main, bg=BG, width=270)
-        left.pack(side="left", fill="y", padx=(0, 8))
         left.pack_propagate(False)
         center = tk.Frame(main, bg=BG)
-        center.pack(side="left", fill="both", expand=True)
         right = tk.Frame(main, bg=BG, width=306)
-        right.pack(side="right", fill="y", padx=(8, 0))
         right.pack_propagate(False)
+        main.add(left,minsize=220,width=270,stretch='never')
+        main.add(center,minsize=500,stretch='always')
+        main.add(right,minsize=250,width=306,stretch='never')
 
         self.right_tabs = TabStack(right, {"system":"SYSTEM",
                                            "inspector":"COMPONENTS / INSPECTOR"})
@@ -179,7 +180,7 @@ class Studio:
         self._build_hardware(system)
         self._build_output(center)
         self.author_sidebar = AuthorSidebar(left, self.open_flow_from_sidebar,
-                                            self.select_from_hierarchy)
+                                            self.select_from_hierarchy,self.add_ready_object)
         self.author_sidebar.pack(fill="both", expand=True)
         self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector)
         self.inspector.pack(fill="both", expand=True)
@@ -741,6 +742,32 @@ class Studio:
         self.inspector.show_record(record)
         self.right_tabs.show('inspector')
         self.update_author_context()
+
+    def add_ready_object(self,kind,screen_position=None):
+        world=self.viewport_panel.world
+        if not world:return
+        if screen_position:
+            widget=self.root.winfo_containing(*screen_position)
+            if widget is not self.viewport_panel.canvas:return
+        try:
+            world.active_screen=None;self.viewport_panel.checkpoint();room=self.viewport_panel.index()
+            if world.kind=='lab3d_v1' and kind in ('Empty GameObject','3D Mesh','Solid Object'):
+                base={'Empty GameObject':'object','3D Mesh':'mesh','Solid Object':'solid'}[kind];name=base;number=1
+                while name in world.doc['objects']:number+=1;name=base+str(number)
+                if len(world.doc['objects'])>=16:raise ValueError('PS2 3D Lab currently supports 16 runtime objects.')
+                world.doc['objects'][name]=list(self.viewport_panel.editor_camera['target']);world.doc['rotations'][name]=[0,0,0];world.doc['scales'][name]=[1,1,1]
+                textures=list((world.root/'textures').glob('*.png'))
+                if kind=='3D Mesh' and textures:world.doc.setdefault('materials',{})[name]={'texture':textures[0].relative_to(world.root).as_posix()}
+                self.viewport_panel.selected='o:'+name
+            elif world.kind=='ps1' and kind=='2D Sprite':
+                textures=world.doc.get('textures',[])
+                if not textures:raise ValueError('Add a texture before creating a Sprite2D.')
+                sprites=world.scenes()[room].setdefault('sprites',[]);sprites.append({'name':'Sprite '+str(len(sprites)+1),'x':152,'y':112,'w':16,'h':16,'texture':textures[0]['name']});self.viewport_panel.selected='s:'+str(len(sprites)-1)
+            elif kind=='Trigger' and self.viewport_panel.record():self.viewport_panel.add_trigger();return
+            else:raise ValueError('%s is available as a GameObject definition, but this project adapter cannot instantiate it yet.'%kind)
+            world.validate();self.viewport_panel.draw();self.update_author_context();self.inspector.show_record(self.viewport_panel.record());self.right_tabs.show('inspector')
+        except (ValueError,KeyError,TypeError) as exc:
+            self.viewport_panel.undo();messagebox.showerror('Ready GameObject',str(exc),parent=self.root)
 
     @staticmethod
     def _numbers(text,count):

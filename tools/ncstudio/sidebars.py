@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from theme import BG,PANEL,PANEL_HI,SUNKEN,FG,DIM,CYAN,AMBER,RED,UI_BOLD,Button
 from ncc.build import project_meta
+from ncc.componenttypes import COMPONENTS,ready_for
 
 SYSTEM_TYPES=('Camera','Movement','Interaction','Inventory','Dialogue','Audio','FX','Save Data','Transitions')
 
@@ -24,10 +25,10 @@ class TabStack(tk.Frame):
             self.buttons[name].configure(bg=PANEL_HI if name==key else PANEL,fg=AMBER if name==key else DIM)
 
 class AuthorSidebar(tk.Frame):
-    def __init__(self,parent,on_flow,on_hierarchy):
-        super().__init__(parent,bg=BG);self.project=None;self.on_flow=on_flow;self.on_hierarchy=on_hierarchy
-        self.stack=TabStack(self,{'flow':'GAME FLOW','systems':'GAME SYSTEMS','hierarchy':'HIERARCHY'});self.stack.pack(fill='both',expand=True)
-        self.flow=self.stack.tabs['flow'][1];self.systems=self.stack.tabs['systems'][1];self.hierarchy=self.stack.tabs['hierarchy'][1]
+    def __init__(self,parent,on_flow,on_hierarchy,on_ready):
+        super().__init__(parent,bg=BG);self.project=None;self.on_flow=on_flow;self.on_hierarchy=on_hierarchy;self.on_ready=on_ready
+        self.stack=TabStack(self,{'flow':'GAME FLOW','systems':'GAME SYSTEMS','hierarchy':'HIERARCHY','ready':'READY OBJECTS'});self.stack.pack(fill='both',expand=True)
+        self.flow=self.stack.tabs['flow'][1];self.systems=self.stack.tabs['systems'][1];self.hierarchy=self.stack.tabs['hierarchy'][1];self.ready=self.stack.tabs['ready'][1]
         self.flow_list=self._list(self.flow);self.flow_list.bind('<Double-Button-1>',self.open_flow)
         tk.Label(self.flow,text='Double-click a state to open its executable events.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=5)
         row=tk.Frame(self.systems,bg=BG);row.pack(fill='x',padx=5,pady=5)
@@ -43,13 +44,28 @@ class AuthorSidebar(tk.Frame):
         tk.Label(self.systems,text='Systems activate reusable kits. Their implementation remains target-specific.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=8)
         self.hierarchy_list=self._list(self.hierarchy);self.hierarchy_list.bind('<<ListboxSelect>>',self.pick_hierarchy)
         self.context=tk.Label(self.hierarchy,text='No active project',bg=BG,fg=DIM,anchor='w');self.context.pack(fill='x',padx=6,pady=5)
+        self.ready_list=self._list(self.ready);self.ready_list.bind('<Double-Button-1>',self.add_ready);self.ready_list.bind('<ButtonRelease-1>',self.drop_ready)
+        tk.Label(self.ready,text='Double-click, or drag toward SCENE, to create at the editor focus. Object types are filtered for the active console.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=6)
         self.flow_nodes=[];self.system_rows=[];self.hierarchy_keys=[]
     @staticmethod
     def _list(parent):
         box=tk.Listbox(parent,bg=SUNKEN,fg=FG,selectbackground=AMBER,selectforeground=BG,exportselection=False,bd=0,highlightthickness=0)
         box.pack(fill='both',expand=True,padx=5,pady=5);return box
     def load(self,project):
-        self.project=project;self.refresh_flow();self.refresh_systems()
+        self.project=project;self.refresh_flow();self.refresh_systems();self.refresh_ready()
+    def refresh_ready(self):
+        self.ready_list.delete(0,'end');self.ready_rows=[]
+        if not self.project:return
+        target=project_meta(self.project)['target']
+        for name,parts in ready_for(target).items():
+            self.ready_rows.append(name);icons=' '.join(COMPONENTS[p]['icon'] for p in parts)
+            self.ready_list.insert('end','[%s]  %s'%(icons,name))
+    def add_ready(self,_event=None):
+        sel=self.ready_list.curselection()
+        if sel:self.on_ready(self.ready_rows[sel[0]],None)
+    def drop_ready(self,event):
+        sel=self.ready_list.curselection()
+        if sel:self.on_ready(self.ready_rows[sel[0]],(event.x_root,event.y_root))
     def refresh_flow(self):
         self.flow_list.delete(0,'end');self.flow_nodes=[]
         if not self.project:return
@@ -130,7 +146,15 @@ class InspectorSidebar(tk.Frame):
             tk.Label(row,text=key.upper(),bg=BG,fg=DIM,width=10,anchor='w').pack(side='left')
             entry=ttk.Entry(row);entry.pack(side='left',fill='x',expand=True);self.entries[key]=entry
         self.meta=tk.Label(self,bg=BG,fg=DIM,justify='left',anchor='nw',wraplength=270);self.meta.pack(fill='x',padx=7,pady=7)
+        tk.Label(self,text='ATTACHED COMPONENT / NC-CODE',bg=BG,fg=CYAN,font=UI_BOLD,anchor='w').pack(fill='x',padx=7,pady=(8,2))
+        self.component=ttk.Combobox(self,state='readonly',values=list(COMPONENTS));self.component.pack(fill='x',padx=7);self.component.bind('<<ComboboxSelected>>',self.show_component)
+        self.component_help=tk.Label(self,bg=SUNKEN,fg=FG,justify='left',anchor='nw',wraplength=270);self.component_help.pack(fill='x',padx=7,pady=5)
         Button(self,'APPLY EXPOSED PROPERTIES',self.apply,AMBER).pack(fill='x',padx=6,pady=5)
+    def show_component(self,_event=None):
+        info=COMPONENTS.get(self.component.get())
+        if not info:self.component_help.configure(text='');return
+        code='\n'.join(info['code']) or '(native component; callable events pending)'
+        self.component_help.configure(text='Modifiers: '+', '.join(info['fields'])+'\n\nNC-CODE:\n'+code)
     def show_record(self,record):
         self.record=record
         for entry in self.entries.values():entry.delete(0,'end')
@@ -141,5 +165,7 @@ class InspectorSidebar(tk.Frame):
             editable=key in ('name','position') or key in record or (key=='material' and 'material' in record)
             self.entries[key].configure(state='normal');self.entries[key].insert(0,', '.join(map(str,value)) if isinstance(value,list) else str(value));self.entries[key].configure(state='normal' if editable and not record.get('readonly') else 'disabled')
         self.meta.configure(text='Key: %s\nSpace: %s\nComponent: %s'%(record.get('key'),record.get('space'),record.get('component') or 'GameObject instance'))
+        suggested=record.get('component') or ('Sprite2D' if record.get('space')=='2d' else 'Mesh3D')
+        if suggested in COMPONENTS:self.component.set(suggested);self.show_component()
     def apply(self):
         if self.record:self.on_apply(self.record,{key:entry.get().strip() for key,entry in self.entries.items()})
