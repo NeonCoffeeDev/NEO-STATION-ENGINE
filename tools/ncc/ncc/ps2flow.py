@@ -10,14 +10,14 @@ from .triggercode import predicates
 def compile_project(project):
     root=Path(project); path=root/'event-flow.json'
     if not path.exists():
-        if (root/'src/nc_events.h').exists():
-            (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n', encoding='utf-8')
+        (root/'src').mkdir(parents=True,exist_ok=True)
+        (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n', encoding='utf-8')
         return
     doc=json.loads(path.read_text())
     if doc.get('target')!='ps2': raise ValueError('PS2 build refuses a graph from another console.')
     if doc.get('status')=='draft':
-        if (root/'src/nc_events.h').exists():
-            (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n')
+        (root/'src').mkdir(parents=True,exist_ok=True)
+        (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n')
         return
     if doc.get('status')!='enabled':raise ValueError('Invalid event status.')
     meta=json.loads((root/'nc.json').read_text())

@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "camera": {
+    "pos": [
+      6,
+      4.5,
+      -8
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "fov": 60
+  },
+  "lights": {
+    "Key Light": {
+      "position": [
+        -2,
+        4,
+        -3
+      ],
+      "direction": [
+        0.4,
+        -1,
+        0.25
+      ],
+      "intensity": 0.7,
+      "ambient": 0.42
+    }
+  },
+  "shadows": {
+    "Cube Shadow": {
+      "position": [
+        0,
+        -1,
+        0
+      ],
+      "size": [
+        1.15,
+        0.04,
+        1.15
+      ]
+    }
+  },
+  "objects": {
+    "Ground": {
+      "position": [
+        0,
+        -1.1,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        5,
+        0.1,
+        5
+      ],
+      "material": "textures/nc-logo.png"
+    },
+    "Demo Cube": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        25,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "material": "textures/nc-logo.png"
+    }
+  }
+}

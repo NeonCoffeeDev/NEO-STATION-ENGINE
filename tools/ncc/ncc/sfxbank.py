@@ -123,16 +123,15 @@ def build(project, out_dir, sfx_rate=sound.SFX_RATE, music_rate=sound.MUSIC_RATE
           log=print, irx=None):
     """Encode everything in the project's audio folders into a linked bank.
 
-    Returns a summary dict, or None when the project has no audio at all.
+    Always emits a valid bank. A new project with no imported audio still
+    links the shared audio runtime and can receive sounds later without its
+    Makefile or source dependencies changing shape.
     """
     root = Path(project)
     sfx_files = sorted((root / SFX_DIR).glob("*.*")) if (root / SFX_DIR).is_dir() else []
     sfx_files = [p for p in sfx_files if p.suffix.lower() in sound.READABLE]
     music_files = sorted((root / MUSIC_DIR).glob("*.*")) if (root / MUSIC_DIR).is_dir() else []
     music_files = [p for p in music_files if p.suffix.lower() in sound.READABLE]
-    if not sfx_files and not music_files:
-        return None
-
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 

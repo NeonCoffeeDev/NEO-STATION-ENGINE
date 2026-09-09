@@ -177,7 +177,7 @@ def write_project_meta(root, name, template, target):
             meta["event_adapter"] = "fixed_room_v1"
         if template == "ps2_hello":meta["event_adapter"] = "pad2d_v1"
         if template == "ps2_3d":meta["event_adapter"] = "lab3d_v1"
-        if template == "ps2_vn":meta["event_adapter"] = "vn_v1"
+        if template in ("ps2_vn","ps2_hybrid"):meta["event_adapter"] = "vn_v1"
         if template == "ps2_logo":meta["event_adapter"] = "screen2d_v1"
         json.dump(meta, fh, indent=2)
         fh.write(chr(10))

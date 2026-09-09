@@ -1,0 +1,180 @@
+[gd_scene load_steps=32 format=3]
+
+[ext_resource type="Script" path="res://addons/neoncoffee/nc_vn_game.gd" id="game"]
+
+[ext_resource type="Script" path="res://addons/neoncoffee/nc_vn_character.gd" id="character"]
+
+[ext_resource type="Script" path="res://addons/neoncoffee/nc_vn_location.gd" id="location"]
+
+[ext_resource type="Script" path="res://addons/neoncoffee/nc_vn_item.gd" id="item"]
+
+[ext_resource type="Script" path="res://addons/neoncoffee/nc_vn_line.gd" id="line"]
+
+[ext_resource type="Script" path="res://addons/neoncoffee/nc_vn_choice.gd" id="choice"]
+
+[sub_resource type="Resource" id="characters_0"]
+
+script = ExtResource("character")
+
+id = "barista"
+
+display_name = "ARIA"
+
+portrait = "res://assets/portrait-placeholder.png"
+
+[sub_resource type="Resource" id="scenes_0"]
+
+script = ExtResource("location")
+
+id = "cafe"
+
+background = "res://assets/cafe.png"
+
+color = Color(0.11764705882352941,0.14901960784313725,0.21568627450980393,1)
+
+[sub_resource type="Resource" id="scenes_1"]
+
+script = ExtResource("location")
+
+id = "street"
+
+background = "res://assets/street.png"
+
+color = Color(0.13725490196078433,0.0784313725490196,0.17647058823529413,1)
+
+[sub_resource type="Resource" id="items_0"]
+
+script = ExtResource("item")
+
+id = "key"
+
+display_name = "CAFE KEY"
+
+[sub_resource type="Resource" id="dialogue_0"]
+
+script = ExtResource("line")
+
+id = "welcome"
+
+speaker = "barista"
+
+scene = "cafe"
+
+text = "Welcome back. Take this key. Press SQUARE to check your inventory."
+
+give = "key"
+
+next = "choice"
+
+[sub_resource type="Resource" id="choice_1_0"]
+
+script = ExtResource("choice")
+
+text = "OPEN THE DOOR"
+
+next = "outside"
+
+requires = "key"
+
+[sub_resource type="Resource" id="choice_1_1"]
+
+script = ExtResource("choice")
+
+text = "STAY FOR COFFEE"
+
+next = "coffee"
+
+[sub_resource type="Resource" id="dialogue_1"]
+
+script = ExtResource("line")
+
+id = "choice"
+
+speaker = "barista"
+
+scene = "cafe"
+
+text = "Where would you like to go?"
+
+choices = Array[ExtResource("choice")]([SubResource("choice_1_0"),SubResource("choice_1_1")])
+
+[sub_resource type="Resource" id="dialogue_2"]
+
+script = ExtResource("line")
+
+id = "outside"
+
+scene = "street"
+
+text = "The key opens the door. You step into the night. This is a named scene change."
+
+[sub_resource type="Resource" id="dialogue_3"]
+
+script = ExtResource("line")
+
+id = "coffee"
+
+scene = "cafe"
+
+speaker = "barista"
+
+text = "One coffee, coming up. Your inventory lasts until you choose BEGIN again."
+
+[node name="VN_Essentials" type="Node2D"]
+
+script = ExtResource("game")
+
+start = "welcome"
+
+characters = Array[ExtResource("character")]([SubResource("characters_0")])
+
+scenes = Array[ExtResource("location")]([SubResource("scenes_0"),SubResource("scenes_1")])
+
+items = Array[ExtResource("item")]([SubResource("items_0")])
+
+dialogue = Array[ExtResource("line")]([SubResource("dialogue_0"),SubResource("dialogue_1"),SubResource("dialogue_2"),SubResource("dialogue_3")])
+
+[node name="Background" type="TextureRect" parent="."]
+offset_right = 640.0
+offset_bottom = 448.0
+expand_mode = 1
+mouse_filter = 2
+
+[node name="Portrait" type="TextureRect" parent="."]
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 160.0
+offset_bottom = 248.0
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Dialogue" type="ColorRect" parent="."]
+offset_left = 32.0
+offset_top = 232.0
+offset_right = 608.0
+offset_bottom = 400.0
+color = Color(0.039,0.047,0.07,1)
+mouse_filter = 2
+
+[node name="SampleText" type="Label" parent="Dialogue"]
+offset_left = 16.0
+offset_top = 8.0
+offset_right = 550.0
+offset_bottom = 150.0
+text = "ARIA
+Welcome back. Take this key.
+Text wraps into four lines.
+
+> OPEN THE DOOR
+  STAY FOR COFFEE"
+mouse_filter = 2
+
+[node name="SafeArea" type="ReferenceRect" parent="."]
+offset_left = 32.0
+offset_top = 24.0
+offset_right = 608.0
+offset_bottom = 424.0
+border_color = Color(1,0.7,0.2,1)
+mouse_filter = 2
+metadata/_edit_lock_ = true

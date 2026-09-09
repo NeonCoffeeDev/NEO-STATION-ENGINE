@@ -1,0 +1,123 @@
+{
+  "story": [
+    "THE SHOP IS SHUT. THE SIGN STILL",
+    "HUMS.",
+    "",
+    "YOU HAVE A DEV KIT THAT IS NOT A",
+    "DEV KIT,",
+    "A CONSOLE FROM 2000, AND A USB",
+    "STICK.",
+    "",
+    "THAT TURNS OUT TO BE ENOUGH.",
+    "",
+    "EVERYTHING ON THIS SCREEN WAS",
+    "BUILT BY",
+    "NEON COFFEE AND RAN ON REAL",
+    "HARDWARE.",
+    "",
+    "THE LOGO IS A TEXTURE IN",
+    "GRAPHICS MEMORY.",
+    "THE TEXT IS A SHEET OF 8X8",
+    "GLYPHS.",
+    "THE PAD IS READ THROUGH THE IOP.",
+    "",
+    "NOW GO AND MAKE SOMETHING."
+  ],
+  "about": [
+    "NEON COFFEE ENGINE",
+    "",
+    "PS1  PSN00BSDK, A .NCPKG OF ART",
+    "AND",
+    "     SCENES, AND NCSCRIPT",
+    "COMPILED TO C.",
+    "",
+    "PS2  PS2SDK. THIS SCREEN. THE",
+    "RUNTIME",
+    "     ITSELF IS STILL TO COME --",
+    "M6.",
+    "",
+    "GODOT IS THE SCENE EDITOR,",
+    "UNFORKED.",
+    "NC STUDIO IS THE MANAGER.",
+    "",
+    "TRIANGLE TO GO BACK."
+  ],
+  "title": "NEON COFFEE",
+  "subtitle": "PLAYSTATION 2",
+  "logo_scale_x": 110,
+  "kit": {
+    "frames_per_character": 2,
+    "start": "welcome",
+    "characters": [
+      {
+        "id": "barista",
+        "name": "ARIA",
+        "portrait": "godot/assets/portrait-placeholder.png"
+      }
+    ],
+    "scenes": [
+      {
+        "id": "cafe",
+        "background": "godot/assets/cafe.png",
+        "color": [
+          30,
+          38,
+          55
+        ]
+      },
+      {
+        "id": "street",
+        "background": "godot/assets/street.png",
+        "color": [
+          35,
+          20,
+          45
+        ]
+      }
+    ],
+    "items": [
+      {
+        "id": "key",
+        "name": "CAFE KEY"
+      }
+    ],
+    "dialogue": [
+      {
+        "id": "welcome",
+        "speaker": "barista",
+        "scene": "cafe",
+        "text": "Welcome back. Take this key. Press SQUARE to check your inventory.",
+        "give": "key",
+        "next": "choice"
+      },
+      {
+        "id": "choice",
+        "speaker": "barista",
+        "scene": "cafe",
+        "text": "Where would you like to go?",
+        "choices": [
+          {
+            "text": "OPEN THE DOOR",
+            "next": "outside",
+            "requires": "key"
+          },
+          {
+            "text": "STAY FOR COFFEE",
+            "next": "coffee"
+          }
+        ]
+      },
+      {
+        "id": "outside",
+        "scene": "street",
+        "text": "The key opens the door. You step into the night. This is a named scene change."
+      },
+      {
+        "id": "coffee",
+        "scene": "cafe",
+        "speaker": "barista",
+        "text": "One coffee, coming up. Your inventory lasts until you choose BEGIN again."
+      }
+    ]
+  }
+}

@@ -145,10 +145,12 @@ class Studio:
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         style_ttk(root)     # before any ttk widget is built
 
+        self._build_menubar()
+
         self._build_titlebar()
         workspace = tk.Frame(root, bg=PANEL)
         workspace.pack(fill="x", padx=8, pady=(0, 6))
-        Button(workspace, "PROJECT HUB", self.toggle_hub, CYAN).pack(side="left")
+        Button(workspace, "OPEN PROJECT", self.open_project_dialog, CYAN).pack(side="left")
         Button(workspace, "FULLSCREEN  F11", self.toggle_fullscreen, DIM).pack(side="right")
         self.workspace_name = tk.Label(workspace, text="Select a project", bg=PANEL,
                                        fg=AMBER, font=MONO_SM)
@@ -169,17 +171,14 @@ class Studio:
         main.add(center,minsize=500,stretch='always')
         main.add(right,minsize=250,width=306,stretch='never')
 
-        self.right_tabs = TabStack(right, {"system":"SYSTEM",
-                                           "inspector":"COMPONENTS / INSPECTOR"})
+        self.right_tabs = TabStack(right, {"inspector":"COMPONENTS / INSPECTOR"})
         self.right_tabs.pack(fill="both", expand=True)
-        system = self.right_tabs.tabs['system'][1]
         inspector_holder = self.right_tabs.tabs['inspector'][1]
-        self._build_projects(system)
-        self._build_target(system)
-        self._build_actions(system)
-        self._build_tools(system)
-        self._build_assets(system)
-        self._build_hardware(system)
+        # Legacy controls still back keyboard/menu commands, but no longer form
+        # a second project manager inside the workspace.
+        system = tk.Frame(root)
+        self._build_projects(system);self._build_target(system);self._build_actions(system)
+        self._build_tools(system);self._build_assets(system);self._build_hardware(system)
         self._build_output(center)
         self.author_sidebar = AuthorSidebar(left, self.open_flow_from_sidebar,
                                             self.select_from_hierarchy,self.add_ready_object)
@@ -205,6 +204,44 @@ class Studio:
         self.root.after(1200, self._poll_project_data)
 
     # ---- chrome ---------------------------------------------------------
+
+    def _build_menubar(self):
+        menu=tk.Menu(self.root,tearoff=False)
+        file_menu=tk.Menu(menu,tearoff=False);menu.add_cascade(label='File',menu=file_menu)
+        file_menu.add_command(label='Open Project...',command=self.open_project_dialog,accelerator='Ctrl+O')
+        file_menu.add_command(label='New Project...',command=self.new_project)
+        file_menu.add_separator();file_menu.add_command(label='Open Project Folder',command=self.open_folder)
+        file_menu.add_separator();file_menu.add_command(label='Exit',command=self.on_close)
+        edit=tk.Menu(menu,tearoff=False);menu.add_cascade(label='Edit',menu=edit)
+        edit.add_command(label='Undo Scene Change',command=lambda:self.viewport_panel.undo(),accelerator='Ctrl+Z')
+        edit.add_command(label='Save Current Editor',command=lambda:self.viewport_panel.save(),accelerator='Ctrl+S')
+        tools=tk.Menu(menu,tearoff=False);menu.add_cascade(label='Tools',menu=tools)
+        tools.add_command(label='Build + Run',command=lambda:self.run_ncc('run'),accelerator='F5')
+        tools.add_command(label='Build',command=lambda:self.run_ncc('build'),accelerator='F7')
+        tools.add_command(label='Check Project',command=self.check_project,accelerator='F8')
+        tools.add_command(label='Sync Runtime',command=lambda:self.run_ncc('sync'))
+        view=tk.Menu(menu,tearoff=False);menu.add_cascade(label='View',menu=view)
+        view.add_command(label='Scene',command=lambda:self.show_tab('viewport'))
+        view.add_command(label='Game',command=lambda:self.show_tab('game'))
+        view.add_command(label='GameObject',command=lambda:self.show_tab('room'))
+        view.add_command(label='Game Flow',command=lambda:self.show_tab('structure'))
+        view.add_separator();view.add_command(label='Fullscreen',command=self.toggle_fullscreen,accelerator='F11')
+        help_menu=tk.Menu(menu,tearoff=False);menu.add_cascade(label='Help',menu=help_menu)
+        help_menu.add_command(label='Project Walkthrough',command=self.open_walkthrough)
+        self.root.configure(menu=menu);self.root.bind('<Control-o>',lambda _e:self.open_project_dialog())
+
+    def open_project_dialog(self):
+        path=filedialog.askdirectory(parent=self.root,title='Open NEO-STATION project',initialdir=self.settings.get('project',self.repo))
+        if path:self.activate_project(path)
+
+    def activate_project(self,path):
+        path=os.path.abspath(path)
+        try:project_meta(path)
+        except (OSError,ValueError,KeyError) as exc:messagebox.showerror('Open Project','Choose a folder containing nc.json.\n\n'+str(exc),parent=self.root);return
+        if not os.path.isfile(os.path.join(path,'nc.json')):messagebox.showerror('Open Project','Choose a folder containing nc.json.',parent=self.root);return
+        if self.viewport_panel.dirty() and not self.viewport_panel.save():return
+        self.projects=[path];self.plist.delete(0,'end');self.plist.insert('end',os.path.basename(path));self.plist.selection_set(0)
+        self.viewport_panel.drafts.clear();self.settings['project']=path;save_settings(self.settings);self.on_select()
 
     def _build_titlebar(self):
         bar = tk.Canvas(self.root, height=46, bg=BG, highlightthickness=0, bd=0)
@@ -657,16 +694,9 @@ class Studio:
     def refresh_projects(self):
         want = self.selected_project() or self.settings.get("project")
         found = find_projects(self.repo)
-        self.projects = [p for p in found
-                         if self.mode == "all"
-                         or project_meta(p)["target"] == self.mode]
+        self.projects = [want] if want and os.path.isfile(os.path.join(want,'nc.json')) else found[:1]
         self.plist.delete(0, "end")
-        for p in self.projects:
-            # Tag the machine. With two targets in one list, which console a
-            # project is for stops being obvious from its name alone.
-            tag = project_meta(p)["target"].upper()
-            self.plist.insert("end", "  %-5s %s"
-                              % (tag, os.path.relpath(p, self.repo)))
+        for p in self.projects:self.plist.insert('end',os.path.basename(p))
         if not self.projects:
             self.set_status("no %s projects -- press NEW... or switch to ALL"
                             % self.mode.upper() if self.mode != "all"
@@ -1374,8 +1404,9 @@ class Studio:
         tk.Label(g.body, text="template", bg=PANEL, fg=DIM, font=MONO_SM,
                  anchor="w").pack(fill="x", padx=8, pady=(10, 2))
 
+        preferred='ps2_hybrid' if any(t['name']=='ps2_hybrid' for t in templates) else DEFAULT_TEMPLATE
         initial = next((t["name"] for t in templates
-                        if t["name"] == DEFAULT_TEMPLATE), templates[0]["name"])
+                        if t["name"] == preferred), templates[0]["name"])
         chosen = tk.StringVar(value=initial)
         detail = tk.Label(g.body, text="", bg=PANEL, fg=DIM, font=MONO_SM,
                           anchor="w", justify="left", wraplength=380)
@@ -1443,13 +1474,8 @@ class Studio:
             self.root.after(200, self._refresh_when_idle)
             return
         dest = getattr(self, "_pending_select", None)
-        self.refresh_projects()
-        if dest and dest in self.projects:
-            i = self.projects.index(dest)
-            self.plist.selection_clear(0, "end")
-            self.plist.selection_set(i)
-            self.plist.see(i)
-            self.on_select()
+        if dest and os.path.isfile(os.path.join(dest,'nc.json')):self.activate_project(dest)
+        else:self.refresh_projects()
         self._pending_select = None
 
     # ---- shutdown -------------------------------------------------------

@@ -81,7 +81,7 @@ class ViewportPanel(tk.Frame):
     def change_stage(self):
         if not self.world or not self.stages:return
         stage=self.stages[max(0,self.stage.current())]
-        screen_key={'Splash':'splash','Menu':'main_menu','Intro':'intro'}.get(stage.get('kind'))
+        screen_key={'Initialize':'init','Splash':'splash','Intro':'intro','Title':'title_screen','Menu':'main_menu'}.get(stage.get('kind'))
         self.world.active_screen=screen_key if screen_key in self.world.screens.get('screens',{}) else None
         value=str(stage.get('value',''))
         for index,scene in enumerate(self.world.scenes()):

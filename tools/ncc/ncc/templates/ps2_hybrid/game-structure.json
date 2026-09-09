@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "status": "enabled",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "Initialize",
+      "value": "Initialize systems",
+      "x": 30,
+      "y": 30
+    },
+    {
+      "id": 2,
+      "kind": "Splash",
+      "value": "Disclaimer",
+      "x": 235,
+      "y": 30
+    },
+    {
+      "id": 3,
+      "kind": "Intro",
+      "value": "Intro / video placeholder",
+      "x": 440,
+      "y": 30
+    },
+    {
+      "id": 4,
+      "kind": "Title",
+      "value": "Title Screen",
+      "x": 645,
+      "y": 30
+    },
+    {
+      "id": 5,
+      "kind": "Menu",
+      "value": "Main Menu",
+      "x": 30,
+      "y": 150
+    },
+    {
+      "id": 6,
+      "kind": "Play",
+      "value": "3D Gameplay",
+      "x": 235,
+      "y": 150
+    },
+    {
+      "id": 7,
+      "kind": "Ending",
+      "value": "Return to Title",
+      "x": 440,
+      "y": 150
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      6,
+      7
+    ]
+  ]
+}

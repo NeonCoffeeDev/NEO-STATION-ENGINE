@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "screens": {
+    "init": {
+      "name": "Initialization",
+      "objects": [
+        {
+          "id": "init_bg",
+          "name": "Initialize Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ]
+        },
+        {
+          "id": "init_status",
+          "name": "Initialization Status",
+          "type": "text",
+          "rect": [
+            32,
+            390,
+            576,
+            24
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "INITIALIZING..."
+        }
+      ]
+    },
+    "splash": {
+      "name": "Splash / Disclaimer",
+      "objects": [
+        {
+          "id": "splash_bg",
+          "name": "Splash Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ]
+        },
+        {
+          "id": "splash_logo",
+          "name": "Neon Coffee Logo",
+          "type": "sprite2d",
+          "rect": [
+            165,
+            72,
+            310,
+            255
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Sprite2D"
+          ],
+          "role": "brand_logo",
+          "texture": "textures/ui/neon-coffee-logo.png",
+          "details": {
+            "filter": "nearest",
+            "blend": "cutout"
+          }
+        },
+        {
+          "id": "disclaimer",
+          "name": "Disclaimer Text",
+          "type": "text",
+          "rect": [
+            90,
+            360,
+            460,
+            32
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "UNOFFICIAL HOMEBREW SOFTWARE"
+        }
+      ]
+    },
+    "intro": {
+      "name": "Intro / Video",
+      "objects": [
+        {
+          "id": "intro_bg",
+          "name": "Intro Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ]
+        },
+        {
+          "id": "video_slot",
+          "name": "Video Playback Slot",
+          "type": "panel",
+          "rect": [
+            80,
+            44,
+            480,
+            320
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ]
+        },
+        {
+          "id": "skip_intro",
+          "name": "Skip Prompt",
+          "type": "text",
+          "rect": [
+            420,
+            398,
+            188,
+            24
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "START: SKIP"
+        }
+      ]
+    },
+    "title_screen": {
+      "name": "Title Screen",
+      "objects": [
+        {
+          "id": "title_bg",
+          "name": "Title Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ]
+        },
+        {
+          "id": "title_logo",
+          "name": "Title Logo",
+          "type": "sprite2d",
+          "rect": [
+            165,
+            72,
+            310,
+            255
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Sprite2D"
+          ],
+          "role": "brand_logo",
+          "texture": "textures/ui/neon-coffee-logo.png",
+          "details": {
+            "filter": "nearest",
+            "blend": "cutout"
+          }
+        },
+        {
+          "id": "press_start",
+          "name": "Press Start",
+          "type": "text",
+          "rect": [
+            220,
+            372,
+            200,
+            28
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "PRESS START"
+        }
+      ]
+    },
+    "main_menu": {
+      "name": "Main Menu",
+      "objects": [
+        {
+          "id": "menu_bg",
+          "name": "Menu Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ]
+        },
+        {
+          "id": "menu_logo",
+          "name": "Menu Logo",
+          "type": "sprite2d",
+          "rect": [
+            32,
+            36,
+            97,
+            80
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Sprite2D"
+          ],
+          "role": "brand_logo",
+          "texture": "textures/ui/neon-coffee-logo.png",
+          "details": {
+            "filter": "nearest",
+            "blend": "cutout"
+          }
+        },
+        {
+          "id": "new_game",
+          "name": "New Game Button",
+          "type": "button",
+          "rect": [
+            220,
+            210,
+            200,
+            36
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Button2D"
+          ],
+          "text": "NEW GAME"
+        },
+        {
+          "id": "continue",
+          "name": "Continue Button",
+          "type": "button",
+          "rect": [
+            220,
+            258,
+            200,
+            36
+          ],
+          "layer": 21,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Button2D"
+          ],
+          "text": "CONTINUE"
+        },
+        {
+          "id": "options",
+          "name": "Options Button",
+          "type": "button",
+          "rect": [
+            220,
+            306,
+            200,
+            36
+          ],
+          "layer": 22,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Button2D"
+          ],
+          "text": "OPTIONS"
+        }
+      ]
+    }
+  }
+}

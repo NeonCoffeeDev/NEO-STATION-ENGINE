@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "name": "NEOStationStarter",
+  "template": "ps2_hybrid",
+  "target": "ps2",
+  "event_adapter": "vn_v1"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "ps2_hybrid",
+  "title": "PS2 2D + 3D game starter",
+  "order": 9,
+  "target": "ps2",
+  "description": "Full boot flow, editable 2D screens, VN/dialogue tools, and a textured PS2 3D world in one project.",
+  "detail": "The primary NEO-STATION PS2 starter. Initialize, splash, intro, title, and menu remain visible as individual beginner-friendly scenes; gameplay combines shared GameObjects, events, audio, UI, and a camera-authored 3D world."
+}
