@@ -1,0 +1,32 @@
+# Editable PS1 cube: viewport placement supplies the initial transform.
+var rx = 0
+var ry = 0
+var rz = 0
+var start_x = 0
+var start_y = 0
+var start_z = 450
+func _ready():
+    start_x = get_x(0)
+    start_y = get_y(0)
+    start_z = get_z(0)
+func _update():
+    if btn_held(BTN_UP):
+        rx = rx - 24
+    if btn_held(BTN_DOWN):
+        rx = rx + 24
+    if btn_held(BTN_LEFT):
+        ry = ry - 24
+    if btn_held(BTN_RIGHT):
+        ry = ry + 24
+    if btn_held(BTN_L1) and get_z(0) < 2000:
+        move(0, 0, 0, 8)
+    if btn_held(BTN_R1) and get_z(0) > 250:
+        move(0, 0, 0, -8)
+    if btn_pressed(BTN_CROSS):
+        rx = 0
+        ry = 0
+        rz = 0
+        set_pos(0, start_x, start_y, start_z)
+    ry = ry + 8
+    rz = rz + 4
+    set_rot(0, rx, ry, rz)

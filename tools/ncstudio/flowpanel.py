@@ -5,7 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 from theme import BG, FG, CYAN, AMBER, Button
-from nodeparams import HELP, MoveDialog, VariableDialog
+from nodeparams import HELP, MoveDialog, VariableDialog, choose_reference
 from ncc.build import project_meta
 from ncc import eventflow, ncscript, ps2flow, flowkits
 
@@ -73,9 +73,13 @@ class FlowPanel(tk.Frame):
             self.kit_choice['values']=list(flowkits.available(meta))
             if self.kit_choice['values']:self.kit_choice.current(0)
             if self.target=='ps1':
-                kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect']
+                kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Show mesh','Hide mesh','Set sprite position','Set object position','After frames','Every frames','On trigger enter','On trigger exit']
             elif meta.get('event_adapter')=='fixed_room_v1':
-                kinds=['On start','On button','On zone','On arrival','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Stop movement','Set camera','Interact','Reset game']
+                kinds=['On start','On button','On zone','On arrival','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Stop movement','Set camera','Interact','Reset game','On trigger enter','On trigger exit']
+            elif meta.get('event_adapter') in ('lab3d_v1','vn_v1','pad2d_v1'):
+                kinds=['On start','On button','After frames','Every frames','Once','Cooldown','Set variable','Add variable','If equal','If at least','Repeat','On trigger enter','On trigger exit']
+                if meta['event_adapter']=='pad2d_v1':kinds += ['Reset game','Set colour','Set sprite position']
+                else:kinds += ['Reset game','Set colour','Set object position'] if meta['event_adapter']=='lab3d_v1' else ['Change room','Show main menu']
             else:
                 kinds=['On start','On button']
             self.kind['values']=kinds;self.kind.current(0)
@@ -139,7 +143,8 @@ class FlowPanel(tk.Frame):
         if self.readonly:return
         for n in self.nodes:
             if n['id']==self.selected:
-                if n['kind']=='Move to':v=MoveDialog(self,n.get('value','')).result
+                if n['kind'] in ('On trigger enter','On trigger exit','Go to Flow Box'):v=choose_reference(self,self.project,n['kind'],n.get('value',''))
+                elif n['kind']=='Move to':v=MoveDialog(self,n.get('value','')).result
                 elif n['kind'] in ('Set variable','Add variable','If equal','If at least'):v=VariableDialog(self,n['kind'],n.get('value','')).result
                 else:v=simpledialog.askstring(n['kind'],HELP.get(n['kind'],'Existing project object index:'),initialvalue=n.get('value',''),parent=self)
                 if v is not None:self.checkpoint();n['value']=v;self.enabled=False;self.draw();self.save()

@@ -2,7 +2,9 @@
 import math
 import re
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox, ttk
+import json
+from pathlib import Path
 
 HELP = {
     'On arrival':'Fire once when the player completes a Move to. Cancellation does not fire it. No parameter.',
@@ -72,3 +74,33 @@ class VariableDialog(simpledialog.Dialog):
             messagebox.showerror('Invalid variable','Start the name with a letter; use letters, digits or underscores (max 24). Enter a whole number in range.',parent=self);return False
 
 HELP.update({'Go to Flow Box':'Destination GAME FLOW box ID. Ends this chain and enters that box next update.', 'On exit':'Runs once when leaving this flow box. Cannot request another transition.'})
+
+HELP.update({"On trigger enter":"Trigger ID from VIEWPORT. Fires when the tracked object anchor enters its volume.","On trigger exit":"Trigger ID from VIEWPORT. Fires when the tracked object anchor leaves its volume.","Set sprite position":"PS1 sprite index, X, Y (integer pixels).", "Set object position":"PS1: mesh index, X,Y,Z. PS2 3D Lab: object name, X,Y,Z.","Set colour":"PS2 3D Lab palette index: 0..3.","Show main menu":"Return to the native VN main menu. Parameter: 0."})
+
+class ReferenceDialog(simpledialog.Dialog):
+    def __init__(self,parent,title,rows,value):
+        self.rows=rows;self.initial=str(value);super().__init__(parent,title)
+    def body(self,master):
+        self.choice=ttk.Combobox(master,state='readonly',width=55,values=[label for ident,label in self.rows]);self.choice.pack(fill='x')
+        found=next((i for i,(ident,label) in enumerate(self.rows) if str(ident)==self.initial),None)
+        if found is not None:self.choice.current(found)
+        elif self.initial:self.choice.set(self.initial+' (missing reference)')
+        elif self.rows:self.choice.current(0)
+        return self.choice
+    def validate(self):
+        if self.choice.current()<0:messagebox.showerror('Reference','Choose an existing entry.',parent=self);return False
+        return True
+    def apply(self):self.result=str(self.rows[self.choice.current()][0])
+
+def choose_reference(parent,project,kind,value):
+    try:
+        root=Path(project)
+        if kind.startswith('On trigger'):
+            path=root/'triggers.json'
+            if not path.exists():raise ValueError('Create and SAVE a trigger in VIEWPORT first.')
+            rows=[(t['id'],'%s | %s | room %s | tracks %s'%(t['id'],t['name'],t['room'],t['subject'])) for t in json.loads(path.read_text(encoding='utf-8'))['triggers']]
+        else:
+            rows=[(t['id'],'%s | %s'%(t['id'],t.get('value',t['kind']))) for t in json.loads((root/'game-structure.json').read_text(encoding='utf-8'))['nodes']]
+        if not rows:raise ValueError('No entries available yet.')
+        return ReferenceDialog(parent,kind,rows,value).result
+    except (OSError,ValueError,KeyError,TypeError) as exc:messagebox.showerror('Reference',str(exc),parent=parent);return None

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "triggers": [
+    {
+      "id": 101,
+      "name": "Left camera zone",
+      "room": 0,
+      "subject": "o:player",
+      "space": "3d",
+      "min": [
+        -3,
+        -1,
+        -2
+      ],
+      "max": [
+        0,
+        2,
+        2.1
+      ]
+    },
+    {
+      "id": 102,
+      "name": "Right camera zone",
+      "room": 0,
+      "subject": "o:player",
+      "space": "3d",
+      "min": [
+        0,
+        -1,
+        -2
+      ],
+      "max": [
+        3.1,
+        2,
+        2.1
+      ]
+    }
+  ]
+}

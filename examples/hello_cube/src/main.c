@@ -1,88 +1,74 @@
 /*
- * hello_cube - a Neon Coffee PS1 project
+ * hello_cube - a Neon Coffee PS1 game
  *
- * This is your game. Edit it freely; the files next to it (nc_gfx.c, nc_input.c)
- * are the engine and are meant to grow into the NC runtime.
+ * You should not need to edit this file. It is the harness that ties the pieces
+ * together:
  *
- *   D-pad      rotate the cube
- *   X          reset rotation
- *   L1 / R1    move it away / closer
+ *   scene.json   what exists  -- meshes, objects, scenes, cameras
+ *                (build it visually in godot/ and press "Export to NC")
+ *   script.ncs   what happens -- your game logic, transpiled to C at build time
+ *   this file    the loop that runs them
+ *
+ * If you find yourself wanting to change something here, it probably belongs in
+ * script.ncs instead.
  */
 
+#include <stdio.h>
+
 #include "nc.h"
+#include "nc_script.h"
 
-/* A cube, 200 units across, centered on the origin. SVECTOR components are 16-bit
- * integers -- there is no floating point on this machine. */
-static const SVECTOR cube_verts[] = {
-    { -100, -100, -100, 0 },
-    {  100, -100, -100, 0 },
-    { -100,  100, -100, 0 },
-    {  100,  100, -100, 0 },
-    {  100, -100,  100, 0 },
-    { -100, -100,  100, 0 },
-    {  100,  100,  100, 0 },
-    { -100,  100,  100, 0 },
-};
-
-/* One outward-facing normal per quad, for lighting. ONE is 4096 == 1.0. */
-static const SVECTOR cube_norms[] = {
-    {     0,     0, -ONE, 0 },
-    {     0,     0,  ONE, 0 },
-    {     0, -ONE,     0, 0 },
-    {     0,  ONE,     0, 0 },
-    { -ONE,      0,     0, 0 },
-    {  ONE,      0,     0, 0 },
-};
-
-/* Winding order decides which way a face points, and therefore whether it survives
- * backface culling. Reverse a quad here and that face turns invisible. */
-static const NC_Quad cube_quads[] = {
-    { 0, 1, 2, 3 },
-    { 4, 5, 6, 7 },
-    { 5, 4, 0, 1 },
-    { 6, 7, 3, 2 },
-    { 0, 2, 5, 7 },
-    { 3, 1, 6, 4 },
-};
-
-static const NC_Mesh cube = {
-    cube_verts,
-    cube_norms,
-    cube_quads,
-    sizeof(cube_quads) / sizeof(cube_quads[0]),
-};
+/* The package, linked in by CMake from scene.ncpkg. */
+extern const unsigned long nc_package[];
 
 int main(void)
 {
-    SVECTOR rot = { 0, 0, 0, 0 };
-    VECTOR  pos = { 0, 0, 450 };
+    NC_Package pkg;
+    int frame = 0;
 
     nc_gfx_init();
     nc_input_init();
-    nc_gfx_set_clear(24, 16, 48);
+    nc_audio_init();     /* before loading: the package uploads its samples */
+    nc_music_init();
+    nc_save_init();
+
+    if (!nc_pkg_load(nc_package, &pkg)) {
+        /* A red screen means the data did not load. The reason is on TTY --
+         * check the PS1 TTY pane in NC Studio. */
+        nc_gfx_set_clear(90, 10, 10);
+        while (1)
+            nc_gfx_flip();
+    }
+
+    nc_scene_load(&pkg, 0);
+    nc_script_set_frame(0);
+    nc_script_ready();
 
     while (1) {
+        int requested;
+
         nc_input_poll();
 
-        if (nc_held(PAD_UP))    rot.vx -= 24;
-        if (nc_held(PAD_DOWN))  rot.vx += 24;
-        if (nc_held(PAD_LEFT))  rot.vy -= 24;
-        if (nc_held(PAD_RIGHT)) rot.vy += 24;
+        nc_script_set_frame(frame);
+        nc_script_update();
 
-        if (nc_held(PAD_L1) && pos.vz < 2000) pos.vz += 8;
-        if (nc_held(PAD_R1) && pos.vz >  250) pos.vz -= 8;
-
-        if (nc_pressed(PAD_CROSS)) {
-            rot.vx = rot.vy = rot.vz = 0;
-            pos.vz = 450;
+        /* Scene changes are deferred to here so a script can call goto_scene()
+         * in the middle of its logic without objects shifting under it. */
+        requested = nc_scene_take_request();
+        if (requested >= 0 && requested != nc_scene_index()) {
+            if (nc_scene_load(&pkg, requested)) {
+                frame = 0;
+                nc_script_set_frame(0);
+                nc_script_ready();
+            }
         }
 
-        /* Idle spin, so it is obviously alive with no controller attached. */
-        rot.vy += 8;
-        rot.vz += 4;
-
-        nc_mesh_draw(&cube, &rot, &pos);
+        nc_shake_update();
+        nc_scene_advance();
+        nc_scene_draw();
         nc_gfx_flip();
+
+        frame++;
     }
 
     return 0;

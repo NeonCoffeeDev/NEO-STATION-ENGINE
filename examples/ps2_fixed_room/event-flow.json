@@ -85,8 +85,8 @@
     },
     {
       "id": 11,
-      "kind": "On zone",
-      "value": "0",
+      "kind": "On trigger enter",
+      "value": "101",
       "x": 20,
       "y": 445,
       "section_id": 4
@@ -101,8 +101,8 @@
     },
     {
       "id": 13,
-      "kind": "On zone",
-      "value": "1",
+      "kind": "On trigger enter",
+      "value": "102",
       "x": 20,
       "y": 530,
       "section_id": 4

@@ -90,6 +90,11 @@ def check_project(path):
     r.say(f"  Checking {name}")
     r.say()
 
+    from .viewportdata import load_triggers
+    try:
+        _,triggers=load_triggers(path)
+        r.say(f"  TRIGGERS   {len(triggers)} / 32 volumes")
+    except (OSError,ValueError,KeyError,TypeError) as exc:r.problem("Invalid triggers",str(exc),"repair the trigger in VIEWPORT")
     scene_path = os.path.join(path, "scene.json")
     if not os.path.isfile(scene_path):
         r.say("  No scene.json -- this project keeps its geometry in C.")
@@ -303,16 +308,19 @@ def _check_package(path, doc, r):
 
 
 def check_ps2(path):
-    """What can honestly be said about a PS2 project today.
-
-    The PS1 checker knows every budget because the PS1 runtime owns every
-    resource. The PS2 runtime does not exist yet, so there is nothing to be
-    authoritative about beyond the executable itself -- and inventing budgets
-    for a renderer nobody has written would be worse than saying so.
-    """
+    """Validate the active PS2 layout adapter and report its budgets."""
     from . import build as build_mod
     from .targets import TARGETS
 
+    from .viewportdata import World,load_triggers
+    try:
+        _,triggers=load_triggers(path)
+        meta=build_mod.project_meta(path)
+        if meta.get("event_adapter") in ("fixed_room_v1","lab3d_v1","pad2d_v1","vn_v1"):
+            world=World(path);world.validate()
+            print(f"  Layout adapter: {meta['event_adapter']}; {len(triggers)}/32 triggers validated")
+    except (OSError,ValueError,KeyError,TypeError) as exc:
+        print(f"Viewport content cannot export: {exc}");return 1
     vn_path = os.path.join(path, "vn.json")
     if os.path.isfile(vn_path):
         from .vn import compile_content
@@ -344,9 +352,7 @@ def check_ps2(path):
         print("  EXECUTABLE not built yet -- ncc build %s" % name)
 
     print()
-    print("  There are no asset budgets to report: the NC runtime is PS1-only")
-    print("  so far, and a PS2 project owns its own main.c. See M6 in")
-    print("  docs/ROADMAP.md for what that milestone actually involves.")
+    print("  Layout limits are adapter-specific; executable size excludes stack and runtime allocations.")
     print()
     return 0
 

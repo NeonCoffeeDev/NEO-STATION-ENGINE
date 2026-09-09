@@ -1,148 +1,443 @@
-"""Editable top-down PS2 layout; not a console renderer."""
-import json
+"""Native 2D/orthographic 3D scene authoring, shared across console adapters."""
 import copy
+import json
 import math
+from PIL import Image, ImageTk
 from pathlib import Path
 import tkinter as tk
-from tkinter import simpledialog, messagebox, ttk
-from theme import BG, FG, CYAN, AMBER, Button
-from ncc.build import project_meta
-from ncc import roomlayout
+from tkinter import ttk, simpledialog, messagebox
+from theme import BG,FG,CYAN,AMBER,Button
+from ncc.viewportdata import World
 
 class ViewportPanel(tk.Frame):
     def __init__(self,parent):
-        super().__init__(parent,bg=BG);self.group=self;self.project=None;self.doc=None;self.selected=None;self.drafts={}
-        self.history=[];self.zoom=1.0
+        super().__init__(parent,bg=BG);self.group=self;self.project=None;self.world=None;self.drafts={};self.history=[];self.selected=None;self.zoom=1.;self.dragging=None
+        self.editor_camera={'yaw':.65,'pitch':-.42,'distance':12.0,'target':[0.0,0.0,0.0]}
+        self.camera_drag=None
         bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
-        Button(bar,'SAVE LAYOUT',self.save,CYAN).pack(side='left')
-        Button(bar,'RELOAD',lambda:self.load(self.project,force=True),CYAN).pack(side='left')
-        Button(bar,'CAMERA ANGLES',self.cameras,AMBER).pack(side='left')
-        Button(bar,'UNDO',self.undo,CYAN).pack(side='left')
-        Button(bar,'FIT',self.fit,CYAN).pack(side='left')
-        Button(bar,'POSITION',self.position,CYAN).pack(side='left')
-        self.object_choice=ttk.Combobox(bar,state='readonly',width=10,values=['player','key','door'])
-        self.object_choice.pack(side='left')
-        self.object_choice.bind('<<ComboboxSelected>>',lambda e:self.select_object())
-        self.snap=tk.BooleanVar(value=True)
-        tk.Checkbutton(bar,text='Snap 0.25',variable=self.snap,bg=BG,fg=FG,selectcolor=BG).pack(side='left')
-        self.note=tk.Label(self,bg=BG,fg=FG,anchor='w');self.note.pack(fill='x')
-        self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
-        self.canvas.pack(fill='both',expand=True)
-        self.canvas.bind('<Configure>',lambda e:self.draw())
-        self.canvas.bind('<Button-1>',self.pick);self.canvas.bind('<B1-Motion>',self.drag)
-        self.canvas.bind('<ButtonRelease-1>',lambda e:self.draw())
-        self.canvas.bind('<MouseWheel>',self.wheel)
+        self.room=ttk.Combobox(bar,state='readonly',width=24);self.room.pack(side='left');self.room.bind('<<ComboboxSelected>>',lambda e:self.change_room())
+        self.plane=ttk.Combobox(bar,state='readonly',width=13,values=['2D','PERSPECTIVE','GAME CAMERA','XY','XZ','YZ']);self.plane.current(0);self.plane.pack(side='left');self.plane.bind('<<ComboboxSelected>>',lambda e:self.fit())
+        for title,fn in [('SAVE',self.save),('RELOAD',self.reload),('UNDO',self.undo),('FIT',self.fit)]:Button(bar,title,fn,CYAN).pack(side='left')
+        self.snap=tk.BooleanVar(value=True);tk.Checkbutton(bar,text='Snap',variable=self.snap,bg=BG,fg=FG,selectcolor=BG).pack(side='left')
+        body=tk.Frame(self,bg=BG);body.pack(fill='both',expand=True)
+        side=tk.Frame(body,bg=BG,width=210);side.pack(side='left',fill='y')
+        self.objects=tk.Listbox(side,bg='#10171b',fg=FG,exportselection=False,width=28);self.objects.pack(fill='both',expand=True);self.objects.bind('<<ListboxSelect>>',self.select)
+        for title,fn in [('POSITION',self.position),('CAMERA ANGLES',self.cameras),('RENAME',self.rename),('SIZE / ROTATION',self.properties),('DUPLICATE OBJECT',self.duplicate),('ADD TRIGGER',self.add_trigger),('TRIGGER BOUNDS',self.bounds),('DELETE TRIGGER',self.delete_trigger)]:Button(side,title,fn,CYAN).pack(fill='x')
+        self.canvas=tk.Canvas(body,bg='#10171b',highlightthickness=0);self.canvas.pack(side='left',fill='both',expand=True)
+        self.canvas.bind('<Configure>',lambda e:self.draw());self.canvas.bind('<Button-1>',self.pick);self.canvas.bind('<B1-Motion>',self.drag);self.canvas.bind('<ButtonRelease-1>',lambda e:setattr(self,'dragging',None));self.canvas.bind('<MouseWheel>',self.wheel)
+        self.canvas.bind('<Button-3>',self.camera_press)
+        self.canvas.bind('<B3-Motion>',self.camera_orbit)
+        self.canvas.bind('<ButtonRelease-3>',lambda e:setattr(self,'camera_drag',None))
+        self.canvas.bind('<Button-2>',self.camera_press)
+        self.canvas.bind('<B2-Motion>',self.camera_pan)
+        self.canvas.bind('<ButtonRelease-2>',lambda e:setattr(self,'camera_drag',None))
+        self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=950);self.note.pack(fill='x')
+        self.photos=[]
+
     def load(self,project,force=False):
-        if self.project==project and not force:return
-        if self.project and self.doc and not force:
-            self.drafts[self.project]=(self.doc,self.original)
-        if force and self.doc and self.original is not None and json.loads(self.original)!=self.doc:
-            if not messagebox.askyesno('Reload layout','Discard unsaved layout edits and reload from disk?',parent=self):return
-        if force:self.drafts.pop(project,None)
-        self.project=project;self.doc=None;self.selected=None
-        self.history=[];self.zoom=1.0
-        self.object_choice.set('')
-        if project and project_meta(project).get('event_adapter')=='fixed_room_v1':
+        if project==self.project and not force:
+            if self.world and not self.dirty():
+                if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original:force=True
+            if not force:return
+        if self.project and self.world:self.drafts[self.project]=self.world
+        self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[]
+        if project:
             try:
-                self.doc=roomlayout.load(project);p=Path(project)/'room-layout.json'
-                self.original=p.read_text() if p.exists() else None
-                if project in self.drafts:self.doc,self.original=self.drafts[project]
-            except (OSError,ValueError,KeyError,TypeError) as e:messagebox.showerror('Viewport',str(e),parent=self)
-        self.note.configure(text='Top-down authoring: drag player, key or door; SAVE then BUILD. Camera angles affect the game, not this view.' if self.doc else 'This viewport currently edits PS2 Fixed Camera Room projects. Use ROOM for PS1/VN layouts.')
+                self.world=World(project) if force or project not in self.drafts else self.drafts[project]
+                self.drafts[project]=self.world
+                self.room['values']=['%d: %s'%(i,s.get('name',s.get('title',s.get('id','Room')))) for i,s in enumerate(self.world.scenes())]
+                self.room.current(0)
+                records=self.world.records(0)
+                is_2d=any(r['space']=='2d' for r in records)
+                self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','GAME CAMERA','XY','XZ','YZ']
+                self.plane.set('2D' if is_2d else 'PERSPECTIVE')
+            except (OSError,ValueError,KeyError,TypeError) as exc:self.note.configure(text=str(exc))
+        self.fit()
+        if self.world:self.note.configure(text='World workspace: left-drag objects in 2D/axis views. Perspective: right-drag orbit, middle-drag pan, wheel dolly. GAME CAMERA is a separate target-framing preview. Select an object, then ADD TRIGGER. SAVE/BUILD applies changes.')
+
+    def dirty(self):
+        w=self.world
+        return w and (json.loads(w.original)!=w.doc or (json.loads(w.trigger_original) if w.trigger_original else dict(version=1,target=w.target,triggers=[]))!=w.triggers)
+    def reload(self):
+        if self.dirty() and not messagebox.askyesno('Reload','Discard unsaved viewport changes?',parent=self):return
+        self.load(self.project,True)
+    def change_room(self):self.selected=None;self.fit()
+    def index(self):return max(0,self.room.current())
+    def records(self):return self.world.records(self.index()) if self.world else []
+    def axes(self):return {'2D':(0,1),'XY':(0,1),'XZ':(0,2),'YZ':(1,2)}[self.plane.get()]
+    def is_perspective(self):return self.plane.get() in ('PERSPECTIVE','GAME CAMERA')
+    def visible(self):return [r for r in self.records() if r['space']==('2d' if self.plane.get()=='2D' else '3d')]
+    def fit(self):
+        self.zoom=1.;rs=self.visible()
+        if self.is_perspective():
+            objects=[r for r in rs if r['key']!='camera' and not r['key'].startswith('t:')]
+            if objects:
+                self.editor_camera['target']=[sum(r['pos'][axis] for r in objects)/len(objects) for axis in range(3)]
+                span=max([abs(r['pos'][axis]-self.editor_camera['target'][axis]) for r in objects for axis in range(3)]+[2.0])
+                self.editor_camera['distance']=max(4.0,span*3.0)
+            self.draw();return
+        a,b=self.axes()
+        if rs:
+            xs=[r['pos'][a] for r in rs];ys=[r['pos'][b] for r in rs]
+            if self.plane.get()=='2D':xs += [0,640 if self.world.target=='ps2' else 320];ys += [0,448 if self.world.target=='ps2' else 240]
+            margin=1 if self.world.target=='ps2' and self.plane.get()!='2D' else 150
+            self.extent=(min(xs)-margin,min(ys)-margin,max(xs)+margin,max(ys)+margin)
+        else:self.extent=(-3,-2,3,2)
         self.draw()
     def mapping(self):
-        w=self.canvas.winfo_width();h=self.canvas.winfo_height()
-        return w/2,h/2,max(1,min((w-100)/7,(h-100)/5))*self.zoom
+        x0,y0,x1,y1=getattr(self,'extent',(-3,-2,3,2));w=max(100,self.canvas.winfo_width());h=max(100,self.canvas.winfo_height())
+        scale=min((w-40)/max(1,x1-x0),(h-40)/max(1,y1-y0))*self.zoom
+        return w/2-(x0+x1)*scale/2,h/2-(y0+y1)*scale/2,scale
     def draw(self):
-        c=self.canvas;c.delete('all')
-        if not self.doc:return
-        cx,cy,scale=self.mapping()
-        for x in range(-3,4):c.create_line(cx+x*scale,cy-2*scale,cx+x*scale,cy+2*scale,fill='#2c3d45')
-        for z in range(-2,3):c.create_line(cx-3*scale,cy-z*scale,cx+3*scale,cy-z*scale,fill='#2c3d45')
-        c.create_text(12,15,anchor='w',text='X →     Z ↑     Room limits: X ±3 / Z ±2',fill=FG)
-        for i,yaw in enumerate(self.doc['camera_yaw']):
-            dx,dz=math.sin(yaw),math.cos(yaw)
-            c.create_line(cx-dx*scale*2,cy+dz*scale*2,cx,cy,arrow='last',fill=['#80a6ff','#cc80ff','#80ffb0'][i],dash=(4,3))
-            c.create_text(cx-dx*scale*2,cy+dz*scale*2+12,text='Camera %d'%i,fill=FG)
-        for name,(x,z) in self.doc['objects'].items():
-            px,py=cx+x*scale,cy-z*scale
-            c.create_rectangle(px-12,py-12,px+12,py+12,fill=AMBER if name==self.selected else CYAN,tags=name)
-            c.create_text(px,py+25,text='%s (%.2f, %.2f)'%(name,x,z),fill=FG,tags=name)
+        c=self.canvas;c.delete('all');self.objects.delete(0,'end');self.photos=[];self.rows=self.visible()
+        if not self.world:return
+        if self.is_perspective():self.draw_perspective();return
+        ox,oy,scale=self.mapping();a,b=self.axes()
+        c.create_line(0,oy,c.winfo_width(),oy,fill='#33434b');c.create_line(ox,0,ox,c.winfo_height(),fill='#33434b')
+        for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
+        order=list(enumerate(self.rows))
+        if self.world.kind=='ps1' and self.plane.get()=='2D':order.reverse()
+        order.sort(key=lambda pair:pair[1]['key'].startswith('t:'))
+        for i,r in order:
+            x,y=ox+r['pos'][a]*scale,oy+r['pos'][b]*scale
+            trigger=r['key'].startswith('t:');flat=r['space']=='2d'
+            w,h=r['size'][a]*scale,r['size'][b]*scale
+            if not trigger and (not flat or self.world.kind=='pad2d_v1'):x-=max(6,w/2);y-=max(6,h/2)
+            w,h=max(12,w),max(12,h)
+            color=AMBER if r['key']==self.selected else ('#bd85ff' if trigger else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
+            c.create_rectangle(x,y,x+w,y+h,outline=color,fill='' if trigger else '#23333b',width=2,tags=('obj',r['key']))
+            if flat and not trigger:self.picture(r,x,y,w,h)
+            if not flat and r['key'].startswith('m:'):self.mesh_preview(r,ox,oy,scale,a,b,color)
+            c.create_text(x+3,y+3,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
+            if r['key']==self.selected:self.objects.selection_set(i)
+        if self.world.kind=='fixed_room_v1':
+            for i,yaw in enumerate(self.world.doc['camera_yaw']):
+                x=ox-math.sin(yaw)*scale*2;y=oy-math.cos(yaw)*scale*2
+                c.create_line(x,y,ox,oy,arrow='last',fill=AMBER,dash=(3,3));c.create_text(x,y,text='Camera '+str(i),fill=FG)
+        c.create_text(10,10,anchor='nw',text=self.plane.get()+' authoring view | '+self.world.target.upper(),fill=FG)
+    def select(self,event=None):
+        if self.objects.curselection():self.selected=self.rows[self.objects.curselection()[0]]['key'];self.draw()
+    def record(self):return next((r for r in self.records() if r['key']==self.selected),None)
+    def checkpoint(self):self.history.append(copy.deepcopy((self.world.doc,self.world.triggers)));self.history=self.history[-40:]
     def pick(self,e):
         tags=self.canvas.gettags('current')
-        self.selected=next((tag for tag in tags if self.doc and tag in self.doc['objects']),None);self.draw()
-        self.object_choice.set(self.selected or '')
-        if self.selected:self.checkpoint()
+        if len(tags)>1 and tags[0]=='obj':
+            self.selected=tags[1];r=self.record()
+            if r.get('readonly'):
+                self.note.configure(text='This is a GameObject-local component preview. Edit its local offset in the upcoming GameObject editor.')
+                self.draw();return
+            self.checkpoint();self.dragging=(e.x,e.y,r['pos']);self.draw()
     def drag(self,e):
-        if not self.doc or not self.selected:return
-        cx,cy,scale=self.mapping();maxx,maxz=(2,1.2) if self.selected=='door' else (3,2)
-        x,z=(e.x-cx)/scale,(cy-e.y)/scale
-        if self.snap.get():x,z=round(x*4)/4,round(z*4)/4
-        self.doc['objects'][self.selected]=[round(max(-maxx,min(maxx,x)),2),round(max(-maxz,min(maxz,z)),2)]
-        self.draw();self.note.configure(text='Unsaved layout: SAVE LAYOUT before building or switching projects.')
-    def save(self):
-        if not self.doc:return True
-        try:
-            roomlayout.validate(self.doc);p=Path(self.project)/'room-layout.json'
-            if (p.read_text() if p.exists() else None)!=self.original:raise ValueError('Layout changed outside this view. Reload before saving.')
-            text=json.dumps(self.doc,indent=2)+'\n';temp=p.with_suffix('.json.tmp');temp.write_text(text);temp.replace(p);self.original=text
-            self.note.configure(text='Saved. Build to apply object positions and camera angles.')
-            return True
-        except (OSError,ValueError) as e:
-            messagebox.showerror('Save layout',str(e),parent=self)
-            return False
-    def cameras(self):
-        if not self.doc:return
-        value=simpledialog.askstring('Camera angles','Three yaw angles in radians (-3.1416..3.1416), separated by commas:',initialvalue=', '.join(map(str,self.doc['camera_yaw'])),parent=self)
-        if value is None:return
-        self.checkpoint()
-        old=self.doc['camera_yaw']
-        try:
-            self.doc['camera_yaw']=[float(v) for v in value.split(',')];roomlayout.validate(self.doc)
-        except (ValueError,TypeError):
-            self.doc['camera_yaw']=old;messagebox.showerror('Camera','Enter three finite angles in range.',parent=self);return
-        self.note.configure(text='Unsaved camera settings: SAVE LAYOUT to apply on next build.')
-
-    def checkpoint(self):
-        self.history.append(copy.deepcopy(self.doc));self.history=self.history[-40:]
-    def undo(self):
-        if self.history:
-            self.doc=self.history.pop();self.draw()
-            self.note.configure(text='Undo applied. Save or Build to apply the layout.')
-    def fit(self):
-        self.zoom=1.0;self.draw()
-    def wheel(self,event):
-        self.zoom=max(.5,min(4,self.zoom*(1.15 if event.delta>0 else 1/1.15)));self.draw()
+        if not self.dragging or self.is_perspective():return
+        x,y,start=self.dragging;_,_,scale=self.mapping();a,b=self.axes();pos=list(start)
+        step=8 if self.plane.get()=='2D' else (.25 if self.world.target=='ps2' else 10)
+        pos[a]+=(e.x-x)/scale;pos[b]+=(e.y-y)/scale
+        if self.snap.get():pos[a]=round(pos[a]/step)*step;pos[b]=round(pos[b]/step)*step
+        self.world.move(self.index(),self.selected,pos);self.draw()
+    def wheel(self,e):
+        if self.is_perspective():self.editor_camera['distance']=max(.5,min(5000,self.editor_camera['distance']*(.88 if e.delta>0 else 1/.88)))
+        else:self.zoom=max(.2,min(8,self.zoom*(1.15 if e.delta>0 else 1/1.15)))
+        self.draw()
     def position(self):
-        if not self.selected or not self.doc:return
-        value=simpledialog.askstring('Object position','X, Z coordinates:',initialvalue=', '.join(map(str,self.doc['objects'][self.selected])),parent=self)
+        r=self.record()
+        if not r:return
+        if r.get('readonly'):
+            self.note.configure(text='Collision and attachment offsets belong to the GameObject definition; this world viewport displays them read-only.')
+            return
+        value=simpledialog.askstring('Position','X,Y for 2D; X,Y,Z for 3D:',initialvalue=', '.join(map(str,r['pos'])),parent=self)
         if value is None:return
-        candidate=copy.deepcopy(self.doc)
+        checkpointed=False
         try:
-            candidate['objects'][self.selected]=[float(v) for v in value.split(',')];roomlayout.validate(candidate)
-        except (ValueError,TypeError):
-            messagebox.showerror('Position','Coordinates must be inside room bounds; door X ±2 / Z ±1.2, others X ±3 / Z ±2.',parent=self);return
-        self.checkpoint();self.doc=candidate;self.draw()
-        self.note.configure(text='Position changed. Save or Build to apply.')
-
+            pos=[float(v) for v in value.split(',')]
+            if len(pos)!=len(r['pos']):raise ValueError('Coordinate count mismatch.')
+            self.checkpoint();checkpointed=True;self.world.move(self.index(),self.selected,pos);self.world.validate();self.draw()
+        except (ValueError,TypeError) as exc:
+            if checkpointed:self.undo()
+            messagebox.showerror('Position',str(exc),parent=self)
+    def rename(self):
+        r=self.record()
+        if not r:return
+        value=simpledialog.askstring('Name','Display name (IDs remain stable):',initialvalue=r['name'],parent=self)
+        if not value:return
+        self.checkpoint();key=self.selected
+        if key.startswith('t:'):next(t for t in self.world.triggers['triggers'] if t['id']==int(key[2:]))['name']=value
+        elif self.world.kind=='ps1' and key[:2] in ('s:','m:'):self.world.scenes()[self.index()]['sprites' if key.startswith('s:') else 'instances'][int(key[2:])]['name']=value
+        else:self.world.doc.setdefault('editor_names',{})[key]=value
+        self.draw()
+    def duplicate(self):
+        r=self.record()
+        if not r or r['key'].startswith('t:') or r.get('readonly'):return
+        key=r['key'];self.checkpoint()
+        if self.world.kind=='ps1' and key[:2] in ('s:','m:'):
+            rows=self.world.scenes()[self.index()]['sprites' if key.startswith('s:') else 'instances'];clone=copy.deepcopy(rows[int(key[2:])]);clone['name']=r['name']+' copy';rows.append(clone);self.selected=key[:2]+str(len(rows)-1)
+        elif self.world.kind=='lab3d_v1':
+            objects=self.world.doc['objects'];name='object_'+str(len(objects));
+            while name in objects:name+='x'
+            if len(objects)>=16:messagebox.showerror('Budget','At most 16 wireframe objects.',parent=self);return
+            objects[name]=list(r['pos'])
+            self.world.doc['rotations'][name]=list(r.get('rot',[0,0,0]))
+            self.world.doc['scales'][name]=list(r.get('scale',[1,1,1]))
+            self.selected='o:'+name
+        else:self.note.configure(text='This adapter has fixed layout roles. Use ROOM to add VN portrait slots.');return
+        self.draw()
+    def add_trigger(self):
+        r=self.record()
+        if not r or r['key'].startswith('t:') or r['key']=='camera' or r.get('readonly'):self.note.configure(text='Select a world object instance for this trigger to track.');return
+        if self.world.kind=='fixed_room_v1' and r['key']!='o:player':self.note.configure(text='Select player: fixed-room triggers track player position.');return
+        if self.world.kind=='vn' and not r['key'].startswith('p:'):self.note.configure(text='Select a portrait slot: VN triggers use that slot anchor and scene, not a player collider.');return
+        ts=self.world.triggers['triggers']
+        if len(ts)>=32:messagebox.showerror('Trigger budget','At most 32 triggers.',parent=self);return
+        self.checkpoint();i=max([t['id'] for t in ts],default=0)+1
+        size=[32]*2 if r['space']=='2d' else ([1]*3 if self.world.target=='ps2' else [200]*3)
+        low=list(r['pos']);ts.append(dict(id=i,name='Trigger '+str(i),room=self.index(),subject=r['key'],space=r['space'],min=low,max=[a+b for a,b in zip(low,size)]));self.selected='t:'+str(i);self.draw()
+        self.note.configure(text='Trigger %d tracks %s. Drag to place; TRIGGER BOUNDS changes its size. Use On trigger enter/exit with ID %d in a flow box.'%(i,r['key'],i))
+    def bounds(self):
+        r=self.record()
+        if not r or not r['key'].startswith('t:'):return
+        t=next(t for t in self.world.triggers['triggers'] if t['id']==int(r['key'][2:]))
+        value=simpledialog.askstring('Trigger bounds','Minimum coordinates, then maximum coordinates:',initialvalue=', '.join(map(str,t['min']+t['max'])),parent=self)
+        if value is None:return
+        checkpointed=False
+        try:
+            vals=[int(v) if self.world.target=='ps1' else float(v) for v in value.split(',')];n=len(t['min'])
+            if len(vals)!=2*n:raise ValueError('Wrong number of bounds.')
+            self.checkpoint();checkpointed=True;t['min']=vals[:n];t['max']=vals[n:];self.world.validate();self.draw()
+        except (ValueError,TypeError) as exc:
+            if checkpointed:self.undo()
+            messagebox.showerror('Trigger',str(exc),parent=self)
+    def delete_trigger(self):
+        if self.selected and self.selected.startswith('t:'):
+            self.checkpoint();self.world.triggers['triggers']=[t for t in self.world.triggers['triggers'] if t['id']!=int(self.selected[2:])];self.selected=None;self.draw()
+    def undo(self):
+        if self.history:self.world.doc,self.world.triggers=self.history.pop();self.draw()
+    def save(self):
+        if not self.world:return True
+        try:self.world.save();self.note.configure(text='Saved source layout and triggers. Build to apply.');return True
+        except (OSError,ValueError,KeyError,TypeError) as exc:messagebox.showerror('Viewport save',str(exc),parent=self);return False
     def save_pending(self):
-        """Persist project drafts without overwriting external edits."""
-        pending=dict(self.drafts)
-        if self.project and self.doc:pending[self.project]=(self.doc,self.original)
-        for project,(doc,original) in pending.items():
-            if original is not None and json.loads(original)==doc:continue
-            p=Path(project)/'room-layout.json'
+        if self.world:self.drafts[self.project]=self.world
+        for world in self.drafts.values():
             try:
-                roomlayout.validate(doc)
-                if (p.read_text() if p.exists() else None)!=original:raise ValueError('External layout changes: '+project)
-                text=json.dumps(doc,indent=2)+'\n';tmp=p.with_suffix('.json.tmp');tmp.write_text(text);tmp.replace(p)
-                self.drafts[project]=(doc,text)
-                if project==self.project:self.original=text
-            except (OSError,ValueError) as e:
-                messagebox.showerror('Layout not saved',str(e),parent=self);return False
+                dirty=json.loads(world.original)!=world.doc or (json.loads(world.trigger_original) if world.trigger_original else dict(version=1,target=world.target,triggers=[]))!=world.triggers
+                if dirty:world.save()
+            except (OSError,ValueError,KeyError,TypeError) as exc:messagebox.showerror('Viewport save',str(exc),parent=self);return False
         return True
 
-    def select_object(self):
-        if self.doc:
-            self.selected=self.object_choice.get()
-            self.draw()
+    # ---- perspective workspace -----------------------------------------
+
+    @staticmethod
+    def _sub(a,b):return [a[i]-b[i] for i in range(3)]
+    @staticmethod
+    def _add(a,b):return [a[i]+b[i] for i in range(3)]
+    @staticmethod
+    def _mul(a,value):return [v*value for v in a]
+    @staticmethod
+    def _dot(a,b):return sum(a[i]*b[i] for i in range(3))
+    @staticmethod
+    def _cross(a,b):return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
+    @classmethod
+    def _normal(cls,value):
+        length=max(1e-9,math.sqrt(cls._dot(value,value)))
+        return [v/length for v in value]
+
+    def camera_basis(self):
+        """Return position/target/FOV without coupling editor and game cameras."""
+        if self.plane.get()=='GAME CAMERA':
+            if self.world.kind=='lab3d_v1':
+                camera=self.world.doc['camera']
+                return list(camera['pos']),list(camera['target']),float(camera['fov'])
+            if self.world.kind=='fixed_room_v1':
+                yaw=float(self.world.doc['camera_yaw'][0])
+                return [-math.sin(yaw)*10,5,-math.cos(yaw)*10],[0,0,0],55
+            if self.world.kind=='ps1':
+                camera=self.world.scenes()[self.index()].get('camera',{})
+                pos=list(camera.get('pos',[0,0,0]));rot=camera.get('rot',[0,0,0])
+                yaw=float(rot[1])*math.pi/2048
+                return pos,[pos[0]+math.sin(yaw),pos[1],pos[2]+math.cos(yaw)],55
+        camera=self.editor_camera
+        target=list(camera['target']);yaw=camera['yaw'];pitch=camera['pitch'];distance=camera['distance']
+        offset=[math.sin(yaw)*math.cos(pitch)*distance,-math.sin(pitch)*distance,-math.cos(yaw)*math.cos(pitch)*distance]
+        return self._add(target,offset),target,60
+
+    def projector(self):
+        pos,target,fov=self.camera_basis();forward=self._normal(self._sub(target,pos))
+        right=self._normal(self._cross(forward,[0,1,0]))
+        up=self._normal(self._cross(right,forward))
+        width=max(100,self.canvas.winfo_width());height=max(100,self.canvas.winfo_height())
+        focal=(height*.5)/math.tan(math.radians(fov)*.5)
+        def project(point):
+            delta=self._sub(point,pos);depth=self._dot(delta,forward)
+            if depth<=.05:return None
+            return (width*.5+self._dot(delta,right)*focal/depth,
+                    height*.5-self._dot(delta,up)*focal/depth,depth)
+        return project
+
+    @staticmethod
+    def box_geometry(low,high):
+        points=[[high[0] if i&1 else low[0],high[1] if i&2 else low[1],high[2] if i&4 else low[2]] for i in range(8)]
+        edges=((0,1),(1,3),(3,2),(2,0),(4,5),(5,7),(7,6),(6,4),(0,4),(1,5),(2,6),(3,7))
+        return points,edges
+
+    def geometry(self,record):
+        key=record['key']
+        if key.startswith('t:'):
+            trigger=next(t for t in self.world.triggers['triggers'] if t['id']==int(key[2:]))
+            return self.box_geometry(trigger['min'],trigger['max'])
+        if self.world.kind=='ps1' and key.startswith('m:'):
+            instance=self.world.scenes()[self.index()]['instances'][int(key[2:])]
+            meshes=self.world.doc.get('meshes',[]);ref=instance.get('mesh',0)
+            mesh=next((m for i,m in enumerate(meshes) if i==ref or m.get('name')==ref),{})
+            points=[self.transform_point(v[:3],record['pos'],instance.get('rot',[0,0,0]),[1,1,1],ps1=True) for v in mesh.get('verts',[])]
+            edges=set()
+            for face in mesh.get('quads',[]):
+                for a,b in zip(face,face[1:]+face[:1]):edges.add(tuple(sorted((a,b))))
+            return points,sorted(edges)
+        if self.world.kind=='lab3d_v1' and key.startswith('o:'):
+            points,edges=self.box_geometry([-1,-1,-1],[1,1,1])
+            return [self.transform_point(v,record['pos'],record.get('rot',[0,0,0]),record.get('scale',[1,1,1])) for v in points],edges
+        half=[max(.05,v*.5) for v in record['size']]
+        return self.box_geometry([record['pos'][i]-half[i] for i in range(3)],[record['pos'][i]+half[i] for i in range(3)])
+
+    @staticmethod
+    def transform_point(point,position,rotation,scale,ps1=False):
+        x,y,z=[point[i]*scale[i] for i in range(3)]
+        factor=math.pi/2048 if ps1 else math.pi/180
+        ax,ay,az=[v*factor for v in rotation]
+        y,z=y*math.cos(ax)-z*math.sin(ax),y*math.sin(ax)+z*math.cos(ax)
+        x,z=x*math.cos(ay)+z*math.sin(ay),-x*math.sin(ay)+z*math.cos(ay)
+        x,y=x*math.cos(az)-y*math.sin(az),x*math.sin(az)+y*math.cos(az)
+        return [x+position[0],y+position[1],z+position[2]]
+
+    def draw_perspective(self):
+        c=self.canvas;project=self.projector()
+        for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
+        # Editor grid is world XZ; it is never serialized into the game.
+        for value in range(-10,11):
+            for a,b in [([-10,0,value],[10,0,value]),([value,0,-10],[value,0,10])]:
+                pa,pb=project(a),project(b)
+                if pa and pb:c.create_line(pa[0],pa[1],pb[0],pb[1],fill='#263941')
+        drawn=[]
+        for index,r in enumerate(self.rows):
+            color=AMBER if r['key']==self.selected else ('#bd85ff' if r['key'].startswith('t:') else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
+            points,edges=self.geometry(r);screen=[project(p) for p in points]
+            for a,b in edges:
+                if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
+                    c.create_line(screen[a][0],screen[a][1],screen[b][0],screen[b][1],fill=color,width=2,tags=('obj',r['key']))
+            origin=project(r['pos'])
+            if origin:
+                x,y,_=origin;c.create_line(x-5,y,x+5,y,fill=AMBER,tags=('obj',r['key']));c.create_line(x,y-5,x,y+5,fill=AMBER,tags=('obj',r['key']))
+                c.create_text(x+7,y+7,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
+            if r['key']==self.selected:self.objects.selection_set(index)
+        mode='EDITOR CAMERA (right orbit / middle pan / wheel dolly)' if self.plane.get()=='PERSPECTIVE' else 'GAME CAMERA PREVIEW (target framing approximation)'
+        c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
+
+    def camera_press(self,event):self.camera_drag=(event.x,event.y,list(self.editor_camera['target']))
+    def camera_orbit(self,event):
+        if not self.camera_drag or self.plane.get()!='PERSPECTIVE':return
+        x,y,_=self.camera_drag;self.editor_camera['yaw']+=(event.x-x)*.008;self.editor_camera['pitch']=max(-1.45,min(1.45,self.editor_camera['pitch']+(event.y-y)*.008));self.camera_drag=(event.x,event.y,list(self.editor_camera['target']));self.draw()
+    def camera_pan(self,event):
+        if not self.camera_drag or self.plane.get()!='PERSPECTIVE':return
+        x,y,start=self.camera_drag;distance=self.editor_camera['distance'];scale=max(.002,distance*.0015)
+        yaw=self.editor_camera['yaw'];right=[math.cos(yaw),0,math.sin(yaw)]
+        self.editor_camera['target']=[start[i]-right[i]*(event.x-x)*scale for i in range(3)]
+        self.editor_camera['target'][1]+= (event.y-y)*scale
+        self.draw()
+
+    def picture(self,r,x,y,w,h):
+        path=None;crop=None;portrait=False
+        if self.world.kind=='ps1' and r['key'].startswith('s:'):
+            sprite=self.world.scenes()[self.index()]['sprites'][int(r['key'][2:])]
+            path=next((t['file'] for t in self.world.doc.get('textures',[]) if t['name']==sprite.get('texture')),None)
+            u,v=sprite.get('u',0),sprite.get('v',0);crop=(u,v,u+sprite['w'],v+sprite['h'])
+        elif self.world.kind=='vn':
+            if r['key']=='background':path=self.world.scenes()[self.index()].get('background')
+            elif r['key'].startswith('p:'):
+                chars=self.world.doc['kit'].get('characters',[])
+                if chars:path=chars[min(int(r['key'][2:]),len(chars)-1)].get('portrait');portrait=True
+        if not path:return
+        try:
+            with Image.open(self.world.root/path) as im:image=im.convert('RGBA')
+            if crop:image=image.crop(crop)
+            size=(max(1,min(2048,int(w))),max(1,min(2048,int(h))))
+            if portrait:image.thumbnail(size,Image.Resampling.NEAREST)
+            else:image=image.resize(size,Image.Resampling.NEAREST)
+            photo=ImageTk.PhotoImage(image);self.photos.append(photo)
+            self.canvas.create_image(x,y+h if portrait else y,anchor='sw' if portrait else 'nw',image=photo,tags=('obj',r['key']))
+        except (OSError,ValueError):pass
+
+    def mesh_preview(self,r,ox,oy,scale,a,b,color):
+        instance=self.world.scenes()[self.index()]['instances'][int(r['key'][2:])]
+        meshes=self.world.doc.get('meshes',[]);ref=instance.get('mesh',0)
+        mesh=next((m for i,m in enumerate(meshes) if i==ref or m.get('name')==ref),{})
+        vertices=mesh.get('verts',[])
+        # Orthographic wireframe uses authored translation and rotation.
+        angles=[v*math.pi/2048 for v in instance.get('rot',[0,0,0])]
+        points=[]
+        for vertex in vertices:
+            x,y,z=vertex[:3];rx,ry,rz=angles
+            y,z=y*math.cos(rx)-z*math.sin(rx),y*math.sin(rx)+z*math.cos(rx)
+            x,z=x*math.cos(ry)+z*math.sin(ry),-x*math.sin(ry)+z*math.cos(ry)
+            x,y=x*math.cos(rz)-y*math.sin(rz),x*math.sin(rz)+y*math.cos(rz)
+            p=[x+r['pos'][0],y+r['pos'][1],z+r['pos'][2]];points.append((ox+p[a]*scale,oy+p[b]*scale))
+        for face in mesh.get('quads',[]):
+            if not all(type(i) is int and 0<=i<len(points) for i in face):continue
+            coords=[c for i in list(face)+[face[0]] for c in points[i]]
+            self.canvas.create_line(*coords,fill=color,tags=('obj',r['key']))
+
+    def cameras(self):
+        if not self.world:return
+        if self.world.kind=='fixed_room_v1':
+            old=self.world.doc['camera_yaw'];caption='Three camera yaw angles, radians:'
+        elif self.world.kind=='ps1':
+            old=self.world.scenes()[self.index()].get('camera',{}).get('rot',[0,0,0]);caption='Camera X,Y,Z rotation; 4096 = one turn:'
+        elif self.world.kind=='lab3d_v1':
+            camera=self.world.doc['camera'];old=camera['pos']+camera['target']+[camera['fov']]
+            caption='Game camera position X,Y,Z, target X,Y,Z, FOV:'
+        else:self.note.configure(text='This adapter has no editable fixed-camera angles.');return
+        value=simpledialog.askstring('Camera',caption,initialvalue=', '.join(map(str,old)),parent=self)
+        if value is None:return
+        checkpointed=False
+        try:
+            vals=[float(v) if self.world.kind in ('fixed_room_v1','lab3d_v1') else int(v) for v in value.split(',')]
+            required=7 if self.world.kind=='lab3d_v1' else 3
+            if len(vals)!=required:raise ValueError('%d values required.'%required)
+            self.checkpoint();checkpointed=True
+            if self.world.kind=='fixed_room_v1':self.world.doc['camera_yaw']=vals
+            elif self.world.kind=='lab3d_v1':
+                self.world.doc['camera']={'pos':vals[:3],'target':vals[3:6],'fov':vals[6]}
+            else:self.world.scenes()[self.index()].setdefault('camera',{})['rot']=vals
+            self.world.validate();self.draw()
+        except (ValueError,TypeError) as exc:
+            if checkpointed:self.undo()
+            messagebox.showerror('Camera',str(exc),parent=self)
+
+    def properties(self):
+        r=self.record()
+        if not r:return
+        if r.get('readonly'):
+            self.note.configure(text='Open this component in the GameObject editor to change its local properties.')
+            return
+        if r['key'].startswith('t:'):self.bounds();return
+        key=r['key'];obj=None;field=None
+        if self.world.kind=='ps1' and key.startswith('m:'):
+            obj=self.world.scenes()[self.index()]['instances'][int(key[2:])];field='rot';old=obj.get('rot',[0,0,0]);caption='Rotation X,Y,Z; 4096 = a turn:'
+        elif self.world.kind=='ps1' and key.startswith('s:'):
+            obj=self.world.scenes()[self.index()]['sprites'][int(key[2:])];field='size';old=[obj['w'],obj['h']];caption='Width, height in pixels:'
+        elif self.world.kind=='vn':
+            self.note.configure(text='Use ROOM for portrait size, image replacement and layers. VIEWPORT positions the same source layout.');return
+        elif self.world.kind=='lab3d_v1' and key.startswith('o:'):
+            old=r.get('rot',[0,0,0])+r.get('scale',[1,1,1]);field='transform'
+            caption='Rotation degrees X,Y,Z, then scale X,Y,Z:'
+        else:self.note.configure(text='This adapter has fixed object geometry.');return
+        value=simpledialog.askstring('Object properties',caption,initialvalue=', '.join(map(str,old)),parent=self)
+        if value is None:return
+        try:
+            values=[float(v) if field=='transform' else int(v) for v in value.split(',')]
+            if len(values)!=len(old) or any(abs(v)>32767 for v in values):raise ValueError('Invalid property values.')
+            if field=='size' and (min(values)<1 or max(values)>1024):raise ValueError('Sprite size must be 1..1024 pixels.')
+            self.checkpoint()
+            if field=='size':obj['w'],obj['h']=values
+            elif field=='transform':self.world.set_transform(key,values[:3],values[3:])
+            else:obj[field]=values
+            self.world.validate();self.draw()
+        except (ValueError,TypeError) as exc:messagebox.showerror('Properties',str(exc),parent=self)

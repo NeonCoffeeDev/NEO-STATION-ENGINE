@@ -42,6 +42,8 @@ var SCREEN_H = 240
 
 # ---- tuning ----------------------------------------------------------------
 
+var spawn_x = 152
+var spawn_y = 190
 var PLAYER_SPEED = 2
 var BULLET_SPEED = 5
 var FIRE_DELAY   = 7
@@ -143,6 +145,8 @@ func update_menu():
 # ============================================================================
 
 func ready_game():
+    spawn_x = sprite_x(PLAYER)
+    spawn_y = sprite_y(PLAYER)
     score = 0
     lives = 3
     cooldown = 0
@@ -151,7 +155,7 @@ func ready_game():
     invuln = 0
     saved = 0
 
-    sprite_set_pos(PLAYER, 152, 190)
+    sprite_set_pos(PLAYER, spawn_x, spawn_y)
     sprite_show(PLAYER)
 
     for i in range(N_BULLETS):
@@ -355,7 +359,7 @@ func hit_player():
     play_sound(2)
     shake(9)
     spawn_boom(sprite_x(PLAYER), sprite_y(PLAYER))
-    sprite_set_pos(PLAYER, 152, 190)
+    sprite_set_pos(PLAYER, spawn_x, spawn_y)
     invuln = INVULN_TIME
     if lives <= 0:
         dead_timer = 0

@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from .eventflow import BUTTONS
 from .flowstate import validate as validate_state
+from .triggercode import predicates
 
 def compile_project(project):
     root=Path(project); path=root/'event-flow.json'
@@ -20,10 +21,17 @@ def compile_project(project):
         return
     if doc.get('status')!='enabled':raise ValueError('Invalid event status.')
     meta=json.loads((root/'nc.json').read_text())
-    if meta.get('event_adapter')!='fixed_room_v1':
+    adapter=meta.get('event_adapter')
+    if adapter not in ('fixed_room_v1','lab3d_v1','vn_v1','pad2d_v1'):
         raise ValueError('This PS2 project has no supported event adapter. Keep its graph as a draft.')
     scoped=validate_state(doc,root)
     actions={'Set camera':(0,2),'Interact':(1,0),'Reset game':(2,0),'Stop movement':(3,0)}
+    if adapter=='lab3d_v1':actions={'Reset game':(2,0),'Set colour':(5,3)}
+    if adapter=='pad2d_v1':actions={'Reset game':(2,0),'Set colour':(5,3)}
+    if adapter=='vn_v1':
+        vn=json.loads((root/'vn.json').read_text(encoding='utf-8'))
+        actions={'Change room':(4,len(vn['kit']['scenes'])-1),'Show main menu':(6,0)}
+    trigger_conditions=predicates(root,'ps2')
     nodes=doc['nodes'];lookup={n['id']:n for n in nodes}
     if len(nodes)>128 or len(lookup)!=len(nodes):raise ValueError('Too many nodes or duplicate IDs.')
     if any(type(i) is not int or i < 1 for i in lookup):raise ValueError('Node IDs must be positive integers.')
@@ -61,6 +69,8 @@ def compile_project(project):
     if len(names)>16:raise ValueError('This adapter supports up to 16 named variables.')
     for name in names:
         output += ['    static int var_%s;'%name,'    if(start) var_%s=0;'%name]
+    for tid,condition in trigger_conditions.items():
+        output += [f'    static int inside_{tid};',f'    int hit_{tid} = ({condition});',f'    int enter_{tid} = !start && hit_{tid} && !inside_{tid};',f'    int leave_{tid} = !start && !hit_{tid} && inside_{tid};',f'    inside_{tid} = hit_{tid};']
     reached=set()
     expanded=0
     def walk(i,stack):
@@ -93,6 +103,20 @@ def compile_project(project):
                 if not 1<=count<=16:raise ValueError('Repeat count must be 1..16.')
                 for iteration in range(count):walk(j,stack|{i})
                 continue
+            if n['kind']=='Set sprite position' and adapter=='pad2d_v1':
+                parts=[int(v.strip()) for v in str(n.get('value','')).split(',')]
+                if len(parts)!=3 or parts[0]!=0 or not 48<=parts[1]<=592 or not 48<=parts[2]<=400:raise ValueError('Pad position: 0, X (48..592), Y (48..400).')
+                output.append('        x=%d;y=%d;'%(parts[1],parts[2]))
+                walk(j,stack|{i});continue
+            if n['kind']=='Set object position' and adapter=='lab3d_v1':
+                parts=[v.strip() for v in str(n.get('value','')).split(',')]
+                layout=json.loads((root/'room-layout.json').read_text(encoding='utf-8'))
+                names=list(layout['objects'])
+                if len(parts)!=4 or parts[0] not in names:raise ValueError('Set object position needs object name, X,Y,Z.')
+                coords=[float(v) for v in parts[1:]]
+                if any(not math.isfinite(v) or abs(v)>100 for v in coords):raise ValueError('3D Lab coordinates must be finite, +/-100.')
+                for axis,value in enumerate(coords):output.append('        nc_object_pos[%d][%d] = %.8ff;' % (names.index(parts[0]),axis,value))
+                walk(j,stack|{i});continue
             if n['kind']=='Move to':
                 if 'static void nc_move_to(' not in (root/'src/main.c').read_text():
                     raise ValueError('Move to requires the updated fixed-room runtime. Create a new Fixed Camera Room project.')
@@ -123,6 +147,10 @@ def compile_project(project):
         kind=n['kind']; value=n.get('value','')
         if scoped and kind=='On exit':continue
         if kind=='On start':condition='entering' if scoped else 'start'
+        elif kind in ('On trigger enter','On trigger exit'):
+            tid=int(value)
+            if tid not in trigger_conditions:raise ValueError('Trigger ID does not exist; create it in VIEWPORT.')
+            condition=('enter_' if kind=='On trigger enter' else 'leave_')+str(tid)
         elif kind=='On arrival':
             if 'static int nc_move_arrived;' not in (root/'src/main.c').read_text():
                 raise ValueError('On arrival requires the updated fixed-room runtime.')
@@ -136,10 +164,11 @@ def compile_project(project):
             if not 1<=frames<=36000:raise ValueError('Timer must be 1..36000 frames.')
             condition=('!start && tick == %d' if kind=='After frames' else '!start && tick > 0 && tick %% %d == 0')%frames
         elif kind=='On zone':
+            if adapter!='fixed_room_v1':raise ValueError('On zone is a fixed-room legacy event; use a placed trigger.')
             v=int(value)
             if v not in (0,1):raise ValueError('Zone must be 0 or 1.')
             condition='zone == %d'%v
-        elif kind in actions or (scoped and kind=='Go to Flow Box') or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
+        elif kind in actions or (adapter=='pad2d_v1' and kind=='Set sprite position') or (adapter=='lab3d_v1' and kind=='Set object position') or (scoped and kind=='Go to Flow Box') or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
         else:raise ValueError('Unsupported PS2 node: '+kind)
         if incoming[n['id']]:raise ValueError('Events cannot have incoming links.')
         if scoped:

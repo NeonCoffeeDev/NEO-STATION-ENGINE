@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "objects": {
+    "cube": [
+      0,
+      0,
+      0
+    ]
+  },
+  "rotations": {
+    "cube": [0.0, 0.0, 0.0]
+  },
+  "scales": {
+    "cube": [1.0, 1.0, 1.0]
+  },
+  "camera": {
+    "pos": [6.0, 4.5, -8.0],
+    "target": [0.0, 0.0, 0.0],
+    "fov": 60.0
+  },
+  "collisions": [
+    {"id": 1, "name": "Cube Collision", "object": "cube", "center": [0.0, 0.0, 0.0], "size": [2.0, 2.0, 2.0]}
+  ],
+  "attachments": [
+    {"id": 2, "name": "Top Attachment", "object": "cube", "pos": [0.0, 1.0, 0.0]}
+  ]
+}

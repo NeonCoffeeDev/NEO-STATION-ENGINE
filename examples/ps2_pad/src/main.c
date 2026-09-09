@@ -141,6 +141,12 @@ static void init_screen(framebuffer_t *frame, zbuffer_t *z, packet_t *packet)
 }
 
 
+#include "nc_pad_layout.h"
+static int x=NC_PAD_X,y=NC_PAD_Y;
+static int nc_colour=-1;
+static void nc_action(int action,int value){if(action==2){x=NC_PAD_X;y=NC_PAD_Y;nc_colour=-1;}if(action==5)nc_colour=value;}
+#include "nc_events.h"
+
 int main(void)
 {
     framebuffer_t frame;
@@ -152,7 +158,7 @@ int main(void)
     unsigned int buttons = 0, last = 0, pressed;
     int have_pad;
 
-    int x = SCREEN_W / 2, y = SCREEN_H / 2;
+    x=NC_PAD_X;y=NC_PAD_Y;
     int size = 96;
     int colour = 0;
     int frames = 0;
@@ -174,6 +180,7 @@ int main(void)
     packet = packet_init(256, PACKET_NORMAL);
     if (packet == NULL) return 1;
     init_screen(&frame, &z, packet);
+    nc_events(1,0,-1);
 
     while (1) {
         if (have_pad && padRead(0, 0, &pad) != 0) {
@@ -196,12 +203,12 @@ int main(void)
         if (buttons & PAD_L1)
             size -= 2;
         if (pressed & PAD_TRIANGLE) {
-            x = SCREEN_W / 2;
-            y = SCREEN_H / 2;
+            x = NC_PAD_X;
+            y = NC_PAD_Y;
         }
         if (pressed & PAD_START) {
-            x = SCREEN_W / 2;
-            y = SCREEN_H / 2;
+            x = NC_PAD_X;
+            y = NC_PAD_Y;
             size = 96;
             colour = 0;
         }
@@ -213,6 +220,8 @@ int main(void)
         if (y < size / 2) y = size / 2;
         if (y > SCREEN_H - size / 2) y = SCREEN_H - size / 2;
 
+        nc_events(0,pressed,-1);
+        if(nc_colour>=0)colour=nc_colour;
         q = packet->data;
         q = draw_disable_tests(q, 0, &z);
         q = draw_clear(q, 0, OFFSET_X, OFFSET_Y, frame.width, frame.height,

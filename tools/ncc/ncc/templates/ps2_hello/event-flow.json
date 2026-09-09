@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "target": "ps2",
+  "status": "enabled",
+  "entry": 4,
+  "stages": [
+    {
+      "id": 1,
+      "name": "Target: ps2"
+    },
+    {
+      "id": 2,
+      "name": "Disclaimer (planned)"
+    },
+    {
+      "id": 3,
+      "name": "Entry / menu (planned)"
+    },
+    {
+      "id": 4,
+      "name": "ps2_hello"
+    },
+    {
+      "id": 5,
+      "name": "Outcome (planned)"
+    },
+    {
+      "id": 6,
+      "name": "Restart / exit (planned)"
+    }
+  ],
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On trigger enter",
+      "value": "1",
+      "x": 20,
+      "y": 30,
+      "section_id": 4
+    },
+    {
+      "id": 2,
+      "kind": "Set colour",
+      "value": "1",
+      "x": 240,
+      "y": 30,
+      "section_id": 4
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ]
+  ]
+}

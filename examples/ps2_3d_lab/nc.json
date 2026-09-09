@@ -2,5 +2,6 @@
   "format": 1,
   "name": "ps2_3d_lab",
   "template": "ps2_3d",
-  "target": "ps2"
+  "target": "ps2",
+  "event_adapter": "lab3d_v1"
 }

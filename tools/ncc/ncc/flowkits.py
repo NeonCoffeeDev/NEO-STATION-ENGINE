@@ -38,3 +38,22 @@ def insert(nodes,edges,recipe):
         if ids:edges.append([ids[-1],ident])
         ids.append(ident)
     return ids
+
+KITS['ps1'].update({
+    'Trigger to room': [('On trigger enter','1'),('Change room','0')],
+    'Trigger reveals mesh': [('On trigger enter','1'),('Show mesh','0')],
+    'Timed sprite placement': [('After frames','120'),('Set sprite position','0, 100, 100')],
+})
+KITS['fixed_room_v1']['Placed trigger changes camera']=[('On trigger enter','101'),('Set camera','0')]
+KITS['lab3d_v1']={
+    'Move cube into trigger':[('On button','SELECT'),('Set object position','cube, 2, 0, 0')],
+    'Trigger colour change':[('On trigger enter','1'),('Set colour','2')],
+}
+KITS['pad2d_v1']={
+    'Trigger colour change':[('On trigger enter','1'),('Set colour','1')],
+    'Reposition box':[('On button','SELECT'),('Set sprite position','0, 320, 224')],
+}
+KITS['vn_v1']={
+    'Timed room change':[('After frames','180'),('Change room','0')],
+    'Return to main menu':[('On button','SELECT'),('Show main menu','0')],
+}

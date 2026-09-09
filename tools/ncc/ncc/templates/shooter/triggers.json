@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "target": "ps1",
+  "triggers": [
+    {
+      "id": 1,
+      "name": "Optional return zone",
+      "room": 1,
+      "subject": "s:2",
+      "space": "2d",
+      "min": [
+        240,
+        0
+      ],
+      "max": [
+        320,
+        240
+      ]
+    }
+  ]
+}

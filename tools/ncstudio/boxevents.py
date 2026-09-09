@@ -32,7 +32,7 @@ class BoxEventsPanel(FlowPanel):
         self.section_id = stage['id']
         self.focus_roots = []
         values = list(self.kind['values'])
-        if self.target == 'ps1' or 'Set camera' in values:
+        if self.target == 'ps1' or 'Set camera' in values or 'Set colour' in values or 'Show main menu' in values:
             self.kind['values'] = values + ['On exit','Go to Flow Box']
         self.note.configure(text='BOX %d / %s: all owned events. On start = enter box. Transition destinations: %s. Entry: %s. Changes require ENABLE.' % (stage['id'], stage.get('value', stage['kind']), ', '.join('%s=%s'%(s['id'],s.get('value',s['kind'])) for s in stages), self.entry))
         self.draw()

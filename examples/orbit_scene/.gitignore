@@ -4,3 +4,5 @@ build/
 *.exe
 *.elf
 *.map
+
+src/nc_script_generated.c

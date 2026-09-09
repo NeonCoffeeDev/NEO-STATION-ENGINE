@@ -117,7 +117,8 @@ class RoomPanel(tk.Frame):
 
     def load(self, project, force=False):
         if project == self.project and not force:
-            return
+            if not self.dirty and self.doc and self.path.exists() and self.path.stat().st_mtime_ns != self.stamp:force=True
+            else:return
         if self.dirty and self.project:
             self.save()
             if self.dirty:

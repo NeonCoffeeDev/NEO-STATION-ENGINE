@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "objects": {
+    "box": [
+      320,
+      224
+    ]
+  }
+}

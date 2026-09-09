@@ -1,0 +1,52 @@
+# Base positions come from VIEWPORT. Animation is an offset from that layout.
+var bx: array[4]
+var by: array[4]
+var bz: array[4]
+var tick = 0
+var paused = 0
+var yaw = 0
+var lift = 0
+var zoom = 0
+func _ready():
+    for i in range(4):
+        bx[i] = get_x(i)
+        by[i] = get_y(i)
+        bz[i] = get_z(i)
+func _update():
+    if btn_pressed(BTN_START):
+        paused = 1 - paused
+    if btn_held(BTN_LEFT):
+        yaw = yaw - 22
+    if btn_held(BTN_RIGHT):
+        yaw = yaw + 22
+    if btn_held(BTN_UP):
+        lift = lift - 10
+    if btn_held(BTN_DOWN):
+        lift = lift + 10
+    if btn_held(BTN_L1):
+        zoom = zoom + 14
+    if btn_held(BTN_R1):
+        zoom = zoom - 14
+    if btn_pressed(BTN_CROSS):
+        yaw = 0
+        lift = 0
+        zoom = 0
+    if paused == 0:
+        tick = (tick + 1) % 131072
+    set_pos(0, bx[0], by[0] + lift, bz[0] + zoom)
+    set_rot(0, 0, tick * 12, tick * 5)
+    for i in range(1,4):
+        var radius = 320
+        var speed = 40
+        var phase = 0
+        if i == 2:
+            radius = 480
+            speed = 26
+            phase = 1365
+        if i == 3:
+            radius = 620
+            speed = 17
+            phase = 2730
+        var angle = tick * speed / 32 + phase + yaw
+        set_pos(i, bx[i] + (cos(angle) - cos(phase)) * radius / 4096, by[i] + lift, bz[i] + zoom + (sin(angle) - sin(phase)) * radius / 4096)
+        set_rot(i, 0, tick * 18, 0)

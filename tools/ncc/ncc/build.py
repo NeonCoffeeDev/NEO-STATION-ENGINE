@@ -1,5 +1,6 @@
 """ncc new / build / run / clean -- the PS1 development loop."""
 
+from pathlib import Path
 import json
 import os
 import re
@@ -174,6 +175,9 @@ def write_project_meta(root, name, template, target):
         meta = {"format": 1, "name": name, "template": template, "target": target}
         if template == "ps2_fixed_room" and target == "ps2":
             meta["event_adapter"] = "fixed_room_v1"
+        if template == "ps2_hello":meta["event_adapter"] = "pad2d_v1"
+        if template == "ps2_3d":meta["event_adapter"] = "lab3d_v1"
+        if template == "ps2_vn":meta["event_adapter"] = "vn_v1"
         json.dump(meta, fh, indent=2)
         fh.write(chr(10))
 
@@ -445,6 +449,14 @@ def _build_ps2(src):
             roomlayout.compile_project(src)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise SystemExit(f"ncc: room-layout.json -- {exc}")
+    if project_meta(src).get("event_adapter") == "lab3d_v1":
+        from .lablayout import compile_project
+        compile_project(src)
+    if project_meta(src).get("event_adapter") == "pad2d_v1":
+        from .viewportdata import World
+        world=World(src);world.validate()
+        x,y=world.doc["objects"]["box"]
+        Path(src,"src","nc_pad_layout.h").write_text(f"#define NC_PAD_X {int(x)}\n#define NC_PAD_Y {int(y)}\n",encoding="utf-8")
     print(f"Building {name}  [PS2]")
     from .vn import compile_content
     try:
@@ -509,6 +521,10 @@ def build(args):
     src = _resolve(getattr(args, "path", None))
 
     target = project_meta(src)["target"]
+    if os.path.exists(os.path.join(src,"triggers.json")):
+        from .viewportdata import load_triggers
+        try:load_triggers(src)
+        except (OSError,ValueError,KeyError,TypeError) as exc:raise SystemExit(f"ncc: triggers.json -- {exc}")
     if target == "ps2":
         try:
             from .ps2flow import compile_project

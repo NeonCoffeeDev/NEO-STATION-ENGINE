@@ -113,6 +113,14 @@ static void init_screen(framebuffer_t *frame, zbuffer_t *z, packet_t *packet)
 }
 
 
+#include "nc_objects.h"
+static int nc_palette_override = -1;
+static void nc_action(int action,int value) {
+    if(action==5) nc_palette_override=value;
+    if(action==2) { memcpy(nc_object_pos,nc_object_initial,sizeof(nc_object_pos));nc_palette_override=-1; }
+}
+#include "nc_events.h"
+
 int main(void)
 {
     framebuffer_t frame;
@@ -128,7 +136,14 @@ int main(void)
     int size = 96;
     int colour = 0;
     int frames = 0;
-    float yaw = 0, pitch = 0;
+    const float camera_pos[3] = NC_GAME_CAMERA_POS;
+    const float camera_target[3] = NC_GAME_CAMERA_TARGET;
+    float dx=camera_target[0]-camera_pos[0];
+    float dy=camera_target[1]-camera_pos[1];
+    float dz=camera_target[2]-camera_pos[2];
+    float camera_yaw=-atan2f(dx,dz);
+    float camera_pitch=atan2f(dy,sqrtf(dx*dx+dz*dz));
+    float yaw = camera_yaw, pitch = camera_pitch;
 
     /* Initialize GIF and select it for dma_wait_fast, as in PS2SDK samples. */
     dma_channel_initialize(DMA_CHANNEL_GIF, NULL, 0);
@@ -144,9 +159,10 @@ int main(void)
     if (!have_pad)
         printf("ps2_3d_lab: no controller in port 1 -- the box will just sit there\n");
 
-    packet = packet_init(256, PACKET_NORMAL);
+    packet = packet_init(2048, PACKET_NORMAL);
     if (packet == NULL) return 1;
     init_screen(&frame, &z, packet);
+    nc_events(1,0,-1);
 
     while (1) {
         if (have_pad && padRead(0, 0, &pad) != 0) {
@@ -186,6 +202,8 @@ int main(void)
         if (y < size / 2) y = size / 2;
         if (y > SCREEN_H - size / 2) y = SCREEN_H - size / 2;
 
+        nc_events(0,pressed,-1);
+        if(nc_palette_override>=0) colour=nc_palette_override;
         q = packet->data;
         q = draw_disable_tests(q, 0, &z);
         q = draw_clear(q, 0, OFFSET_X, OFFSET_Y, frame.width, frame.height,
@@ -201,25 +219,44 @@ int main(void)
                 {0,4},{1,5},{2,6},{3,7}
             };
             float px[8], py[8];
-            int i;
+            int i,object;
             if (buttons & PAD_LEFT) yaw -= 0.035f;
             if (buttons & PAD_RIGHT) yaw += 0.035f;
             if (buttons & PAD_UP) pitch -= 0.035f;
             if (buttons & PAD_DOWN) pitch += 0.035f;
-            if (pressed & PAD_START) yaw = pitch = 0;
+            if (pressed & PAD_START) { yaw = camera_yaw; pitch = camera_pitch; }
+            for(object=0;object<NC_OBJECT_COUNT;object++) {
+            int visible[8];
             for (i=0;i<8;i++) {
                 float vx=(i&1)?1.0f:-1.0f, vy=(i&2)?1.0f:-1.0f;
                 float vz=(i&4)?1.0f:-1.0f;
+                float ax=nc_object_rot[object][0]*0.01745329252f;
+                float ay=nc_object_rot[object][1]*0.01745329252f;
+                float az=nc_object_rot[object][2]*0.01745329252f;
+                float tx,ty,tz;
+                vx*=nc_object_scale[object][0];
+                vy*=nc_object_scale[object][1];
+                vz*=nc_object_scale[object][2];
+                ty=vy*cosf(ax)-vz*sinf(ax);tz=vy*sinf(ax)+vz*cosf(ax);vy=ty;vz=tz;
+                tx=vx*cosf(ay)+vz*sinf(ay);tz=-vx*sinf(ay)+vz*cosf(ay);vx=tx;vz=tz;
+                tx=vx*cosf(az)-vy*sinf(az);ty=vx*sinf(az)+vy*cosf(az);vx=tx;vy=ty;
+                float focal=((float)SCREEN_H*.5f)/tanf(NC_GAME_CAMERA_FOV*0.00872664626f);
+                vx+=nc_object_pos[object][0]-camera_pos[0];
+                vy+=nc_object_pos[object][1]-camera_pos[1];
+                vz+=nc_object_pos[object][2]-camera_pos[2];
                 float rx=vx*cosf(yaw)+vz*sinf(yaw);
                 float rz=-vx*sinf(yaw)+vz*cosf(yaw);
                 float ry=vy*cosf(pitch)-rz*sinf(pitch);
-                float depth=vy*sinf(pitch)+rz*cosf(pitch)+5.0f;
-                px[i]=rx*(size*3.0f)/depth;
-                py[i]=ry*(size*3.0f)/depth;
+                float depth=vy*sinf(pitch)+rz*cosf(pitch);
+                visible[i]=depth>=0.3f;
+                if(!visible[i])continue;
+                px[i]=rx*(focal*((float)size/96.0f))/depth;
+                py[i]=ry*(focal*((float)size/96.0f))/depth;
             }
             for(i=0;i<12;i++) {
                 line_t line = {0};
                 int a=edges[i][0], b=edges[i][1];
+                if(!visible[a]||!visible[b])continue;
                 line.v0.x=px[a]; line.v0.y=py[a];
                 line.v1.x=px[b]; line.v1.y=py[b];
                 line.color.r=palette[colour][0];
@@ -228,8 +265,8 @@ int main(void)
                 line.color.a=0x80; line.color.q=1.0f;
                 q=draw_line(q,0,&line);
             }
+            } /* all placed objects */
         }
-
         q = draw_finish(q);
 
         dma_wait_fast();

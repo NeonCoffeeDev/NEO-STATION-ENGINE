@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "triggers": [
+    {
+      "id": 1,
+      "name": "Colour change volume",
+      "room": 0,
+      "subject": "o:cube",
+      "space": "3d",
+      "min": [
+        1,
+        -2,
+        -2
+      ],
+      "max": [
+        4,
+        2,
+        2
+      ]
+    }
+  ]
+}
