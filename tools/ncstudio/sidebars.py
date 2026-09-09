@@ -1,0 +1,130 @@
+"""Project-aware authoring and inspector sidebars shared by every target."""
+import json
+from pathlib import Path
+import tkinter as tk
+from tkinter import ttk, messagebox
+from theme import BG,PANEL,PANEL_HI,SUNKEN,FG,DIM,CYAN,AMBER,RED,UI_BOLD,Button
+from ncc.build import project_meta
+
+SYSTEM_TYPES=('Camera','Movement','Interaction','Inventory','Dialogue','Audio','FX','Save Data','Transitions')
+
+class TabStack(tk.Frame):
+    def __init__(self,parent,tabs):
+        super().__init__(parent,bg=BG);self.tabs=tabs;self.buttons={};self.active=None
+        bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
+        for key,(title,frame) in tabs.items():
+            label=tk.Label(bar,text='  '+title+'  ',bg=PANEL,fg=DIM,font=UI_BOLD,pady=4,cursor='hand2')
+            label.pack(side='left',padx=(0,2));label.bind('<Button-1>',lambda _e,k=key:self.show(k));self.buttons[key]=label
+            frame.pack_forget()
+        self.show(next(iter(tabs)))
+    def show(self,key):
+        self.active=key
+        for name,(_title,frame) in self.tabs.items():
+            frame.pack(in_=self,fill='both',expand=True) if name==key else frame.pack_forget()
+            self.buttons[name].configure(bg=PANEL_HI if name==key else PANEL,fg=AMBER if name==key else DIM)
+
+class AuthorSidebar(tk.Frame):
+    def __init__(self,parent,on_flow,on_hierarchy):
+        super().__init__(parent,bg=BG);self.project=None;self.on_flow=on_flow;self.on_hierarchy=on_hierarchy
+        self.flow=tk.Frame(self,bg=BG);self.systems=tk.Frame(self,bg=BG);self.hierarchy=tk.Frame(self,bg=BG)
+        self.stack=TabStack(self,{'flow':('GAME FLOW',self.flow),'systems':('GAME SYSTEMS',self.systems),'hierarchy':('HIERARCHY',self.hierarchy)});self.stack.pack(fill='both',expand=True)
+        self.flow_list=self._list(self.flow);self.flow_list.bind('<Double-Button-1>',self.open_flow)
+        tk.Label(self.flow,text='Double-click a state to open its executable events.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=5)
+        row=tk.Frame(self.systems,bg=BG);row.pack(fill='x',padx=5,pady=5)
+        self.system_choice=ttk.Combobox(row,state='readonly',values=SYSTEM_TYPES,width=17);self.system_choice.current(0);self.system_choice.pack(side='left')
+        Button(row,'ADD',self.add_system,CYAN,width=6).pack(side='right')
+        self.system_list=self._list(self.systems);self.system_list.bind('<<ListboxSelect>>',self.select_system)
+        self.enabled=tk.BooleanVar(value=True)
+        tk.Checkbutton(self.systems,text='Active in this project',variable=self.enabled,bg=BG,fg=FG,selectcolor=SUNKEN).pack(anchor='w',padx=6)
+        tk.Label(self.systems,text='Modifiers (key=value, comma separated)',bg=BG,fg=DIM).pack(anchor='w',padx=6)
+        self.modifiers=ttk.Entry(self.systems);self.modifiers.pack(fill='x',padx=6,pady=4)
+        buttons=tk.Frame(self.systems,bg=BG);buttons.pack(fill='x',padx=5)
+        Button(buttons,'APPLY',self.apply_system,AMBER).pack(side='left');Button(buttons,'REMOVE',self.remove_system,RED).pack(side='right')
+        tk.Label(self.systems,text='Systems activate reusable kits. Their implementation remains target-specific.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=8)
+        self.hierarchy_list=self._list(self.hierarchy);self.hierarchy_list.bind('<<ListboxSelect>>',self.pick_hierarchy)
+        self.context=tk.Label(self.hierarchy,text='No active project',bg=BG,fg=DIM,anchor='w');self.context.pack(fill='x',padx=6,pady=5)
+        self.flow_nodes=[];self.system_rows=[];self.hierarchy_keys=[]
+    @staticmethod
+    def _list(parent):
+        box=tk.Listbox(parent,bg=SUNKEN,fg=FG,selectbackground=AMBER,selectforeground=BG,exportselection=False,bd=0,highlightthickness=0)
+        box.pack(fill='both',expand=True,padx=5,pady=5);return box
+    def load(self,project):
+        self.project=project;self.refresh_flow();self.refresh_systems()
+    def refresh_flow(self):
+        self.flow_list.delete(0,'end');self.flow_nodes=[]
+        if not self.project:return
+        try:
+            path=Path(self.project)/'game-structure.json';doc=json.loads(path.read_text()) if path.exists() else {'nodes':[]}
+            self.flow_nodes=doc.get('nodes',[])
+            for i,node in enumerate(self.flow_nodes):
+                arrow='  -> ' if i else '     '
+                self.flow_list.insert('end','%02d%s%s  %s'%(i+1,arrow,node.get('kind','State'),node.get('value','')))
+        except (OSError,ValueError):self.flow_list.insert('end','Invalid game-structure.json')
+    def open_flow(self,_event=None):
+        sel=self.flow_list.curselection()
+        if sel and sel[0]<len(self.flow_nodes):self.on_flow(self.flow_nodes[sel[0]].get('id'))
+    def _systems_path(self):return Path(self.project)/'game-systems.json'
+    def refresh_systems(self):
+        self.system_list.delete(0,'end');self.system_rows=[]
+        if not self.project:return
+        try:
+            path=self._systems_path();doc=json.loads(path.read_text()) if path.exists() else {}
+            if doc and doc.get('target')!=project_meta(self.project)['target']:raise ValueError('System target mismatch')
+            self.system_rows=doc.get('systems',[])
+        except (OSError,ValueError) as exc:messagebox.showerror('Game systems',str(exc),parent=self);return
+        for row in self.system_rows:self.system_list.insert('end',('[ON]  ' if row.get('active',True) else '[OFF] ')+row['kit'])
+    def save_systems(self):
+        if not self.project:return
+        target=project_meta(self.project)['target'];path=self._systems_path();temp=path.with_suffix('.json.tmp')
+        temp.write_text(json.dumps({'version':1,'target':target,'systems':self.system_rows},indent=2)+'\n');temp.replace(path);self.refresh_systems()
+    def add_system(self):
+        name=self.system_choice.get()
+        if self.project and name and not any(r['kit']==name for r in self.system_rows):self.system_rows.append({'kit':name,'active':True,'modifiers':{}});self.save_systems()
+    def select_system(self,_event=None):
+        sel=self.system_list.curselection()
+        if not sel:return
+        row=self.system_rows[sel[0]];self.enabled.set(row.get('active',True));self.modifiers.delete(0,'end');self.modifiers.insert(0,', '.join('%s=%s'%item for item in row.get('modifiers',{}).items()))
+    def apply_system(self):
+        sel=self.system_list.curselection()
+        if not sel:return
+        try:
+            mods={}
+            for part in filter(None,(p.strip() for p in self.modifiers.get().split(','))):
+                key,value=part.split('=',1);mods[key.strip()]=value.strip()
+            self.system_rows[sel[0]].update(active=bool(self.enabled.get()),modifiers=mods);self.save_systems()
+        except ValueError:messagebox.showerror('Modifiers','Use key=value pairs separated by commas.',parent=self)
+    def remove_system(self):
+        sel=self.system_list.curselection()
+        if sel:self.system_rows.pop(sel[0]);self.save_systems()
+    def set_hierarchy(self,title,records):
+        self.context.configure(text=title);self.hierarchy_list.delete(0,'end');self.hierarchy_keys=[]
+        for row in records:
+            self.hierarchy_keys.append(row.get('key'));kind=row.get('component') or row.get('space','object')
+            self.hierarchy_list.insert('end','%s  [%s]'%(row.get('name',row.get('key','Object')),kind))
+    def pick_hierarchy(self,_event=None):
+        sel=self.hierarchy_list.curselection()
+        if sel:self.on_hierarchy(self.hierarchy_keys[sel[0]])
+
+class InspectorSidebar(tk.Frame):
+    FIELDS=('name','position','rotation','scale','size','target','fov','material')
+    def __init__(self,parent,on_apply):
+        super().__init__(parent,bg=BG);self.on_apply=on_apply;self.record=None;self.entries={}
+        self.title=tk.Label(self,text='No GameObject selected',bg=BG,fg=AMBER,font=UI_BOLD,anchor='w');self.title.pack(fill='x',padx=7,pady=7)
+        for key in self.FIELDS:
+            row=tk.Frame(self,bg=BG);row.pack(fill='x',padx=6,pady=2)
+            tk.Label(row,text=key.upper(),bg=BG,fg=DIM,width=10,anchor='w').pack(side='left')
+            entry=ttk.Entry(row);entry.pack(side='left',fill='x',expand=True);self.entries[key]=entry
+        self.meta=tk.Label(self,bg=BG,fg=DIM,justify='left',anchor='nw',wraplength=270);self.meta.pack(fill='x',padx=7,pady=7)
+        Button(self,'APPLY EXPOSED PROPERTIES',self.apply,AMBER).pack(fill='x',padx=6,pady=5)
+    def show_record(self,record):
+        self.record=record
+        for entry in self.entries.values():entry.delete(0,'end')
+        if not record:self.title.configure(text='No GameObject selected');self.meta.configure(text='Select an instance in SCENE or HIERARCHY.');return
+        self.title.configure(text=record.get('name',record.get('key','GameObject')))
+        values={'name':record.get('name',''),'position':record.get('pos',[]),'rotation':record.get('rot',[]),'scale':record.get('scale',[]),'size':record.get('size',[]),'target':record.get('target',[]),'fov':record.get('fov',''),'material':record.get('material',{}).get('texture','')}
+        for key,value in values.items():
+            editable=key in ('name','position') or key in record or (key=='material' and 'material' in record)
+            self.entries[key].configure(state='normal');self.entries[key].insert(0,', '.join(map(str,value)) if isinstance(value,list) else str(value));self.entries[key].configure(state='normal' if editable and not record.get('readonly') else 'disabled')
+        self.meta.configure(text='Key: %s\nSpace: %s\nComponent: %s'%(record.get('key'),record.get('space'),record.get('component') or 'GameObject instance'))
+    def apply(self):
+        if self.record:self.on_apply(self.record,{key:entry.get().strip() for key,entry in self.entries.items()})

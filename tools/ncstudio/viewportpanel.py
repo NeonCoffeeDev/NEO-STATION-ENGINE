@@ -15,6 +15,7 @@ class ViewportPanel(tk.Frame):
         super().__init__(parent,bg=BG);self.group=self;self.project=None;self.world=None;self.drafts={};self.history=[];self.selected=None;self.zoom=1.;self.dragging=None
         self.editor_camera={'yaw':.65,'pitch':-.42,'distance':12.0,'target':[0.0,0.0,0.0]}
         self.game_mode=False
+        self.on_selection=None
         self.output_mode=False
         self.texture_cache={}
         self.active_camera=0
@@ -171,12 +172,14 @@ class ViewportPanel(tk.Frame):
             self.selected=self.rows[self.objects.curselection()[0]]['key']
             if self.selected.startswith('camera:'):self.active_camera=int(self.selected.split(':')[1])
             self.draw()
+            if self.on_selection:self.on_selection(self.record())
     def record(self):return next((r for r in self.records() if r['key']==self.selected),None)
     def checkpoint(self):self.history.append(copy.deepcopy((self.world.doc,self.world.triggers)));self.history=self.history[-40:]
     def pick(self,e):
         tags=self.canvas.gettags('current')
         if len(tags)>1 and tags[0]=='obj':
             self.selected=tags[1];r=self.record()
+            if self.on_selection:self.on_selection(r)
             if self.selected.startswith('camera:'):self.active_camera=int(self.selected.split(':')[1])
             if r.get('readonly'):
                 self.note.configure(text='This is a GameObject-local component preview. Edit its local offset in the upcoming GameObject editor.')

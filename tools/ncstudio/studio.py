@@ -33,6 +33,7 @@ from flowpanel import FlowPanel
 from assetpanel import AssetPanel
 from structurepanel import StructurePanel
 from viewportpanel import GamePanel, ViewportPanel
+from sidebars import AuthorSidebar, InspectorSidebar, TabStack
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -146,17 +147,33 @@ class Studio:
         main = tk.Frame(root, bg=BG)
         main.pack(fill="both", expand=True, padx=8, pady=(0, 6))
 
-        left = tk.Frame(main, bg=BG, width=296)
+        left = tk.Frame(main, bg=BG, width=270)
         left.pack(side="left", fill="y", padx=(0, 8))
         left.pack_propagate(False)
+        center = tk.Frame(main, bg=BG)
+        center.pack(side="left", fill="both", expand=True)
+        right = tk.Frame(main, bg=BG, width=306)
+        right.pack(side="right", fill="y", padx=(8, 0))
+        right.pack_propagate(False)
 
-        self._build_projects(left)
-        self._build_target(left)
-        self._build_actions(left)
-        self._build_tools(left)
-        self._build_assets(left)
-        self._build_hardware(left)
-        self._build_output(main)
+        system = tk.Frame(right, bg=BG)
+        inspector_holder = tk.Frame(right, bg=BG)
+        self._build_projects(system)
+        self._build_target(system)
+        self._build_actions(system)
+        self._build_tools(system)
+        self._build_assets(system)
+        self._build_hardware(system)
+        self._build_output(center)
+        self.author_sidebar = AuthorSidebar(left, self.open_flow_from_sidebar,
+                                            self.select_from_hierarchy)
+        self.author_sidebar.pack(fill="both", expand=True)
+        self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector)
+        self.inspector.pack(fill="both", expand=True)
+        self.viewport_panel.on_selection = self.on_viewport_selection
+        self.right_tabs = TabStack(right, {"system":("SYSTEM",system),
+                                           "inspector":("COMPONENTS / INSPECTOR",inspector_holder)})
+        self.right_tabs.pack(fill="both", expand=True)
         self._build_statusbar()
         self._bind_keys()
 
@@ -511,6 +528,7 @@ class Studio:
             self.design_panel.load(self.selected_project())
         elif key == "layers":
             self.scene_panel.load(self.selected_project())
+        if getattr(self,"author_sidebar",None):self.update_author_context()
 
     # ---- state ----------------------------------------------------------
 
@@ -521,7 +539,7 @@ class Studio:
     # everything else is specific to one machine's toolchain.
     TAB_ORDER = ("console", "tty", "script", "layers", "design", "room", "kits", "flow", "assets", "structure", "viewport", "game")
     TAB_LABELS = {"console": "CONSOLE", "tty": "PS1 TTY", "script": "SCRIPT",
-                  "layers": "LAYERS", "design": "DESIGN", "room": "ROOM", "kits": "KITS", "flow": "EVENTS", "assets": "ASSETS", "structure": "GAME FLOW", "viewport": "SCENE", "game": "GAME"}
+                  "layers": "LAYERS", "design": "DESIGN", "room": "GAMEOBJECT", "kits": "KITS", "flow": "EVENTS", "assets": "ASSETS", "structure": "GAME FLOW", "viewport": "SCENE", "game": "GAME"}
     TAB_TARGETS = {"console": ("ps1", "ps2"), "tty": ("ps1",), "script": ("ps1",),
                    "layers": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2"), "flow": ("ps1", "ps2"), "assets": ("ps1", "ps2"), "structure": ("ps1", "ps2"), "viewport": ("ps1", "ps2"), "game": ("ps1", "ps2")}
 
@@ -669,6 +687,7 @@ class Studio:
         self.asset_panel.load(p)
         self.structure_panel.load(p)
         self.viewport_panel.load(p)
+        self.author_sidebar.load(p)
         self.sync_editor()
         if getattr(self, "room_panel", None):
             self.room_panel.load(p)
@@ -676,6 +695,70 @@ class Studio:
             self.design_panel.load(p)
         if getattr(self, "scene_panel", None):
             self.scene_panel.load(p)
+        self.update_author_context()
+
+    def open_flow_from_sidebar(self,node_id):
+        self.show_tab('structure')
+        self.structure_panel.selected=node_id
+        self.structure_panel.draw();self.structure_panel.open_events()
+
+    def update_author_context(self):
+        if not getattr(self,'author_sidebar',None):return
+        if self.active_tab in ('viewport','game') and self.viewport_panel.world:
+            self.author_sidebar.set_hierarchy('SCENE / '+os.path.basename(self.selected_project()),self.viewport_panel.records())
+            self.author_sidebar.stack.show('hierarchy')
+        elif self.active_tab=='room' and getattr(self.room_panel,'objects',None):
+            names=list(self.room_panel.objects.get(0,'end'))
+            self.author_sidebar.set_hierarchy('GAMEOBJECT CONTENTS',[{'key':'room:'+str(i),'name':name,'space':'local'} for i,name in enumerate(names)])
+            self.author_sidebar.stack.show('hierarchy')
+        else:
+            self.author_sidebar.set_hierarchy(self.TAB_LABELS.get(self.active_tab,'PROJECT'),[])
+            if self.active_tab=='structure':self.author_sidebar.stack.show('flow')
+
+    def select_from_hierarchy(self,key):
+        if key and key.startswith('room:'):
+            index=int(key.split(':')[1]);self.room_panel.objects.selection_clear(0,'end');self.room_panel.objects.selection_set(index);self.room_panel.objects.event_generate('<<ListboxSelect>>');return
+        if self.viewport_panel.world and key:
+            self.viewport_panel.selected=key
+            if key.startswith('camera:'):self.viewport_panel.active_camera=int(key.split(':')[1])
+            self.viewport_panel.draw();self.inspector.show_record(self.viewport_panel.record());self.right_tabs.show('inspector')
+
+    def on_viewport_selection(self,record):
+        self.inspector.show_record(record)
+        self.right_tabs.show('inspector')
+        self.update_author_context()
+
+    @staticmethod
+    def _numbers(text,count):
+        values=[float(value.strip()) for value in text.split(',') if value.strip()]
+        if len(values)!=count:raise ValueError('%d comma-separated values required.'%count)
+        return values
+
+    def apply_inspector(self,record,values):
+        world=self.viewport_panel.world
+        if not world or record.get('readonly'):return
+        try:
+            self.viewport_panel.checkpoint();key=record['key']
+            if values['position']:world.move(self.viewport_panel.index(),key,self._numbers(values['position'],len(record['pos'])))
+            if values['rotation'] or values['scale']:
+                rotation=self._numbers(values['rotation'],3) if values['rotation'] else record.get('rot',[0,0,0])
+                scale=self._numbers(values['scale'],3) if values['scale'] else record.get('scale',[1,1,1])
+                world.set_transform(key,rotation,scale)
+            if values['material'] and values['material']!=record.get('material',{}).get('texture',''):world.set_material(key,values['material'])
+            if key.startswith('camera:') and world.kind=='fixed_room_v1':
+                camera=world.doc['cameras'][int(key.split(':')[1])]
+                if values['target']:camera['target']=self._numbers(values['target'],3)
+                if values['fov']:camera['fov']=float(values['fov'])
+            elif key=='camera' and world.kind=='lab3d_v1':
+                if values['target']:world.doc['camera']['target']=self._numbers(values['target'],3)
+                if values['fov']:world.doc['camera']['fov']=float(values['fov'])
+            name=values['name']
+            if name and name!=record.get('name'):
+                world.doc.setdefault('editor_names',{})[key]=name
+            world.validate();self.viewport_panel.save();self.viewport_panel.draw();self.update_author_context();self.inspector.show_record(self.viewport_panel.record())
+            self.set_status('GameObject properties saved',GREEN)
+        except (ValueError,TypeError,OSError) as exc:
+            self.viewport_panel.undo();messagebox.showerror('Inspector',str(exc),parent=self.root)
 
     def toggle_hub(self):
         self.hub_visible = not self.hub_visible
