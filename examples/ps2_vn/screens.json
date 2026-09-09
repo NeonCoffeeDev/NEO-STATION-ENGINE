@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "screens": {
+    "splash": {"objects": [
+      {"name": "Splash Background", "type": "panel", "rect": [0, 0, 640, 448], "text": ""},
+      {"name": "Neon Coffee Logo", "type": "text", "rect": [170, 130, 300, 80], "text": "NEON COFFEE"},
+      {"name": "Disclaimer", "type": "text", "rect": [90, 360, 460, 32], "text": "UNOFFICIAL HOMEBREW SOFTWARE"}
+    ]},
+    "main_menu": {"objects": [
+      {"name": "Menu Background", "type": "panel", "rect": [0, 0, 640, 448], "text": ""},
+      {"name": "Game Title", "type": "text", "rect": [150, 72, 340, 56], "text": "NEON COFFEE"},
+      {"name": "New Game", "type": "button", "rect": [220, 210, 200, 36], "text": "NEW GAME"},
+      {"name": "Continue", "type": "button", "rect": [220, 258, 200, 36], "text": "CONTINUE"},
+      {"name": "Options", "type": "button", "rect": [220, 306, 200, 36], "text": "OPTIONS"}
+    ]}
+  }
+}

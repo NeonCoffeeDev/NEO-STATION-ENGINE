@@ -42,7 +42,7 @@ class ViewportPanel(tk.Frame):
     def load(self,project,force=False):
         if project==self.project and not force:
             if self.world and not self.dirty():
-                if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original:force=True
+                if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original or (self.world.screen_path.read_text(encoding='utf-8') if self.world.screen_path.exists() else None)!=self.world.screen_original:force=True
             if not force:return
         if self.project and self.world:self.drafts[self.project]=self.world
         self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[];self.stage.set('');self.stage['values']=[];self.stages=[]
@@ -67,7 +67,7 @@ class ViewportPanel(tk.Frame):
 
     def dirty(self):
         w=self.world
-        return w and (json.loads(w.original)!=w.doc or (json.loads(w.trigger_original) if w.trigger_original else dict(version=1,target=w.target,triggers=[]))!=w.triggers)
+        return w and (json.loads(w.original)!=w.doc or (json.loads(w.trigger_original) if w.trigger_original else dict(version=1,target=w.target,triggers=[]))!=w.triggers or (json.loads(w.screen_original) if w.screen_original else dict(version=1,target=w.target,screens={}))!=w.screens)
     def reload(self):
         if self.dirty() and not messagebox.askyesno('Reload','Discard unsaved viewport changes?',parent=self):return
         self.load(self.project,True)
@@ -75,13 +75,17 @@ class ViewportPanel(tk.Frame):
     def change_stage(self):
         if not self.world or not self.stages:return
         stage=self.stages[max(0,self.stage.current())]
+        screen_key={'Splash':'splash','Menu':'main_menu','Intro':'intro'}.get(stage.get('kind'))
+        self.world.active_screen=screen_key if screen_key in self.world.screens.get('screens',{}) else None
         value=str(stage.get('value',''))
         for index,scene in enumerate(self.world.scenes()):
             name=str(scene.get('name',scene.get('title',scene.get('id',''))))
             if name and name==value:
                 self.room.current(index);break
+        records=self.world.records(self.index());is_2d=any(r['space']=='2d' for r in records)
+        self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','XY','XZ','YZ'];self.plane.set('2D' if is_2d else 'PERSPECTIVE')
         self.selected=None;self.fit()
-        self.note.configure(text='%s is selected in GAME FLOW. SCENE shows its assigned room; Splash/Menu composition becomes reusable GameObjects in the next editor pass.'%stage.get('kind','State'))
+        self.note.configure(text='%s is selected in GAME FLOW. SCENE and GAME show its assigned project composition.'%stage.get('kind','State'))
     def index(self):return max(0,self.room.current())
     def records(self):return self.world.records(self.index()) if self.world else []
     def axes(self):return {'2D':(0,1),'XY':(0,1),'XZ':(0,2),'YZ':(1,2)}[self.plane.get()]
@@ -128,7 +132,8 @@ class ViewportPanel(tk.Frame):
             c.create_rectangle(x,y,x+w,y+h,outline=color,fill='' if trigger else '#23333b',width=2,tags=('obj',r['key']))
             if flat and not trigger:self.picture(r,x,y,w,h)
             if not flat and r['key'].startswith('m:'):self.mesh_preview(r,ox,oy,scale,a,b,color)
-            c.create_text(x+3,y+3,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
+            label=r.get('text') or r['name']
+            c.create_text(x+w/2,y+h/2,text=label,anchor='center',fill=FG,tags=('obj',r['key'])) if r['key'].startswith('u:') else c.create_text(x+3,y+3,text=label,anchor='nw',fill=FG,tags=('obj',r['key']))
             if r['key']==self.selected:self.objects.selection_set(i)
         if self.world.kind=='fixed_room_v1':
             for i,yaw in enumerate(self.world.doc['camera_yaw']):
@@ -196,6 +201,7 @@ class ViewportPanel(tk.Frame):
         if not value:return
         self.checkpoint();key=self.selected
         if key.startswith('t:'):next(t for t in self.world.triggers['triggers'] if t['id']==int(key[2:]))['name']=value
+        elif key.startswith('u:') and self.world.active_screen:self.world.screens['screens'][self.world.active_screen]['objects'][int(key[2:])]['name']=value
         elif self.world.kind=='ps1' and key[:2] in ('s:','m:'):self.world.scenes()[self.index()]['sprites' if key.startswith('s:') else 'instances'][int(key[2:])]['name']=value
         else:self.world.doc.setdefault('editor_names',{})[key]=value
         self.draw()
@@ -253,7 +259,7 @@ class ViewportPanel(tk.Frame):
         if self.world:self.drafts[self.project]=self.world
         for world in self.drafts.values():
             try:
-                dirty=json.loads(world.original)!=world.doc or (json.loads(world.trigger_original) if world.trigger_original else dict(version=1,target=world.target,triggers=[]))!=world.triggers
+                dirty=json.loads(world.original)!=world.doc or (json.loads(world.trigger_original) if world.trigger_original else dict(version=1,target=world.target,triggers=[]))!=world.triggers or (json.loads(world.screen_original) if world.screen_original else dict(version=1,target=world.target,screens={}))!=world.screens
                 if dirty:world.save()
             except (OSError,ValueError,KeyError,TypeError) as exc:messagebox.showerror('Viewport save',str(exc),parent=self);return False
         return True
@@ -403,6 +409,7 @@ class ViewportPanel(tk.Frame):
             elif r['key'].startswith('p:'):
                 chars=self.world.doc['kit'].get('characters',[])
                 if chars:path=chars[min(int(r['key'][2:]),len(chars)-1)].get('portrait');portrait=True
+        if r['key'].startswith('u:'):path=r.get('texture') or None
         if not path:return
         try:
             with Image.open(self.world.root/path) as im:image=im.convert('RGBA')

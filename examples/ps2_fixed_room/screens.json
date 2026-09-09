@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "screens": {
+    "splash": {"objects": [
+      {"name": "Splash Background", "type": "panel", "rect": [0, 0, 640, 448], "text": ""},
+      {"name": "Studio Logo", "type": "text", "rect": [170, 140, 300, 64], "text": "NEO-STATION"},
+      {"name": "Disclaimer", "type": "text", "rect": [100, 360, 440, 32], "text": "PLAYSTATION 2 HOMEBREW"}
+    ]},
+    "main_menu": {"objects": [
+      {"name": "Menu Background", "type": "panel", "rect": [0, 0, 640, 448], "text": ""},
+      {"name": "Game Title", "type": "text", "rect": [160, 70, 320, 56], "text": "FIXED CAMERA DEMO"},
+      {"name": "Start Game", "type": "button", "rect": [220, 230, 200, 40], "text": "START GAME"},
+      {"name": "Options", "type": "button", "rect": [220, 282, 200, 40], "text": "OPTIONS"}
+    ]}
+  }
+}

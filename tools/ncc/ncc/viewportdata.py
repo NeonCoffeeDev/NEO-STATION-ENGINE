@@ -37,6 +37,11 @@ class World:
         self.trigger_original=self.trigger_path.read_text(encoding='utf-8') if self.trigger_path.exists() else None
         self.triggers=json.loads(self.trigger_original) if self.trigger_original else dict(version=1,target=self.target,triggers=[])
         if self.triggers.get('target')!=self.target:raise ValueError('Trigger target does not match project.')
+        self.screen_path=self.root/'screens.json'
+        self.screen_original=self.screen_path.read_text(encoding='utf-8') if self.screen_path.exists() else None
+        self.screens=json.loads(self.screen_original) if self.screen_original else {'version':1,'target':self.target,'screens':{}}
+        if self.screens.get('target')!=self.target:raise ValueError('Screen target does not match project.')
+        self.active_screen=None
 
     def scenes(self):
         if self.kind=='ps1':return self.doc.get('scenes',[self.doc])
@@ -46,6 +51,11 @@ class World:
     def records(self, room):
         rows=[]
         def add(key,name,pos,size,space):rows.append(dict(key=key,name=name,pos=list(pos),size=list(size),space=space))
+        if self.active_screen and self.active_screen in self.screens.get('screens',{}):
+            for i,obj in enumerate(self.screens['screens'][self.active_screen].get('objects',[])):
+                add('u:'+str(i),obj.get('name','UI Object '+str(i)),obj.get('rect',[0,0,64,32])[:2],obj.get('rect',[0,0,64,32])[2:],'2d')
+                rows[-1].update(ui_type=obj.get('type','panel'),text=obj.get('text',''),texture=obj.get('texture',''))
+            return rows
         if self.kind=='ps1':
             sc=self.scenes()[room]
             for i,s in enumerate(sc.get('sprites',[])):add('s:'+str(i),s.get('name','Sprite '+str(i)),[s.get('x',0),s.get('y',0)],[s['w'],s['h']],'2d')
@@ -93,6 +103,8 @@ class World:
         return rows
 
     def move(self,room,key,pos):
+        if key.startswith('u:') and self.active_screen:
+            self.screens['screens'][self.active_screen]['objects'][int(key[2:])]['rect'][:2]=list(map(int,pos));return
         if key.startswith('t:'):
             t=next(t for t in self.triggers['triggers'] if t['id']==int(key[2:]));size=[b-a for a,b in zip(t['min'],t['max'])]
             pos=list(map(int,pos)) if self.target=='ps1' else pos
@@ -193,7 +205,7 @@ class World:
 
     def save(self):
         self.validate()
-        changes=[(self.path,self.original,self.doc),(self.trigger_path,self.trigger_original,self.triggers)]
+        changes=[(self.path,self.original,self.doc),(self.trigger_path,self.trigger_original,self.triggers),(self.screen_path,self.screen_original,self.screens)]
         # Check every source before writing either file.
         for path,original,doc in changes:
             if (path.read_text(encoding='utf-8') if path.exists() else None)!=original:raise ValueError('External changes to '+path.name+'; reload before saving.')
