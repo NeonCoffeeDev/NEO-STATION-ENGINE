@@ -17,6 +17,8 @@ class ViewportPanel(tk.Frame):
         self.game_mode=False
         self.output_mode=False
         self.texture_cache={}
+        self.interactive=False
+        self.draw_job=None
         self.camera_drag=None
         bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
         self.stage=ttk.Combobox(bar,state='readonly',width=28);self.stage.pack(side='left');self.stage.bind('<<ComboboxSelected>>',lambda e:self.change_stage())
@@ -31,13 +33,13 @@ class ViewportPanel(tk.Frame):
         self.objects=tk.Listbox(side,bg='#10171b',fg=FG,exportselection=False,width=28);self.objects.pack(fill='both',expand=True);self.objects.bind('<<ListboxSelect>>',self.select)
         for title,fn in [('POSITION',self.position),('CAMERA',self.cameras),('RENAME',self.rename),('TRANSFORM',self.properties),('MATERIAL / TEXTURE',self.material),('DUPLICATE OBJECT',self.duplicate),('ADD TRIGGER',self.add_trigger),('TRIGGER BOUNDS',self.bounds),('DELETE TRIGGER',self.delete_trigger)]:Button(side,title,fn,CYAN).pack(fill='x')
         self.canvas=tk.Canvas(body,bg='#10171b',highlightthickness=0);self.canvas.pack(side='left',fill='both',expand=True)
-        self.canvas.bind('<Configure>',lambda e:self.draw());self.canvas.bind('<Button-1>',self.pick);self.canvas.bind('<B1-Motion>',self.drag);self.canvas.bind('<ButtonRelease-1>',lambda e:setattr(self,'dragging',None));self.canvas.bind('<MouseWheel>',self.wheel)
+        self.canvas.bind('<Configure>',lambda e:self.request_draw());self.canvas.bind('<Button-1>',self.pick);self.canvas.bind('<B1-Motion>',self.drag);self.canvas.bind('<ButtonRelease-1>',self.end_object_drag);self.canvas.bind('<MouseWheel>',self.wheel)
         self.canvas.bind('<Button-3>',self.camera_press)
         self.canvas.bind('<B3-Motion>',self.camera_orbit)
-        self.canvas.bind('<ButtonRelease-3>',lambda e:setattr(self,'camera_drag',None))
+        self.canvas.bind('<ButtonRelease-3>',self.end_camera_drag)
         self.canvas.bind('<Button-2>',self.camera_press)
         self.canvas.bind('<B2-Motion>',self.camera_pan)
-        self.canvas.bind('<ButtonRelease-2>',lambda e:setattr(self,'camera_drag',None))
+        self.canvas.bind('<ButtonRelease-2>',self.end_camera_drag)
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=950);self.note.pack(fill='x')
         self.photos=[]
 
@@ -115,13 +117,16 @@ class ViewportPanel(tk.Frame):
         scale=min((w-40)/max(1,x1-x0),(h-40)/max(1,y1-y0))*self.zoom
         return w/2-(x0+x1)*scale/2,h/2-(y0+y1)*scale/2,scale
     def draw(self):
-        c=self.canvas;c.delete('all');self.objects.delete(0,'end');self.photos=[];self.rows=self.visible()
+        self.draw_job=None
+        c=self.canvas;c.delete('all');self.photos=[];self.rows=self.visible()
+        if not self.interactive:self.objects.delete(0,'end')
         if not self.world:return
         if self.is_perspective():self.draw_perspective();return
         ox,oy,scale=self.mapping();a,b=self.axes()
         if not self.output_mode:
             c.create_line(0,oy,c.winfo_width(),oy,fill='#33434b');c.create_line(ox,0,ox,c.winfo_height(),fill='#33434b')
-        for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
+        if not self.interactive:
+            for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
         order=list(enumerate(self.rows))
         if self.world.kind=='ps1' and self.plane.get()=='2D':order.reverse()
         order.sort(key=lambda pair:pair[1]['key'].startswith('t:'))
@@ -143,12 +148,22 @@ class ViewportPanel(tk.Frame):
             if r['key'].startswith('u:'):
                 c.create_text(x+w/2,y+h/2,text=label,anchor='center',fill=FG,font=('Segoe UI',max(9,min(28,int(h*.35))),'bold'),tags=('obj',r['key']))
             elif not self.output_mode:c.create_text(x+3,y+3,text=label,anchor='nw',fill=FG,tags=('obj',r['key']))
-            if r['key']==self.selected:self.objects.selection_set(i)
+            if r['key']==self.selected and not self.interactive:self.objects.selection_set(i)
         if self.world.kind=='fixed_room_v1':
             for i,yaw in enumerate(self.world.doc['camera_yaw']):
                 x=ox-math.sin(yaw)*scale*2;y=oy-math.cos(yaw)*scale*2
                 c.create_line(x,y,ox,oy,arrow='last',fill=AMBER,dash=(3,3));c.create_text(x,y,text='Camera '+str(i),fill=FG)
         if not self.output_mode:c.create_text(10,10,anchor='nw',text=self.plane.get()+' authoring view | '+self.world.target.upper(),fill=FG)
+
+    def request_draw(self):
+        """Collapse a burst of mouse events into one display refresh."""
+        if self.draw_job is None:self.draw_job=self.after(16,self.draw)
+
+    def end_object_drag(self,_event=None):
+        self.dragging=None;self.interactive=False;self.draw()
+
+    def end_camera_drag(self,_event=None):
+        self.camera_drag=None;self.interactive=False;self.draw()
     def select(self,event=None):
         if self.objects.curselection():self.selected=self.rows[self.objects.curselection()[0]]['key'];self.draw()
     def record(self):return next((r for r in self.records() if r['key']==self.selected),None)
@@ -160,7 +175,7 @@ class ViewportPanel(tk.Frame):
             if r.get('readonly'):
                 self.note.configure(text='This is a GameObject-local component preview. Edit its local offset in the upcoming GameObject editor.')
                 self.draw();return
-            self.checkpoint();self.dragging=(e.x,e.y,copy.deepcopy(r));self.draw()
+            self.checkpoint();self.dragging=(e.x,e.y,copy.deepcopy(r));self.interactive=True;self.request_draw()
     def drag(self,e):
         if not self.dragging:return
         x,y,start=self.dragging
@@ -177,16 +192,16 @@ class ViewportPanel(tk.Frame):
                 if self.tool.get()=='ROTATE':rotation[axis]+=round(pixels/3)*5 if self.snap.get() else pixels*.5
                 else:scale3[axis]=max(.05,scale3[axis]+(round(pixels/8)*.1 if self.snap.get() else pixels*.01))
                 self.world.set_transform(self.selected,rotation,scale3)
-            self.draw();return
+            self.request_draw();return
         _,_,scale=self.mapping();a,b=self.axes();pos=list(start['pos'])
         step=8 if self.plane.get()=='2D' else (.25 if self.world.target=='ps2' else 10)
         pos[a]+=(e.x-x)/scale;pos[b]+=(e.y-y)/scale
         if self.snap.get():pos[a]=round(pos[a]/step)*step;pos[b]=round(pos[b]/step)*step
-        self.world.move(self.index(),self.selected,pos);self.draw()
+        self.world.move(self.index(),self.selected,pos);self.request_draw()
     def wheel(self,e):
         if self.is_perspective():self.editor_camera['distance']=max(.5,min(5000,self.editor_camera['distance']*(.88 if e.delta>0 else 1/.88)))
         else:self.zoom=max(.2,min(8,self.zoom*(1.15 if e.delta>0 else 1/1.15)))
-        self.draw()
+        self.request_draw()
     def position(self):
         r=self.record()
         if not r:return
@@ -363,7 +378,8 @@ class ViewportPanel(tk.Frame):
 
     def draw_perspective(self):
         c=self.canvas;project=self.projector()
-        for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
+        if not self.interactive:
+            for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
         # Editor grid is world XZ; it is never part of the camera output.
         if not self.output_mode:
             for value in range(-10,11):
@@ -372,10 +388,12 @@ class ViewportPanel(tk.Frame):
                     if pa and pb:c.create_line(pa[0],pa[1],pb[0],pb[1],fill='#263941')
         drawn=[]
         for index,r in enumerate(self.rows):
+            if self.output_mode and (r['key'].startswith('t:') or r.get('component') or r['key']=='camera'):continue
             color=AMBER if r['key']==self.selected else ('#bd85ff' if r['key'].startswith('t:') else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
             points,edges=self.geometry(r);screen=[project(p) for p in points]
             material=r.get('material',{}).get('texture')
-            if len(screen)==8:self.draw_box_surfaces(c,screen,material,r['key'])
+            renderable=not r['key'].startswith('t:') and not r.get('component') and r['key']!='camera'
+            if renderable and len(screen)==8:self.draw_box_surfaces(c,screen,material,r['key'])
             if not self.output_mode:
                 for a,b in edges:
                     if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
@@ -384,7 +402,7 @@ class ViewportPanel(tk.Frame):
             if origin and not self.output_mode:
                 x,y,_=origin;c.create_line(x-5,y,x+5,y,fill=AMBER,tags=('obj',r['key']));c.create_line(x,y-5,x,y+5,fill=AMBER,tags=('obj',r['key']))
                 c.create_text(x+7,y+7,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
-            if r['key']==self.selected:self.objects.selection_set(index)
+            if r['key']==self.selected and not self.interactive:self.objects.selection_set(index)
         mode='GAME VIEWPORT / MAIN CAMERA' if self.game_mode else 'SCENE / EDITOR CAMERA (right orbit / middle pan / wheel dolly)'
         if not self.output_mode:c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
 
@@ -398,16 +416,18 @@ class ViewportPanel(tk.Frame):
             try:
                 image=self.texture_cache.get(material)
                 if image is None:
-                    with Image.open(self.world.root/material) as source:image=source.convert('RGB').resize((8,8),Image.Resampling.NEAREST)
+                    with Image.open(self.world.root/material) as source:image=source.convert('RGB').resize((4,4),Image.Resampling.NEAREST)
                     self.texture_cache[material]=image
             except (OSError,ValueError):image=None
+        cells=1 if self.interactive else 4
         for face in visible:
             corners=[screen[i] for i in face]
             if image:
-                for v in range(8):
-                    for u in range(8):
-                        points=[self.bilerp(corners,u/8,v/8),self.bilerp(corners,(u+1)/8,v/8),self.bilerp(corners,(u+1)/8,(v+1)/8),self.bilerp(corners,u/8,(v+1)/8)]
-                        rgb=image.getpixel((u,v));fill='#%02x%02x%02x'%rgb
+                for v in range(cells):
+                    for u in range(cells):
+                        points=[self.bilerp(corners,u/cells,v/cells),self.bilerp(corners,(u+1)/cells,v/cells),self.bilerp(corners,(u+1)/cells,(v+1)/cells),self.bilerp(corners,u/cells,(v+1)/cells)]
+                        sample=(min(3,int((u+.5)*4/cells)),min(3,int((v+.5)*4/cells)))
+                        rgb=image.getpixel(sample);fill='#%02x%02x%02x'%rgb
                         canvas.create_polygon(*[n for p in points for n in p],fill=fill,outline=fill,tags=('obj',key))
             else:
                 canvas.create_polygon(*[n for i in face for n in screen[i][:2]],fill='#29404d',outline='',tags=('obj',key))
@@ -425,17 +445,17 @@ class ViewportPanel(tk.Frame):
             return '#%02x%02x%02x'%rgb
         except (OSError,ValueError):return '#39454d'
 
-    def camera_press(self,event):self.camera_drag=(event.x,event.y,list(self.editor_camera['target']))
+    def camera_press(self,event):self.camera_drag=(event.x,event.y,list(self.editor_camera['target']));self.interactive=True
     def camera_orbit(self,event):
         if not self.camera_drag or self.plane.get()!='PERSPECTIVE':return
-        x,y,_=self.camera_drag;self.editor_camera['yaw']+=(event.x-x)*.008;self.editor_camera['pitch']=max(-1.45,min(1.45,self.editor_camera['pitch']+(event.y-y)*.008));self.camera_drag=(event.x,event.y,list(self.editor_camera['target']));self.draw()
+        x,y,_=self.camera_drag;self.editor_camera['yaw']+=(event.x-x)*.008;self.editor_camera['pitch']=max(-1.45,min(1.45,self.editor_camera['pitch']+(event.y-y)*.008));self.camera_drag=(event.x,event.y,list(self.editor_camera['target']));self.request_draw()
     def camera_pan(self,event):
         if not self.camera_drag or self.plane.get()!='PERSPECTIVE':return
         x,y,start=self.camera_drag;distance=self.editor_camera['distance'];scale=max(.002,distance*.0015)
         yaw=self.editor_camera['yaw'];right=[math.cos(yaw),0,math.sin(yaw)]
         self.editor_camera['target']=[start[i]-right[i]*(event.x-x)*scale for i in range(3)]
         self.editor_camera['target'][1]+= (event.y-y)*scale
-        self.draw()
+        self.request_draw()
 
     def picture(self,r,x,y,w,h):
         path=None;crop=None;portrait=False
