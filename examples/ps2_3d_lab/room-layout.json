@@ -14,6 +14,11 @@
   "scales": {
     "cube": [1.0, 1.0, 1.0]
   },
+  "materials": {
+    "cube": {
+      "texture": "textures/checker.png"
+    }
+  },
   "camera": {
     "pos": [6.0, 4.5, -8.0],
     "target": [0.0, 0.0, 0.0],

@@ -2,10 +2,11 @@
 import copy
 import json
 import math
+import shutil
 from PIL import Image, ImageTk
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
+from tkinter import ttk, simpledialog, messagebox, filedialog
 from theme import BG,FG,CYAN,AMBER,Button
 from ncc.viewportdata import World
 
@@ -13,16 +14,20 @@ class ViewportPanel(tk.Frame):
     def __init__(self,parent):
         super().__init__(parent,bg=BG);self.group=self;self.project=None;self.world=None;self.drafts={};self.history=[];self.selected=None;self.zoom=1.;self.dragging=None
         self.editor_camera={'yaw':.65,'pitch':-.42,'distance':12.0,'target':[0.0,0.0,0.0]}
+        self.game_mode=False
         self.camera_drag=None
         bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
+        self.stage=ttk.Combobox(bar,state='readonly',width=28);self.stage.pack(side='left');self.stage.bind('<<ComboboxSelected>>',lambda e:self.change_stage())
         self.room=ttk.Combobox(bar,state='readonly',width=24);self.room.pack(side='left');self.room.bind('<<ComboboxSelected>>',lambda e:self.change_room())
-        self.plane=ttk.Combobox(bar,state='readonly',width=13,values=['2D','PERSPECTIVE','GAME CAMERA','XY','XZ','YZ']);self.plane.current(0);self.plane.pack(side='left');self.plane.bind('<<ComboboxSelected>>',lambda e:self.fit())
+        self.plane=ttk.Combobox(bar,state='readonly',width=13,values=['2D','PERSPECTIVE','XY','XZ','YZ']);self.plane.current(0);self.plane.pack(side='left');self.plane.bind('<<ComboboxSelected>>',lambda e:self.fit())
+        self.tool=ttk.Combobox(bar,state='readonly',width=10,values=['MOVE','ROTATE','SCALE']);self.tool.set('MOVE');self.tool.pack(side='left')
+        self.axis=ttk.Combobox(bar,state='readonly',width=5,values=['X','Y','Z']);self.axis.set('X');self.axis.pack(side='left')
         for title,fn in [('SAVE',self.save),('RELOAD',self.reload),('UNDO',self.undo),('FIT',self.fit)]:Button(bar,title,fn,CYAN).pack(side='left')
         self.snap=tk.BooleanVar(value=True);tk.Checkbutton(bar,text='Snap',variable=self.snap,bg=BG,fg=FG,selectcolor=BG).pack(side='left')
         body=tk.Frame(self,bg=BG);body.pack(fill='both',expand=True)
         side=tk.Frame(body,bg=BG,width=210);side.pack(side='left',fill='y')
         self.objects=tk.Listbox(side,bg='#10171b',fg=FG,exportselection=False,width=28);self.objects.pack(fill='both',expand=True);self.objects.bind('<<ListboxSelect>>',self.select)
-        for title,fn in [('POSITION',self.position),('CAMERA ANGLES',self.cameras),('RENAME',self.rename),('SIZE / ROTATION',self.properties),('DUPLICATE OBJECT',self.duplicate),('ADD TRIGGER',self.add_trigger),('TRIGGER BOUNDS',self.bounds),('DELETE TRIGGER',self.delete_trigger)]:Button(side,title,fn,CYAN).pack(fill='x')
+        for title,fn in [('POSITION',self.position),('CAMERA',self.cameras),('RENAME',self.rename),('TRANSFORM',self.properties),('MATERIAL / TEXTURE',self.material),('DUPLICATE OBJECT',self.duplicate),('ADD TRIGGER',self.add_trigger),('TRIGGER BOUNDS',self.bounds),('DELETE TRIGGER',self.delete_trigger)]:Button(side,title,fn,CYAN).pack(fill='x')
         self.canvas=tk.Canvas(body,bg='#10171b',highlightthickness=0);self.canvas.pack(side='left',fill='both',expand=True)
         self.canvas.bind('<Configure>',lambda e:self.draw());self.canvas.bind('<Button-1>',self.pick);self.canvas.bind('<B1-Motion>',self.drag);self.canvas.bind('<ButtonRelease-1>',lambda e:setattr(self,'dragging',None));self.canvas.bind('<MouseWheel>',self.wheel)
         self.canvas.bind('<Button-3>',self.camera_press)
@@ -40,20 +45,25 @@ class ViewportPanel(tk.Frame):
                 if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original:force=True
             if not force:return
         if self.project and self.world:self.drafts[self.project]=self.world
-        self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[]
+        self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[];self.stage.set('');self.stage['values']=[];self.stages=[]
         if project:
             try:
                 self.world=World(project) if force or project not in self.drafts else self.drafts[project]
                 self.drafts[project]=self.world
                 self.room['values']=['%d: %s'%(i,s.get('name',s.get('title',s.get('id','Room')))) for i,s in enumerate(self.world.scenes())]
                 self.room.current(0)
+                structure=Path(project)/'game-structure.json'
+                if structure.exists():
+                    self.stages=json.loads(structure.read_text(encoding='utf-8')).get('nodes',[])
+                    self.stage['values']=['%s: %s'%(n.get('kind','State'),n.get('value','')) for n in self.stages]
+                    if self.stages:self.stage.current(0)
                 records=self.world.records(0)
                 is_2d=any(r['space']=='2d' for r in records)
-                self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','GAME CAMERA','XY','XZ','YZ']
+                self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','XY','XZ','YZ']
                 self.plane.set('2D' if is_2d else 'PERSPECTIVE')
             except (OSError,ValueError,KeyError,TypeError) as exc:self.note.configure(text=str(exc))
         self.fit()
-        if self.world:self.note.configure(text='World workspace: left-drag objects in 2D/axis views. Perspective: right-drag orbit, middle-drag pan, wheel dolly. GAME CAMERA is a separate target-framing preview. Select an object, then ADD TRIGGER. SAVE/BUILD applies changes.')
+        if self.world:self.note.configure(text='SCENE editor: place and edit world objects with the free editor camera. The GAME tab renders the placed Main Camera. Select an object, then ADD TRIGGER. SAVE/BUILD applies changes.')
 
     def dirty(self):
         w=self.world
@@ -62,10 +72,20 @@ class ViewportPanel(tk.Frame):
         if self.dirty() and not messagebox.askyesno('Reload','Discard unsaved viewport changes?',parent=self):return
         self.load(self.project,True)
     def change_room(self):self.selected=None;self.fit()
+    def change_stage(self):
+        if not self.world or not self.stages:return
+        stage=self.stages[max(0,self.stage.current())]
+        value=str(stage.get('value',''))
+        for index,scene in enumerate(self.world.scenes()):
+            name=str(scene.get('name',scene.get('title',scene.get('id',''))))
+            if name and name==value:
+                self.room.current(index);break
+        self.selected=None;self.fit()
+        self.note.configure(text='%s is selected in GAME FLOW. SCENE shows its assigned room; Splash/Menu composition becomes reusable GameObjects in the next editor pass.'%stage.get('kind','State'))
     def index(self):return max(0,self.room.current())
     def records(self):return self.world.records(self.index()) if self.world else []
     def axes(self):return {'2D':(0,1),'XY':(0,1),'XZ':(0,2),'YZ':(1,2)}[self.plane.get()]
-    def is_perspective(self):return self.plane.get() in ('PERSPECTIVE','GAME CAMERA')
+    def is_perspective(self):return self.plane.get()=='PERSPECTIVE' or self.game_mode
     def visible(self):return [r for r in self.records() if r['space']==('2d' if self.plane.get()=='2D' else '3d')]
     def fit(self):
         self.zoom=1.;rs=self.visible()
@@ -126,10 +146,25 @@ class ViewportPanel(tk.Frame):
             if r.get('readonly'):
                 self.note.configure(text='This is a GameObject-local component preview. Edit its local offset in the upcoming GameObject editor.')
                 self.draw();return
-            self.checkpoint();self.dragging=(e.x,e.y,r['pos']);self.draw()
+            self.checkpoint();self.dragging=(e.x,e.y,copy.deepcopy(r));self.draw()
     def drag(self,e):
-        if not self.dragging or self.is_perspective():return
-        x,y,start=self.dragging;_,_,scale=self.mapping();a,b=self.axes();pos=list(start)
+        if not self.dragging:return
+        x,y,start=self.dragging
+        if self.is_perspective():
+            if start.get('readonly') or not start['key'].startswith('o:'):return
+            axis={'X':0,'Y':1,'Z':2}[self.axis.get()]
+            pixels=(e.x-x)-(e.y-y)
+            if self.tool.get()=='MOVE':
+                pos=list(start['pos']);step=.25 if self.snap.get() else .02
+                pos[axis]+=round(pixels/12)*step if self.snap.get() else pixels*step
+                self.world.move(self.index(),self.selected,pos)
+            elif self.world.kind=='lab3d_v1':
+                rotation=list(start.get('rot',[0,0,0]));scale3=list(start.get('scale',[1,1,1]))
+                if self.tool.get()=='ROTATE':rotation[axis]+=round(pixels/3)*5 if self.snap.get() else pixels*.5
+                else:scale3[axis]=max(.05,scale3[axis]+(round(pixels/8)*.1 if self.snap.get() else pixels*.01))
+                self.world.set_transform(self.selected,rotation,scale3)
+            self.draw();return
+        _,_,scale=self.mapping();a,b=self.axes();pos=list(start['pos'])
         step=8 if self.plane.get()=='2D' else (.25 if self.world.target=='ps2' else 10)
         pos[a]+=(e.x-x)/scale;pos[b]+=(e.y-y)/scale
         if self.snap.get():pos[a]=round(pos[a]/step)*step;pos[b]=round(pos[b]/step)*step
@@ -242,7 +277,7 @@ class ViewportPanel(tk.Frame):
 
     def camera_basis(self):
         """Return position/target/FOV without coupling editor and game cameras."""
-        if self.plane.get()=='GAME CAMERA':
+        if self.game_mode:
             if self.world.kind=='lab3d_v1':
                 camera=self.world.doc['camera']
                 return list(camera['pos']),list(camera['target']),float(camera['fov'])
@@ -320,6 +355,13 @@ class ViewportPanel(tk.Frame):
         for index,r in enumerate(self.rows):
             color=AMBER if r['key']==self.selected else ('#bd85ff' if r['key'].startswith('t:') else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
             points,edges=self.geometry(r);screen=[project(p) for p in points]
+            material=r.get('material',{}).get('texture')
+            if material and len(screen)==8:
+                fill=self.material_color(material)
+                for face in ((0,1,3,2),(4,5,7,6),(0,1,5,4),(2,3,7,6),(0,2,6,4),(1,3,7,5)):
+                    if all(screen[i] for i in face):
+                        coords=[value for i in face for value in screen[i][:2]]
+                        c.create_polygon(*coords,fill=fill,outline='',stipple='gray25',tags=('obj',r['key']))
             for a,b in edges:
                 if a<len(screen) and b<len(screen) and screen[a] and screen[b]:
                     c.create_line(screen[a][0],screen[a][1],screen[b][0],screen[b][1],fill=color,width=2,tags=('obj',r['key']))
@@ -328,8 +370,15 @@ class ViewportPanel(tk.Frame):
                 x,y,_=origin;c.create_line(x-5,y,x+5,y,fill=AMBER,tags=('obj',r['key']));c.create_line(x,y-5,x,y+5,fill=AMBER,tags=('obj',r['key']))
                 c.create_text(x+7,y+7,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
             if r['key']==self.selected:self.objects.selection_set(index)
-        mode='EDITOR CAMERA (right orbit / middle pan / wheel dolly)' if self.plane.get()=='PERSPECTIVE' else 'GAME CAMERA PREVIEW (target framing approximation)'
+        mode='GAME VIEWPORT / MAIN CAMERA' if self.game_mode else 'SCENE / EDITOR CAMERA (right orbit / middle pan / wheel dolly)'
         c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
+
+    def material_color(self,relative):
+        try:
+            with Image.open(self.world.root/relative) as image:
+                image.thumbnail((32,32));rgb=image.convert('RGB').resize((1,1)).getpixel((0,0))
+            return '#%02x%02x%02x'%rgb
+        except (OSError,ValueError):return '#39454d'
 
     def camera_press(self,event):self.camera_drag=(event.x,event.y,list(self.editor_camera['target']))
     def camera_orbit(self,event):
@@ -441,3 +490,80 @@ class ViewportPanel(tk.Frame):
             else:obj[field]=values
             self.world.validate();self.draw()
         except (ValueError,TypeError) as exc:messagebox.showerror('Properties',str(exc),parent=self)
+
+    def material(self):
+        r=self.record()
+        if not r or self.world.kind!='lab3d_v1' or not r['key'].startswith('o:'):
+            self.note.configure(text='Select a PS2 3D object to assign a material texture.');return
+        source=filedialog.askopenfilename(parent=self,title='Choose PS2 material texture',filetypes=[('PNG texture','*.png')])
+        if not source:return
+        try:
+            with Image.open(source) as image:
+                width,height=image.size
+            if width>512 or height>512:raise ValueError('PS2 editor material limit is 512x512. Resize this texture first.')
+            folder=self.world.root/'textures';folder.mkdir(exist_ok=True)
+            destination=folder/Path(source).name
+            if Path(source).resolve()!=destination.resolve():shutil.copy2(source,destination)
+            self.checkpoint();self.world.set_material(r['key'],destination.relative_to(self.world.root).as_posix())
+            self.world.validate();self.draw()
+            self.note.configure(text='Assigned %s. The desktop Scene/Game renderer previews the material; SAVE makes it project data.'%destination.name)
+        except (OSError,ValueError) as exc:messagebox.showerror('Material',str(exc),parent=self)
+
+    def render_game(self, canvas, object_sink):
+        """Render the active room through its placed Main Camera.
+
+        GAME borrows the scene renderer but never its editor camera or editing
+        bindings.  Keeping one renderer also prevents the Scene and Game tabs
+        from disagreeing about transforms while this preview is still a
+        desktop approximation of the console renderer.
+        """
+        if not self.world:
+            canvas.delete('all')
+            return
+        old_canvas,old_objects,old_rows=self.canvas,self.objects,getattr(self,'rows',[])
+        old_mode,old_plane,old_extent=self.game_mode,self.plane.get(),getattr(self,'extent',None)
+        try:
+            self.canvas=canvas;self.objects=object_sink
+            records=self.records()
+            is_2d=any(r['space']=='2d' for r in records)
+            self.game_mode=not is_2d
+            self.plane.set('2D' if is_2d else 'PERSPECTIVE')
+            if is_2d:
+                width=640 if self.world.target=='ps2' else 320
+                height=448 if self.world.target=='ps2' else 240
+                self.extent=(0,0,width,height)
+            self.draw()
+        finally:
+            self.canvas=old_canvas;self.objects=old_objects;self.rows=old_rows
+            self.game_mode=old_mode;self.plane.set(old_plane)
+            if old_extent is None:
+                self.__dict__.pop('extent',None)
+            else:self.extent=old_extent
+
+
+class GamePanel(tk.Frame):
+    """Read-only target viewport driven by the Scene editor's Main Camera."""
+    def __init__(self,parent,scene_editor):
+        super().__init__(parent,bg=BG);self.group=self;self.scene_editor=scene_editor
+        bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
+        tk.Label(bar,text='GAME VIEWPORT  |  MAIN CAMERA',bg=BG,fg=AMBER).pack(side='left',padx=8,pady=5)
+        Button(bar,'REFRESH',self.refresh,CYAN).pack(side='left')
+        self.status=tk.Label(bar,text='',bg=BG,fg=FG);self.status.pack(side='right',padx=8)
+        self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
+        self.canvas.pack(fill='both',expand=True,padx=8,pady=8)
+        self.canvas.bind('<Configure>',lambda _e:self.refresh())
+        self.sink=tk.Listbox(self)
+        self.note=tk.Label(self,text='Read-only output. Edit objects and the Main Camera in SCENE.',bg=BG,fg=AMBER,anchor='w')
+        self.note.pack(fill='x',padx=8,pady=(0,6))
+
+    def load(self,project):
+        self.scene_editor.load(project)
+        self.refresh()
+
+    def refresh(self):
+        world=self.scene_editor.world
+        if not world:
+            self.canvas.delete('all');self.status.configure(text='NO EDITABLE CAMERA');return
+        width,height=((640,448) if world.target=='ps2' else (320,240))
+        self.status.configure(text='%s  %d x %d'%(world.target.upper(),width,height))
+        self.scene_editor.render_game(self.canvas,self.sink)

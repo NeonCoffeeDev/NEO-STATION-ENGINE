@@ -32,6 +32,7 @@ class World:
             })
             self.doc.setdefault('collisions', [])
             self.doc.setdefault('attachments', [])
+            self.doc.setdefault('materials', {})
         self.trigger_path=self.root/'triggers.json'
         self.trigger_original=self.trigger_path.read_text(encoding='utf-8') if self.trigger_path.exists() else None
         self.triggers=json.loads(self.trigger_original) if self.trigger_original else dict(version=1,target=self.target,triggers=[])
@@ -66,6 +67,7 @@ class World:
                     add('o:'+key,key,xyz,row_size,'3d')
                     rows[-1]['rot'] = list(self.doc.get('rotations', {}).get(key, [0, 0, 0]))
                     rows[-1]['scale'] = list(scale)
+                    rows[-1]['material'] = self.doc.get('materials', {}).get(key, {})
             if self.kind == 'lab3d_v1':
                 camera = self.doc['camera']
                 add('camera', 'Game Camera', camera['pos'], [.35, .35, .35], '3d')
@@ -120,6 +122,11 @@ class World:
         name = key[2:]
         self.doc['rotations'][name] = list(rotation)
         self.doc['scales'][name] = list(scale)
+
+    def set_material(self, key, texture):
+        if self.kind != 'lab3d_v1' or not key.startswith('o:'):
+            raise ValueError('Materials are currently editable on PS2 3D objects.')
+        self.doc.setdefault('materials', {})[key[2:]] = {'texture': texture}
 
     def validate(self):
         if self.kind=='ps1':
@@ -176,6 +183,12 @@ class World:
                     key='center' if kind=='collision' else 'pos'
                     if len(row.get(key,[]))!=3 or any(type(v) not in (int,float) or not math.isfinite(v) for v in row[key]):raise ValueError('Invalid %s offset.'%kind)
                     if kind=='collision' and (len(row.get('size',[]))!=3 or any(type(v) not in (int,float) or not .05<=v<=100 for v in row['size'])):raise ValueError('Invalid collision size.')
+            for name,material in self.doc.get('materials',{}).items():
+                if name not in names:raise ValueError('Material references a missing 3D object.')
+                texture=material.get('texture','')
+                if not texture or Path(texture).is_absolute() or not (self.root/texture).is_file():
+                    raise ValueError('Material texture must be a project-relative PNG.')
+                if Path(texture).suffix.lower()!='.png':raise ValueError('PS2 material textures must be PNG files.')
         validate_triggers(self)
 
     def save(self):
