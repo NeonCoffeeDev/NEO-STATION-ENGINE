@@ -60,13 +60,16 @@ class World:
     def records(self, room):
         rows=[]
         def add(key,name,pos,size,space):rows.append(dict(key=key,name=name,pos=list(pos),size=list(size),space=space))
+        def common(row,obj=None):
+            values=(obj or {}).copy();values.update(self.doc.get('object_properties',{}).get(row['key'],{}))
+            row.update(isActive=values.get('isActive',True),visible=values.get('visible',True),tag=values.get('tag',''),state=values.get('state','default'),persistent=values.get('persistent',False))
         if self.kind=='screen2d_v1':
             keys=list(self.doc.get('screens',{}));self.active_screen=keys[min(room,len(keys)-1)] if keys else None
         if self.active_screen and self.active_screen in self.screens.get('screens',{}):
             for i,obj in enumerate(self.screens['screens'][self.active_screen].get('objects',[])):
                 add('u:'+str(i),obj.get('name','UI Object '+str(i)),obj.get('rect',[0,0,64,32])[:2],obj.get('rect',[0,0,64,32])[2:],'2d')
                 ui_type=obj.get('type','panel');component={'sprite2d':'Sprite2D','text':'Text2D','button':'Button2D','panel':'Panel2D'}.get(ui_type,'Transform')
-                rows[-1].update(ui_type=ui_type,text=obj.get('text',''),texture=obj.get('texture',''),image=obj.get('texture',''),layer=obj.get('layer',i),visible=obj.get('visible',True),details=obj.get('details',{}),component=component)
+                rows[-1].update(ui_type=ui_type,text=obj.get('text',''),texture=obj.get('texture',''),image=obj.get('texture',''),layer=obj.get('layer',i),details=obj.get('details',{}),component=component,components=obj.get('components',['Transform','Lifecycle','Identity',component]));common(rows[-1],obj)
             return sorted(rows,key=lambda row:row.get('layer',0))
         if self.kind=='ps1':
             sc=self.scenes()[room]
@@ -125,8 +128,14 @@ class World:
         for t in self.triggers['triggers']:
             if t['room']==room:add('t:'+str(t['id']),t['name'],t['min'],[b-a for a,b in zip(t['min'],t['max'])],t['space'])
         if self.kind=='vn':rows.sort(key=lambda r: 3 if r['key'].startswith('t:') else 2 if r['key']=='dialogue' else 0 if r['key']=='background' else 1)
-        for r in rows:r['name']=self.doc.get('editor_names',{}).get(r['key'],r['name'])
+        for r in rows:
+            r['name']=self.doc.get('editor_names',{}).get(r['key'],r['name']);common(r)
         return rows
+
+    def set_common(self,key,values):
+        if key.startswith('u:') and self.active_screen:
+            obj=self.screens['screens'][self.active_screen]['objects'][int(key[2:])];obj.update(values);return
+        self.doc.setdefault('object_properties',{}).setdefault(key,{}).update(values)
 
     def move(self,room,key,pos):
         if key.startswith('u:') and self.active_screen:

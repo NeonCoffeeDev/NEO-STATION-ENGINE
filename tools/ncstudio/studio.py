@@ -803,6 +803,8 @@ class Studio:
                 if values['visible']!='':obj['visible']=values['visible'].lower() not in ('0','false','off','no')
                 if values['size']:
                     size=self._numbers(values['size'],2);obj['rect'][2:]=list(map(int,size))
+            truth=lambda value:value.lower() not in ('0','false','off','no')
+            world.set_common(key,{'isActive':truth(values['isActive']),'visible':truth(values['visible']),'tag':values['tag'],'state':values['state'] or 'default','persistent':truth(values['persistent'])})
             if key.startswith('camera:') and world.kind=='fixed_room_v1':
                 camera=world.doc['cameras'][int(key.split(':')[1])]
                 if values['target']:camera['target']=self._numbers(values['target'],3)

@@ -31,10 +31,10 @@ class ViewportPanel(tk.Frame):
         for title,fn in [('SAVE',self.save),('RELOAD',self.reload),('UNDO',self.undo),('FIT',self.fit)]:Button(bar,title,fn,CYAN).pack(side='left')
         self.snap=tk.BooleanVar(value=True);tk.Checkbutton(bar,text='Snap',variable=self.snap,bg=BG,fg=FG,selectcolor=BG).pack(side='left')
         body=tk.Frame(self,bg=BG);body.pack(fill='both',expand=True)
-        side=tk.Frame(body,bg=BG,width=210);side.pack(side='left',fill='y')
-        self.objects=tk.Listbox(side,bg='#10171b',fg=FG,exportselection=False,width=28);self.objects.pack(fill='both',expand=True);self.objects.bind('<<ListboxSelect>>',self.select)
-        for title,fn in [('POSITION',self.position),('CAMERA',self.cameras),('RENAME',self.rename),('TRANSFORM',self.properties),('MATERIAL / TEXTURE',self.material),('DUPLICATE OBJECT',self.duplicate),('ADD TRIGGER',self.add_trigger),('TRIGGER BOUNDS',self.bounds),('DELETE TRIGGER',self.delete_trigger)]:Button(side,title,fn,CYAN).pack(fill='x')
-        self.canvas=tk.Canvas(body,bg='#10171b',highlightthickness=0);self.canvas.pack(side='left',fill='both',expand=True)
+        # Selection belongs to the shared left HIERARCHY. Keep a private sink
+        # for the mature drawing code, but do not duplicate object navigation.
+        self.objects=tk.Listbox(self)
+        self.canvas=tk.Canvas(body,bg='#10171b',highlightthickness=0);self.canvas.pack(fill='both',expand=True)
         self.canvas.bind('<Configure>',lambda e:self.request_draw());self.canvas.bind('<Button-1>',self.pick);self.canvas.bind('<B1-Motion>',self.drag);self.canvas.bind('<ButtonRelease-1>',self.end_object_drag);self.canvas.bind('<MouseWheel>',self.wheel)
         self.canvas.bind('<Button-3>',self.camera_press)
         self.canvas.bind('<B3-Motion>',self.camera_orbit)

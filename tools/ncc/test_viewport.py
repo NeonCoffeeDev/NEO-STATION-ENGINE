@@ -114,6 +114,14 @@ class ViewportTests(unittest.TestCase):
             world.move(0,'u:0',[30,40]);world.save();fresh=World(root)
             self.assertEqual(fresh.records(0)[0]['pos'],[30,40])
 
+    def test_shared_gameobject_properties_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);world=self.setup_world(root)
+            world.set_common('s:0',{'isActive':False,'tag':'player','state':'hurt','persistent':True})
+            world.save();row=World(root).records(0)[0]
+            self.assertFalse(row['isActive']);self.assertEqual(row['tag'],'player')
+            self.assertEqual(row['state'],'hurt');self.assertTrue(row['persistent'])
+
     def test_ps2_materials_compile_to_aligned_native_data(self):
         from PIL import Image
         with tempfile.TemporaryDirectory() as d:

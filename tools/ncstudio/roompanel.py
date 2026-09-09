@@ -78,8 +78,9 @@ class RoomPanel(tk.Frame):
         self.actor = ttk.Combobox(left, state='readonly', width=22)
         self.actor.pack(fill='x')
         self.actor.bind('<<ComboboxSelected>>', lambda e: self.draw())
-        self.objects = tk.Listbox(left, bg=SUNKEN, fg=FG, exportselection=False, height=8)
-        self.objects.pack(fill='both', expand=True)
+        # GAMEOBJECT contents are listed once, in the shared left HIERARCHY.
+        # This hidden selection model preserves the existing editor operations.
+        self.objects = tk.Listbox(self, exportselection=False)
         self.objects.bind('<<ListboxSelect>>', self.select)
         self.values = []
         for caption in ('X', 'Y', 'Width', 'Height'):

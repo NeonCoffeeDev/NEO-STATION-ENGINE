@@ -143,7 +143,7 @@ class AuthorSidebar(tk.Frame):
         if sel:self.on_hierarchy(self.hierarchy_keys[sel[0]])
 
 class InspectorSidebar(tk.Frame):
-    FIELDS=('name','position','rotation','scale','size','text','target','fov','image','layer','visible','material')
+    FIELDS=('name','isActive','visible','tag','state','persistent','position','rotation','scale','size','text','target','fov','image','layer','material')
     def __init__(self,parent,on_apply,on_choose_image=None):
         super().__init__(parent,bg=BG);self.on_apply=on_apply;self.on_choose_image=on_choose_image;self.record=None;self.entries={}
         self.title=tk.Label(self,text='No GameObject selected',bg=BG,fg=AMBER,font=UI_BOLD,anchor='w');self.title.pack(fill='x',padx=7,pady=7)
@@ -169,7 +169,7 @@ class InspectorSidebar(tk.Frame):
         for entry in self.entries.values():entry.delete(0,'end')
         if not record:self.title.configure(text='No GameObject selected');self.meta.configure(text='Select an instance in SCENE or HIERARCHY.');return
         self.title.configure(text=record.get('name',record.get('key','GameObject')))
-        values={'name':record.get('name',''),'position':record.get('pos',[]),'rotation':record.get('rot',[]),'scale':record.get('scale',[]),'size':record.get('size',[]),'text':record.get('text',''),'target':record.get('target',[]),'fov':record.get('fov',''),'image':record.get('image',''),'layer':record.get('layer',''),'visible':record.get('visible',''),'material':record.get('material',{}).get('texture','')}
+        values={'name':record.get('name',''),'isActive':record.get('isActive',True),'visible':record.get('visible',True),'tag':record.get('tag',''),'state':record.get('state','default'),'persistent':record.get('persistent',False),'position':record.get('pos',[]),'rotation':record.get('rot',[]),'scale':record.get('scale',[]),'size':record.get('size',[]),'text':record.get('text',''),'target':record.get('target',[]),'fov':record.get('fov',''),'image':record.get('image',''),'layer':record.get('layer',''),'material':record.get('material',{}).get('texture','')}
         for key,value in values.items():
             editable=key in ('name','position') or key in record or (key=='material' and 'material' in record)
             self.entries[key].configure(state='normal');self.entries[key].insert(0,', '.join(map(str,value)) if isinstance(value,list) else str(value));self.entries[key].configure(state='normal' if editable and not record.get('readonly') else 'disabled')

@@ -1,6 +1,8 @@
 """Shared authoring vocabulary for GameObjects, visual actions, and NC-CODE."""
 COMPONENTS={
  'Transform':dict(icon='XYZ',targets=('ps1','ps2'),fields=('position','rotation','scale'),code=('set_pos(object,x,y,z)','set_rot(object,x,y,z)','move(object,x,y,z)')),
+ 'Lifecycle':dict(icon='PWR',targets=('ps1','ps2'),fields=('isActive','visible','persistent'),code=('show(object)','hide(object)','goto_scene(scene)')),
+ 'Identity':dict(icon='TAG',targets=('ps1','ps2'),fields=('name','tag','state'),code=('save_set(slot,value)',)),
  'Sprite2D':dict(icon='IMG',targets=('ps1','ps2'),fields=('image','frame','layer','visible','flip'),code=('sprite_frame(sprite,x,y)','sprite_show(sprite)','sprite_hide(sprite)')),
  'Text2D':dict(icon='TXT',targets=('ps1','ps2'),fields=('text','font','color','align','layer','visible'),code=('draw_text(x,y,text)','set_text(object,text)','show(object)','hide(object)')),
  'Panel2D':dict(icon='PNL',targets=('ps1','ps2'),fields=('size','color','layer','visible'),code=('show(object)','hide(object)')),
@@ -18,18 +20,18 @@ COMPONENTS={
 }
 
 READY_OBJECTS={
- 'Empty GameObject':('Transform',),
- '2D Sprite':('Transform','Sprite2D'),
- '2D Text':('Transform','Text2D'),
- 'Menu Button':('Transform','Button2D'),
- 'UI Panel':('Transform','Panel2D'),
- '3D Mesh':('Transform','Mesh3D','Material'),
- 'Main Camera':('Transform','Camera'),
- 'Solid Object':('Transform','Collision Box'),
- 'Trigger':('Transform','Trigger Volume'),
- 'Audio Emitter':('Transform','Audio Source'),
- 'FX Emitter':('Transform','FX Emitter'),
- 'PS2 Light':('Transform','Light'),
+ 'Empty GameObject':('Transform','Lifecycle','Identity'),
+ '2D Sprite':('Transform','Lifecycle','Identity','Sprite2D'),
+ '2D Text':('Transform','Lifecycle','Identity','Text2D'),
+ 'Menu Button':('Transform','Lifecycle','Identity','Button2D'),
+ 'UI Panel':('Transform','Lifecycle','Identity','Panel2D'),
+ '3D Mesh':('Transform','Lifecycle','Identity','Mesh3D','Material'),
+ 'Main Camera':('Transform','Lifecycle','Identity','Camera'),
+ 'Solid Object':('Transform','Lifecycle','Identity','Collision Box'),
+ 'Trigger':('Transform','Lifecycle','Identity','Trigger Volume'),
+ 'Audio Emitter':('Transform','Lifecycle','Identity','Audio Source'),
+ 'FX Emitter':('Transform','Lifecycle','Identity','FX Emitter'),
+ 'PS2 Light':('Transform','Lifecycle','Identity','Light'),
 }
 
 def ready_for(target):
