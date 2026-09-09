@@ -70,3 +70,5 @@ class VariableDialog(simpledialog.Dialog):
             self.result='%s, %d'%(name,number);return True
         except ValueError:
             messagebox.showerror('Invalid variable','Start the name with a letter; use letters, digits or underscores (max 24). Enter a whole number in range.',parent=self);return False
+
+HELP.update({'Go to Flow Box':'Destination GAME FLOW box ID. Ends this chain and enters that box next update.', 'On exit':'Runs once when leaving this flow box. Cannot request another transition.'})

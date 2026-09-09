@@ -1,3 +1,5 @@
+> Updated: GAME FLOW now supports box-owned events and active-state execution. See [FLOW-BOXES.md](FLOW-BOXES.md); older reference-map descriptions below apply only to legacy graphs.
+
 # Programming with events
 
 Start in a PS2 Fixed Camera Room project. These variable/condition nodes require

@@ -4,10 +4,14 @@ import math
 import re
 from pathlib import Path
 from .eventflow import BUTTONS
+from .flowstate import validate as validate_state
 
 def compile_project(project):
     root=Path(project); path=root/'event-flow.json'
-    if not path.exists(): return
+    if not path.exists():
+        if (root/'src/nc_events.h').exists():
+            (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n', encoding='utf-8')
+        return
     doc=json.loads(path.read_text())
     if doc.get('target')!='ps2': raise ValueError('PS2 build refuses a graph from another console.')
     if doc.get('status')=='draft':
@@ -18,6 +22,7 @@ def compile_project(project):
     meta=json.loads((root/'nc.json').read_text())
     if meta.get('event_adapter')!='fixed_room_v1':
         raise ValueError('This PS2 project has no supported event adapter. Keep its graph as a draft.')
+    scoped=validate_state(doc,root)
     actions={'Set camera':(0,2),'Interact':(1,0),'Reset game':(2,0),'Stop movement':(3,0)}
     nodes=doc['nodes'];lookup={n['id']:n for n in nodes}
     if len(nodes)>128 or len(lookup)!=len(nodes):raise ValueError('Too many nodes or duplicate IDs.')
@@ -27,11 +32,21 @@ def compile_project(project):
         if a not in lookup or b not in lookup or b in links[a]:raise ValueError('Invalid or duplicate edge.')
         links[a].append(b);incoming[b]+=1
     output=['/* Generated PS2 fixed-room events. Do not edit. */','static void nc_events(int start, unsigned int pressed, int zone) {','    (void)start; (void)pressed; (void)zone;', '    static unsigned int tick;', '    if (start) tick = 0; else if (tick < 0xffffffffu) tick++;']
+    if scoped:
+        output = output[:3] + [
+            '    static int active, pending, initialized;',
+            '    static unsigned int tick;',
+            '    int entering = 0;',
+            '    if (start || !initialized) { active = %d; pending = 0; initialized = 1; entering = 1; }' % doc['entry'],
+            '    else if (pending) { active = pending; pending = 0; entering = 1; }',
+            '    if (entering) { tick = 0; pressed = 0; zone = -1; } else if (tick < 0xffffffffu) tick++;']
     for n in nodes:
         if n['kind']=='Once':
             output += ['    static int used_%d;'%n['id'], '    if (start) used_%d = 0;'%n['id']]
         elif n['kind']=='Cooldown':
             output += ['    static unsigned int next_%d;'%n['id'], '    if (start) next_%d = 0;'%n['id']]
+    if scoped:
+        output=[line.replace('if (start) used_', 'if (entering) used_').replace('if (start) next_', 'if (entering) next_') for line in output]
     variable_kinds=('Set variable','Add variable','If equal','If at least')
     variables={}
     for n in nodes:
@@ -56,6 +71,10 @@ def compile_project(project):
         reached.add(i)
         for j in links[i]:
             n=lookup[j]
+            if n['kind']=='Go to Flow Box' and scoped:
+                output.append('        if (!pending) pending = %d;' % int(n['value']))
+                reached.add(j)
+                continue
             if n['kind'] in variable_kinds:
                 name,value=variables[j];symbol='var_'+name
                 if n['kind']=='Set variable':output.append('        %s = %d;'%(symbol,value))
@@ -102,7 +121,8 @@ def compile_project(project):
             walk(j,stack|{i})
     for n in nodes:
         kind=n['kind']; value=n.get('value','')
-        if kind=='On start':condition='start'
+        if scoped and kind=='On exit':continue
+        if kind=='On start':condition='entering' if scoped else 'start'
         elif kind=='On arrival':
             if 'static int nc_move_arrived;' not in (root/'src/main.c').read_text():
                 raise ValueError('On arrival requires the updated fixed-room runtime.')
@@ -119,10 +139,19 @@ def compile_project(project):
             v=int(value)
             if v not in (0,1):raise ValueError('Zone must be 0 or 1.')
             condition='zone == %d'%v
-        elif kind in actions or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
+        elif kind in actions or (scoped and kind=='Go to Flow Box') or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
         else:raise ValueError('Unsupported PS2 node: '+kind)
         if incoming[n['id']]:raise ValueError('Events cannot have incoming links.')
+        if scoped:
+            if kind!='On start':condition='!entering && ('+condition+')'
+            condition='active == %d && !pending && (%s)' % (n['section_id'],condition)
         output.append('    if (%s) {'%condition);walk(n['id'],set());output.append('    }')
+    if scoped:
+        for n in nodes:
+            if n['kind']=='On exit':
+                if incoming[n['id']]:raise ValueError('Events cannot have incoming links.')
+                output.append('    if (pending && active == %d) {' % n['section_id'])
+                walk(n['id'],set());output.append('    }')
     if reached!=set(lookup):raise ValueError('Every action must connect to an event.')
     output.append('}')
     (root/'src/nc_events.h').write_text('\n'.join(output)+'\n')

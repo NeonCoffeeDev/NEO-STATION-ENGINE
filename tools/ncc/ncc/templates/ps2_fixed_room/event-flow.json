@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "target": "ps2",
   "status": "enabled",
   "nodes": [
@@ -8,175 +8,224 @@
       "kind": "On start",
       "value": "",
       "x": 20,
-      "y": 20
+      "y": 20,
+      "section_id": 1
     },
     {
       "id": 2,
       "kind": "Reset game",
       "value": "0",
       "x": 240,
-      "y": 20
+      "y": 20,
+      "section_id": 1
     },
     {
       "id": 3,
       "kind": "On button",
       "value": "CROSS",
       "x": 20,
-      "y": 105
+      "y": 105,
+      "section_id": 4
     },
     {
       "id": 4,
       "kind": "Interact",
       "value": "0",
       "x": 430,
-      "y": 105
+      "y": 105,
+      "section_id": 4
     },
     {
       "id": 5,
       "kind": "On button",
       "value": "START",
       "x": 20,
-      "y": 190
+      "y": 190,
+      "section_id": 4
     },
     {
       "id": 6,
       "kind": "Reset game",
       "value": "0",
       "x": 240,
-      "y": 190
+      "y": 190,
+      "section_id": 4
     },
     {
       "id": 7,
       "kind": "On button",
       "value": "L1",
       "x": 20,
-      "y": 275
+      "y": 275,
+      "section_id": 4
     },
     {
       "id": 8,
       "kind": "Set camera",
       "value": "0",
       "x": 240,
-      "y": 275
+      "y": 275,
+      "section_id": 4
     },
     {
       "id": 9,
       "kind": "On button",
       "value": "R1",
       "x": 20,
-      "y": 360
+      "y": 360,
+      "section_id": 4
     },
     {
       "id": 10,
       "kind": "Set camera",
       "value": "2",
       "x": 240,
-      "y": 360
+      "y": 360,
+      "section_id": 4
     },
     {
       "id": 11,
       "kind": "On zone",
       "value": "0",
       "x": 20,
-      "y": 445
+      "y": 445,
+      "section_id": 4
     },
     {
       "id": 12,
       "kind": "Set camera",
       "value": "0",
       "x": 240,
-      "y": 445
+      "y": 445,
+      "section_id": 4
     },
     {
       "id": 13,
       "kind": "On zone",
       "value": "1",
       "x": 20,
-      "y": 530
+      "y": 530,
+      "section_id": 4
     },
     {
       "id": 14,
       "kind": "Set camera",
       "value": "1",
       "x": 240,
-      "y": 530
+      "y": 530,
+      "section_id": 4
     },
     {
       "id": 15,
       "kind": "Cooldown",
       "value": "20",
       "x": 220,
-      "y": 105
+      "y": 105,
+      "section_id": 4
     },
     {
       "id": 16,
       "kind": "On button",
       "value": "SQUARE",
       "x": 20,
-      "y": 650
+      "y": 650,
+      "section_id": 4
     },
     {
       "id": 17,
       "kind": "Move to",
       "value": "-2, 1.5, 90",
       "x": 210,
-      "y": 650
+      "y": 650,
+      "section_id": 4
     },
     {
       "id": 18,
       "kind": "On button",
       "value": "TRIANGLE",
       "x": 20,
-      "y": 770
+      "y": 770,
+      "section_id": 4
     },
     {
       "id": 19,
       "kind": "Add variable",
       "value": "presses, 1",
       "x": 210,
-      "y": 770
+      "y": 770,
+      "section_id": 4
     },
     {
       "id": 20,
       "kind": "If equal",
       "value": "presses, 3",
       "x": 400,
-      "y": 770
+      "y": 770,
+      "section_id": 4
     },
     {
       "id": 21,
       "kind": "Set camera",
       "value": "2",
       "x": 590,
-      "y": 770
+      "y": 770,
+      "section_id": 4
     },
     {
       "id": 22,
       "kind": "On arrival",
       "value": "",
       "x": 20,
-      "y": 890
+      "y": 890,
+      "section_id": 4
     },
     {
       "id": 23,
       "kind": "Interact",
       "value": "0",
       "x": 210,
-      "y": 890
+      "y": 890,
+      "section_id": 4
     },
     {
       "id": 24,
       "kind": "On button",
       "value": "CIRCLE",
       "x": 20,
-      "y": 1010
+      "y": 1010,
+      "section_id": 4
     },
     {
       "id": 25,
       "kind": "Stop movement",
       "value": "0",
       "x": 210,
-      "y": 1010
+      "y": 1010,
+      "section_id": 4
+    },
+    {
+      "id": 26,
+      "kind": "Go to Flow Box",
+      "value": "4",
+      "x": 430,
+      "y": 20,
+      "section_id": 1
+    },
+    {
+      "id": 27,
+      "kind": "On start",
+      "value": "",
+      "x": 20,
+      "y": 1100,
+      "section_id": 4
+    },
+    {
+      "id": 28,
+      "kind": "Set camera",
+      "value": "0",
+      "x": 220,
+      "y": 1100,
+      "section_id": 4
     }
   ],
   "edges": [
@@ -235,6 +284,41 @@
     [
       24,
       25
+    ],
+    [
+      2,
+      26
+    ],
+    [
+      27,
+      28
     ]
+  ],
+  "entry": 1,
+  "stages": [
+    {
+      "id": 1,
+      "name": "Target: ps2"
+    },
+    {
+      "id": 2,
+      "name": "Disclaimer (planned)"
+    },
+    {
+      "id": 3,
+      "name": "Entry / menu (planned)"
+    },
+    {
+      "id": 4,
+      "name": "ps2_fixed_room"
+    },
+    {
+      "id": 5,
+      "name": "Outcome (planned)"
+    },
+    {
+      "id": 6,
+      "name": "Restart / exit (planned)"
+    }
   ]
 }

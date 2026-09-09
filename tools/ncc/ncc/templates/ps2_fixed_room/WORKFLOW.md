@@ -31,3 +31,7 @@ animation or collision-aware movement is claimed by this prototype.
 
 Build after changes and check the console. Keep graph files in their own target;
 PS2 actions and assets are not automatically converted for PS1.
+
+## Executable flow boxes
+
+Select Initialize in GAME FLOW: On start resets the room, then Go to Flow Box 4 enters Play on the next update. Select Play to edit its complete input, movement and camera graph beneath the map. On start selects camera 0 on entry. Other planned boxes remain empty until you author their events. ENABLE validates all boxes together.

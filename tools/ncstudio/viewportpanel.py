@@ -1,9 +1,10 @@
 """Editable top-down PS2 layout; not a console renderer."""
 import json
 import copy
+import math
 from pathlib import Path
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox, ttk
 from theme import BG, FG, CYAN, AMBER, Button
 from ncc.build import project_meta
 from ncc import roomlayout
@@ -19,6 +20,11 @@ class ViewportPanel(tk.Frame):
         Button(bar,'UNDO',self.undo,CYAN).pack(side='left')
         Button(bar,'FIT',self.fit,CYAN).pack(side='left')
         Button(bar,'POSITION',self.position,CYAN).pack(side='left')
+        self.object_choice=ttk.Combobox(bar,state='readonly',width=10,values=['player','key','door'])
+        self.object_choice.pack(side='left')
+        self.object_choice.bind('<<ComboboxSelected>>',lambda e:self.select_object())
+        self.snap=tk.BooleanVar(value=True)
+        tk.Checkbutton(bar,text='Snap 0.25',variable=self.snap,bg=BG,fg=FG,selectcolor=BG).pack(side='left')
         self.note=tk.Label(self,bg=BG,fg=FG,anchor='w');self.note.pack(fill='x')
         self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
         self.canvas.pack(fill='both',expand=True)
@@ -30,9 +36,12 @@ class ViewportPanel(tk.Frame):
         if self.project==project and not force:return
         if self.project and self.doc and not force:
             self.drafts[self.project]=(self.doc,self.original)
+        if force and self.doc and self.original is not None and json.loads(self.original)!=self.doc:
+            if not messagebox.askyesno('Reload layout','Discard unsaved layout edits and reload from disk?',parent=self):return
         if force:self.drafts.pop(project,None)
         self.project=project;self.doc=None;self.selected=None
         self.history=[];self.zoom=1.0
+        self.object_choice.set('')
         if project and project_meta(project).get('event_adapter')=='fixed_room_v1':
             try:
                 self.doc=roomlayout.load(project);p=Path(project)/'room-layout.json'
@@ -51,6 +60,10 @@ class ViewportPanel(tk.Frame):
         for x in range(-3,4):c.create_line(cx+x*scale,cy-2*scale,cx+x*scale,cy+2*scale,fill='#2c3d45')
         for z in range(-2,3):c.create_line(cx-3*scale,cy-z*scale,cx+3*scale,cy-z*scale,fill='#2c3d45')
         c.create_text(12,15,anchor='w',text='X →     Z ↑     Room limits: X ±3 / Z ±2',fill=FG)
+        for i,yaw in enumerate(self.doc['camera_yaw']):
+            dx,dz=math.sin(yaw),math.cos(yaw)
+            c.create_line(cx-dx*scale*2,cy+dz*scale*2,cx,cy,arrow='last',fill=['#80a6ff','#cc80ff','#80ffb0'][i],dash=(4,3))
+            c.create_text(cx-dx*scale*2,cy+dz*scale*2+12,text='Camera %d'%i,fill=FG)
         for name,(x,z) in self.doc['objects'].items():
             px,py=cx+x*scale,cy-z*scale
             c.create_rectangle(px-12,py-12,px+12,py+12,fill=AMBER if name==self.selected else CYAN,tags=name)
@@ -58,11 +71,14 @@ class ViewportPanel(tk.Frame):
     def pick(self,e):
         tags=self.canvas.gettags('current')
         self.selected=next((tag for tag in tags if self.doc and tag in self.doc['objects']),None);self.draw()
+        self.object_choice.set(self.selected or '')
         if self.selected:self.checkpoint()
     def drag(self,e):
         if not self.doc or not self.selected:return
         cx,cy,scale=self.mapping();maxx,maxz=(2,1.2) if self.selected=='door' else (3,2)
-        self.doc['objects'][self.selected]=[round(max(-maxx,min(maxx,(e.x-cx)/scale)),2),round(max(-maxz,min(maxz,(cy-e.y)/scale)),2)]
+        x,z=(e.x-cx)/scale,(cy-e.y)/scale
+        if self.snap.get():x,z=round(x*4)/4,round(z*4)/4
+        self.doc['objects'][self.selected]=[round(max(-maxx,min(maxx,x)),2),round(max(-maxz,min(maxz,z)),2)]
         self.draw();self.note.configure(text='Unsaved layout: SAVE LAYOUT before building or switching projects.')
     def save(self):
         if not self.doc:return True
@@ -125,3 +141,8 @@ class ViewportPanel(tk.Frame):
             except (OSError,ValueError) as e:
                 messagebox.showerror('Layout not saved',str(e),parent=self);return False
         return True
+
+    def select_object(self):
+        if self.doc:
+            self.selected=self.object_choice.get()
+            self.draw()

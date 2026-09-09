@@ -32,6 +32,9 @@ class FlowPanel(tk.Frame):
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=850)
         self.note.pack(fill='x')
         self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
+        horizontal=tk.Scrollbar(self,orient='horizontal',command=self.canvas.xview)
+        horizontal.pack(side='bottom',fill='x')
+        self.canvas.configure(xscrollcommand=horizontal.set)
         scroll=tk.Scrollbar(self,command=self.canvas.yview)
         scroll.pack(side='right',fill='y')
         self.canvas.configure(yscrollcommand=scroll.set)
@@ -42,16 +45,22 @@ class FlowPanel(tk.Frame):
         self.canvas.bind('<Double-Button-1>',lambda e:self.edit())
 
     def load(self,project):
-        if self.project==project:return
+        if self.project==project:
+            p=Path(project)/self.filename if project else None
+            current=p.read_text(encoding='utf-8') if p and p.exists() else None
+            if current==getattr(self,'disk_original',None):return
         self.history=[];self.focus_roots=None;self.section_id=None
         self.kit_choice.set('');self.kit_choice['values']=[]
         self.enabled=False
+        self.document={}
+        self.disk_original=None
         self.project=project; self.nodes=[];self.edges=[];self.selected=None;self.source=None;self.readonly=False
         if project:
             self.target=project_meta(project)['target']; p=Path(project)/self.filename
             try:
                 if p.exists():
-                    d=json.loads(p.read_text())
+                    self.disk_original=p.read_text(encoding='utf-8')
+                    d=json.loads(self.disk_original);self.document=d
                     if d.get('target')!=self.target:raise ValueError('Flow target mismatch; file left untouched.')
                     self.nodes=d['nodes'];self.edges=d['edges'];self.enabled=d.get('status')=='enabled'
                     ids={n['id'] for n in self.nodes}
@@ -71,10 +80,13 @@ class FlowPanel(tk.Frame):
                 kinds=['On start','On button']
             self.kind['values']=kinds;self.kind.current(0)
         self.note.configure(text='ENABLE validates this project adapter. Drag nodes; CONNECT then click source and destination. Set camera: 0..2; On zone: 0..1. Scroll for more nodes.')
+        if getattr(self,'document',{}).get('version')==2 and type(self) is FlowPanel:
+            self.readonly=True
+            self.note.configure(text='Box-owned events: edit by selecting a GAME FLOW box. This overview is read-only.')
         self.draw()
 
     def draw(self):
-        self.canvas.configure(scrollregion=(0,0,1500,max([n.get('y',0)+150 for n in self.nodes],default=700)))
+        self.canvas.configure(scrollregion=(0,0,max(1500,max([n.get('x',0)+200 for n in self.nodes],default=0)),max([n.get('y',0)+150 for n in self.nodes],default=700)))
         c=self.canvas;c.delete('all');byid={n['id']:n for n in self.nodes}
         visible=self.visible_ids()
         for a,b in self.edges:
@@ -141,7 +153,14 @@ class FlowPanel(tk.Frame):
     def save(self):
         if not self.project or self.readonly:return
         p=Path(self.project)/self.filename;tmp=p.with_suffix('.json.tmp')
-        tmp.write_text(json.dumps(dict(version=1,target=self.target,status='enabled' if getattr(self,'enabled',False) else 'draft',nodes=self.nodes,edges=self.edges),indent=2)+'\n');tmp.replace(p)
+        if (p.read_text(encoding='utf-8') if p.exists() else None)!=self.disk_original:
+            self.readonly=True
+            messagebox.showerror('Flow changed externally','Reopen this panel before editing. External changes were preserved.',parent=self)
+            return
+        doc=dict(self.document)
+        doc.update(version=doc.get('version',1),target=self.target,status='enabled' if getattr(self,'enabled',False) else 'draft',nodes=self.nodes,edges=self.edges)
+        tmp.write_text(json.dumps(doc,indent=2)+'\n',encoding='utf-8');tmp.replace(p)
+        self.disk_original=p.read_text(encoding='utf-8')
 
     def disable(self):
         self.enabled=False;self.save()
@@ -149,6 +168,7 @@ class FlowPanel(tk.Frame):
     def enable(self):
         if not self.project or self.readonly:return
         self.enabled=True;self.save()
+        if self.readonly:return
         try:
             script=Path(self.project)/'script.ncs'
             source=script.read_text() if script.exists() else ''
