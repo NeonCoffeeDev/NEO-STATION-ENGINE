@@ -17,6 +17,7 @@ class ViewportPanel(tk.Frame):
         self.game_mode=False
         self.output_mode=False
         self.texture_cache={}
+        self.active_camera=0
         self.interactive=False
         self.draw_job=None
         self.camera_drag=None
@@ -150,9 +151,10 @@ class ViewportPanel(tk.Frame):
             elif not self.output_mode:c.create_text(x+3,y+3,text=label,anchor='nw',fill=FG,tags=('obj',r['key']))
             if r['key']==self.selected and not self.interactive:self.objects.selection_set(i)
         if self.world.kind=='fixed_room_v1':
-            for i,yaw in enumerate(self.world.doc['camera_yaw']):
-                x=ox-math.sin(yaw)*scale*2;y=oy-math.cos(yaw)*scale*2
-                c.create_line(x,y,ox,oy,arrow='last',fill=AMBER,dash=(3,3));c.create_text(x,y,text='Camera '+str(i),fill=FG)
+            for i,camera in enumerate(self.world.doc['cameras']):
+                x=ox+camera['pos'][a]*scale;y=oy+camera['pos'][b]*scale
+                tx=ox+camera['target'][a]*scale;ty=oy+camera['target'][b]*scale
+                c.create_line(x,y,tx,ty,arrow='last',fill=AMBER,dash=(3,3));c.create_text(x,y,text=camera['name'],fill=FG)
         if not self.output_mode:c.create_text(10,10,anchor='nw',text=self.plane.get()+' authoring view | '+self.world.target.upper(),fill=FG)
 
     def request_draw(self):
@@ -165,13 +167,17 @@ class ViewportPanel(tk.Frame):
     def end_camera_drag(self,_event=None):
         self.camera_drag=None;self.interactive=False;self.draw()
     def select(self,event=None):
-        if self.objects.curselection():self.selected=self.rows[self.objects.curselection()[0]]['key'];self.draw()
+        if self.objects.curselection():
+            self.selected=self.rows[self.objects.curselection()[0]]['key']
+            if self.selected.startswith('camera:'):self.active_camera=int(self.selected.split(':')[1])
+            self.draw()
     def record(self):return next((r for r in self.records() if r['key']==self.selected),None)
     def checkpoint(self):self.history.append(copy.deepcopy((self.world.doc,self.world.triggers)));self.history=self.history[-40:]
     def pick(self,e):
         tags=self.canvas.gettags('current')
         if len(tags)>1 and tags[0]=='obj':
             self.selected=tags[1];r=self.record()
+            if self.selected.startswith('camera:'):self.active_camera=int(self.selected.split(':')[1])
             if r.get('readonly'):
                 self.note.configure(text='This is a GameObject-local component preview. Edit its local offset in the upcoming GameObject editor.')
                 self.draw();return
@@ -247,7 +253,7 @@ class ViewportPanel(tk.Frame):
         self.draw()
     def add_trigger(self):
         r=self.record()
-        if not r or r['key'].startswith('t:') or r['key']=='camera' or r.get('readonly'):self.note.configure(text='Select a world object instance for this trigger to track.');return
+        if not r or r['key'].startswith(('t:','camera')) or r.get('readonly'):self.note.configure(text='Select a world object instance for this trigger to track.');return
         if self.world.kind=='fixed_room_v1' and r['key']!='o:player':self.note.configure(text='Select player: fixed-room triggers track player position.');return
         if self.world.kind=='vn' and not r['key'].startswith('p:'):self.note.configure(text='Select a portrait slot: VN triggers use that slot anchor and scene, not a player collider.');return
         ts=self.world.triggers['triggers']
@@ -305,15 +311,15 @@ class ViewportPanel(tk.Frame):
         length=max(1e-9,math.sqrt(cls._dot(value,value)))
         return [v/length for v in value]
 
-    def camera_basis(self):
+    def camera_basis(self,use_game_camera=False):
         """Return position/target/FOV without coupling editor and game cameras."""
-        if self.game_mode:
+        if self.game_mode or use_game_camera:
             if self.world.kind=='lab3d_v1':
                 camera=self.world.doc['camera']
                 return list(camera['pos']),list(camera['target']),float(camera['fov'])
             if self.world.kind=='fixed_room_v1':
-                yaw=float(self.world.doc['camera_yaw'][0])
-                return [-math.sin(yaw)*10,5,-math.cos(yaw)*10],[0,0,0],55
+                camera=self.world.doc['cameras'][min(self.active_camera,len(self.world.doc['cameras'])-1)]
+                return list(camera['pos']),list(camera['target']),float(camera['fov'])
             if self.world.world3d and self.world.world3d.get('camera'):
                 camera=self.world.world3d['camera']
                 return list(camera['pos']),list(camera['target']),float(camera.get('fov',55))
@@ -389,11 +395,11 @@ class ViewportPanel(tk.Frame):
         drawn=[]
         for index,r in enumerate(self.rows):
             if r['key'].startswith('h:'):self.draw_shadow_effect(c,project,r.get('shadow',{}))
-            if self.output_mode and (r['key'].startswith('t:') or r.get('component') or r.get('editor_only') or r['key']=='camera'):continue
+            if self.output_mode and (r['key'].startswith(('t:','camera')) or r.get('component') or r.get('editor_only')):continue
             color=AMBER if r['key']==self.selected else ('#bd85ff' if r['key'].startswith('t:') else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
             points,edges=self.geometry(r);screen=[project(p) for p in points]
             material=r.get('material',{}).get('texture')
-            renderable=not r['key'].startswith('t:') and not r.get('component') and r['key']!='camera'
+            renderable=not r['key'].startswith(('t:','camera')) and not r.get('component')
             renderable=renderable and not r.get('editor_only')
             if renderable and material and len(screen)==8:self.draw_box_surfaces(c,points,screen,material,r['key'])
             if not self.output_mode or (renderable and not material):
@@ -406,7 +412,29 @@ class ViewportPanel(tk.Frame):
                 c.create_text(x+7,y+7,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
             if r['key']==self.selected and not self.interactive:self.objects.selection_set(index)
         mode='GAME VIEWPORT / MAIN CAMERA' if self.game_mode else 'SCENE / EDITOR CAMERA (right orbit / middle pan / wheel dolly)'
+        if not self.output_mode and self.selected and self.selected.startswith('camera'):self.draw_camera_inset(c)
         if not self.output_mode:c.create_text(10,10,anchor='nw',text=mode+' | '+self.world.target.upper(),fill=FG)
+
+    def draw_camera_inset(self,canvas):
+        """Low-cost live camera monitor inside SCENE for the selected camera."""
+        pos,target,fov=self.camera_basis(True);width,height=260,182
+        left=max(8,canvas.winfo_width()-width-14);top=14
+        forward=self._normal(self._sub(target,pos));right=self._normal(self._cross(forward,[0,1,0]));up=self._normal(self._cross(right,forward))
+        focal=(height*.5)/math.tan(math.radians(fov)*.5)
+        def project(point):
+            delta=self._sub(point,pos);depth=self._dot(delta,forward)
+            if depth<=.05:return None
+            return (left+width*.5+self._dot(delta,right)*focal/depth,top+height*.5-self._dot(delta,up)*focal/depth,depth)
+        canvas.create_rectangle(left,top,left+width,top+height,fill='#080d12',outline=AMBER,width=2)
+        old=self.interactive;self.interactive=True
+        try:
+            for record in self.rows:
+                if record['space']!='3d' or record['key'].startswith(('t:','camera')) or record.get('component') or record.get('editor_only'):continue
+                points,_=self.geometry(record);screen=[project(point) for point in points]
+                material=record.get('material',{}).get('texture')
+                if material and len(screen)==8:self.draw_box_surfaces(canvas,points,screen,material,'camera-preview')
+        finally:self.interactive=old
+        canvas.create_text(left+6,top+5,text='CAMERA PREVIEW',anchor='nw',fill=AMBER)
 
     def draw_box_surfaces(self,canvas,world_points,screen,material,key):
         """Draw a cube as filled, depth-sorted faces with sampled texture cells."""
@@ -522,7 +550,9 @@ class ViewportPanel(tk.Frame):
     def cameras(self):
         if not self.world:return
         if self.world.kind=='fixed_room_v1':
-            old=self.world.doc['camera_yaw'];caption='Three camera yaw angles, radians:'
+            index=self.active_camera
+            camera=self.world.doc['cameras'][index];old=camera['pos']+camera['target']+[camera['fov']]
+            caption='%s position X,Y,Z, target X,Y,Z, FOV:'%camera['name']
         elif self.world.kind=='ps1':
             old=self.world.scenes()[self.index()].get('camera',{}).get('rot',[0,0,0]);caption='Camera X,Y,Z rotation; 4096 = one turn:'
         elif self.world.kind=='lab3d_v1':
@@ -534,10 +564,10 @@ class ViewportPanel(tk.Frame):
         checkpointed=False
         try:
             vals=[float(v) if self.world.kind in ('fixed_room_v1','lab3d_v1') else int(v) for v in value.split(',')]
-            required=7 if self.world.kind=='lab3d_v1' else 3
+            required=7 if self.world.kind in ('lab3d_v1','fixed_room_v1') else 3
             if len(vals)!=required:raise ValueError('%d values required.'%required)
             self.checkpoint();checkpointed=True
-            if self.world.kind=='fixed_room_v1':self.world.doc['camera_yaw']=vals
+            if self.world.kind=='fixed_room_v1':self.world.doc['cameras'][self.active_camera].update(pos=vals[:3],target=vals[3:6],fov=vals[6])
             elif self.world.kind=='lab3d_v1':
                 self.world.doc['camera']={'pos':vals[:3],'target':vals[3:6],'fov':vals[6]}
             else:self.world.scenes()[self.index()].setdefault('camera',{})['rot']=vals

@@ -15,10 +15,10 @@
       0
     ]
   },
-  "camera_yaw": [
-    0.45,
-    -0.65,
-    0.0
+  "cameras": [
+    {"name":"Camera A","pos":[-4,4,-8],"target":[0,0,0],"fov":55},
+    {"name":"Camera B","pos":[5,3,-6],"target":[0,0,0],"fov":55},
+    {"name":"Camera C","pos":[0,6,7],"target":[0,0,0],"fov":50}
   ],
   "materials": {
     "player": {"texture": "textures/checker.png"},

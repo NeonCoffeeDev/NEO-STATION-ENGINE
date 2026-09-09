@@ -17,7 +17,9 @@ class World:
         self.original=self.path.read_text(encoding='utf-8')
         self.doc=json.loads(self.original)
         if name=='room-layout.json' and (self.doc.get('target')!=self.target or self.doc.get('version')!=1):raise ValueError('Layout target/version mismatch.')
-        if self.kind=='fixed_room_v1':self.doc.setdefault('materials',{})
+        if self.kind=='fixed_room_v1':
+            from .roomlayout import validate as validate_room
+            validate_room(self.doc);self.doc.setdefault('materials',{})
         if self.kind == 'lab3d_v1':
             # Version 1 stored only an object's position. Keep those files valid
             # while adding editor/runtime rotation, scale, and a game camera.
@@ -83,6 +85,10 @@ class World:
                     rows[-1]['rot'] = list(self.doc.get('rotations', {}).get(key, [0, 0, 0]))
                     rows[-1]['scale'] = list(scale)
                     rows[-1]['material'] = self.doc.get('materials', {}).get(key, {})
+            if self.kind=='fixed_room_v1':
+                for i,camera in enumerate(self.doc['cameras']):
+                    add('camera:'+str(i),camera.get('name','Camera '+str(i+1)),camera['pos'],[.35,.35,.35],'3d')
+                    rows[-1].update(target=list(camera['target']),fov=camera['fov'])
             if self.kind == 'lab3d_v1':
                 camera = self.doc['camera']
                 add('camera', 'Game Camera', camera['pos'], [.35, .35, .35], '3d')
@@ -126,6 +132,8 @@ class World:
             self.world3d['lights'][key[2:]]['position']=list(pos);return
         if key.startswith('h:') and self.world3d:
             self.world3d['shadows'][key[2:]]['position']=list(pos);return
+        if key.startswith('camera:') and self.kind=='fixed_room_v1':
+            self.doc['cameras'][int(key.split(':')[1])]['pos']=list(pos);return
         if key.startswith('t:'):
             t=next(t for t in self.triggers['triggers'] if t['id']==int(key[2:]));size=[b-a for a,b in zip(t['min'],t['max'])]
             pos=list(map(int,pos)) if self.target=='ps1' else pos

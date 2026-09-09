@@ -8,12 +8,14 @@
 #include <dma.h>
 #include <draw.h>
 #include <draw2d.h>
+#include <draw3d.h>
 #include <graph.h>
 #include <gs_psm.h>
 #include <libpad.h>
 #include <packet.h>
 #include <sifrpc.h>
 #include <loadfile.h>
+#include "nc_materials.h"
 
 /* 640x448 is the safe NTSC full-screen mode. The PS1 runtime's 320x240 is a
  * quarter of this, which is the most visible difference between the two
@@ -48,6 +50,7 @@ static const unsigned char palette[][3] = {
     { 0xff, 0x6b, 0x5e },
 };
 #define PALETTE_COUNT (int)(sizeof(palette) / sizeof(palette[0]))
+static texbuffer_t material_tex[NC_MATERIAL_COUNT > 0 ? NC_MATERIAL_COUNT : 1];
 
 
 static void load_pad_modules(void)
@@ -113,7 +116,7 @@ static void nc_move_to(float x, float z, int frames) {
 }
 static void nc_action(int action, int value) {
     if(action==3) {move_duration=0;nc_move_arrived=0;}
-    if(action==0) camera_id=value;
+    if(action==0) camera_id=value<0?0:(value>=ROOM_CAMERA_COUNT?ROOM_CAMERA_COUNT-1:value);
     if(action==2) {nc_move_arrived=0;move_duration=0;player_x=ROOM_PLAYER_X;player_z=ROOM_PLAYER_Z;camera_id=0;has_key=door_open=won=0;door_angle=0;}
     if(action==1) {
         if(!has_key && fabsf(player_x-ROOM_KEY_X)<0.8f && fabsf(player_z-ROOM_KEY_Z)<0.8f) has_key=1;
@@ -122,12 +125,43 @@ static void nc_action(int action, int value) {
 }
 #include "nc_events.h"
 static int project_point(float x,float y,float z,float *sx,float *sy) {
-    static const float yaw[3]=ROOM_CAMERA_YAW;
-    float a=yaw[camera_id],rx=x*cosf(a)+z*sinf(a),rz=-x*sinf(a)+z*cosf(a);
-    float pitch=0.5f,ry=y*cosf(pitch)-rz*sinf(pitch);
-    float depth=y*sinf(pitch)+rz*cosf(pitch)+10;
+    const float *eye=room_camera_pos[camera_id],*target=room_camera_target[camera_id];
+    float fx=target[0]-eye[0],fy=target[1]-eye[1],fz=target[2]-eye[2];
+    float fl=sqrtf(fx*fx+fy*fy+fz*fz),rxv=-fz,rzv=fx,rl;
+    float ux,uy,uz,dx=x-eye[0],dy=y-eye[1],dz=z-eye[2],rx,ry,depth,focal;
+    if(fl<0.001f)return 0;fx/=fl;fy/=fl;fz/=fl;
+    rl=sqrtf(rxv*rxv+rzv*rzv);if(rl<0.001f){rxv=1;rzv=0;rl=1;}rxv/=rl;rzv/=rl;
+    ux=-fy*rzv;uy=fz*rxv-fx*rzv;uz=fy*rxv;
+    rx=dx*rxv+dz*rzv;ry=dx*ux+dy*uy+dz*uz;depth=dx*fx+dy*fy+dz*fz;
     if(depth<0.3f)return 0;
-    *sx=rx*430/depth;*sy=-ry*430/depth;return 1;
+    focal=224.0f/tanf(room_camera_fov[camera_id]*0.00872664626f);
+    *sx=rx*focal/depth;*sy=-ry*focal/depth;return 1;
+}
+
+static void load_materials(void)
+{
+    int i;
+    packet_t *upload = packet_init(64 + NC_MATERIAL_COUNT * 8, PACKET_NORMAL);
+    qword_t *q;
+    if (!upload) return;
+    q = upload->data;
+    for (i = 0; i < NC_MATERIAL_COUNT; i++) {
+        material_tex[i].width = nc_materials[i].width;
+        material_tex[i].psm = GS_PSM_32;
+        material_tex[i].address = graph_vram_allocate(nc_materials[i].width,
+            nc_materials[i].height, GS_PSM_32, GRAPH_ALIGN_BLOCK);
+        material_tex[i].info.width = draw_log2(nc_materials[i].width);
+        material_tex[i].info.height = draw_log2(nc_materials[i].height);
+        material_tex[i].info.components = TEXTURE_COMPONENTS_RGBA;
+        material_tex[i].info.function = TEXTURE_FUNCTION_MODULATE;
+        q = draw_texture_transfer(q, nc_materials[i].pixels,
+            nc_materials[i].width, nc_materials[i].height, GS_PSM_32,
+            material_tex[i].address, material_tex[i].width);
+    }
+    q = draw_texture_flush(q);
+    dma_channel_send_chain(DMA_CHANNEL_GIF, upload->data, q-upload->data, 0, 0);
+    dma_wait_fast();
+    packet_free(upload);
 }
 static qword_t *wire(qword_t *q,float x,float y,float z,float w,float h,float d,float angle,int color) {
     static const int edges[12][2]={{0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7}};
@@ -145,13 +179,48 @@ static qword_t *wire(qword_t *q,float x,float y,float z,float w,float h,float d,
     }
     return q;
 }
+static qword_t *textured_box(qword_t *q,float x,float y,float z,float w,float h,float d,float angle,int material) {
+    static const int faces[6][4]={{0,1,3,2},{4,5,7,6},{0,1,5,4},{2,3,7,6},{0,2,6,4},{1,3,7,5}};
+    static const int tri[6]={0,1,2,0,2,3};
+    float sx[8],sy[8];int good[8],i,f;
+    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};
+    if(material<0||material>=NC_MATERIAL_COUNT)return q;
+    for(i=0;i<8;i++) {
+        float vx=(i&1)?w:-w,vz=(i&4)?d:-d;
+        good[i]=project_point(x+vx*cosf(angle)+vz*sinf(angle),y+((i&2)?h:-h),z-vx*sinf(angle)+vz*cosf(angle),&sx[i],&sy[i]);
+    }
+    lod.calculation=LOD_USE_K;lod.max_level=0;lod.mag_filter=LOD_MAG_NEAREST;lod.min_filter=LOD_MIN_NEAREST;
+    clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
+    q=draw_texture_sampling(q,0,&lod);q=draw_texturebuffer(q,0,&material_tex[material],&clut);
+    prim.type=PRIM_TRIANGLE;prim.shading=PRIM_SHADE_FLAT;prim.mapping=DRAW_ENABLE;
+    prim.fogging=DRAW_DISABLE;prim.blending=DRAW_DISABLE;prim.antialiasing=DRAW_DISABLE;
+    prim.mapping_type=PRIM_MAP_UV;prim.colorfix=PRIM_FIXED;
+    color.a=0x80;color.q=1.0f;
+    for(f=0;f<6;f++) {
+        u64 *dw;
+        if(!good[faces[f][0]]||!good[faces[f][1]]||!good[faces[f][2]]||!good[faces[f][3]])continue;
+        color.r=color.g=color.b=(f==3?0x80:(f==5?0x68:0x50));
+        dw=(u64*)draw_prim_start(q,0,&prim,&color);
+        for(i=0;i<6;i++) {
+            int corner=tri[i],vertex=faces[f][corner];
+            int u=(corner==1||corner==2)?nc_materials[material].used_width-1:0;
+            int v=(corner>=2)?nc_materials[material].used_height-1:0;
+            xyz_t xyz;texel_t uv;
+            uv.uv=(u64)ftoi4(u)|((u64)ftoi4(v)<<32);
+            xyz.x=(u16)ftoi4(2048.0f+sx[vertex]);xyz.y=(u16)ftoi4(2048.0f+sy[vertex]);xyz.z=32;
+            *dw++=uv.uv;*dw++=xyz.xyz;
+        }
+        q=draw_prim_end((qword_t*)dw,2,DRAW_UV_REGLIST);
+    }
+    return q;
+}
 int main(void) {
     framebuffer_t frame;zbuffer_t z;packet_t *packet;qword_t *q;
     struct padButtonStatus pad;unsigned int buttons=0,last=0,pressed;int tick=0,previous_zone=-1;
     dma_channel_initialize(DMA_CHANNEL_GIF,NULL,0);dma_channel_fast_waits(DMA_CHANNEL_GIF);
     load_pad_modules();padInit(0);padPortOpen(0,0,pad_buffer);
     packet=packet_init(2048,PACKET_NORMAL);if(!packet)return 1;
-    init_screen(&frame,&z,packet);nc_events(1,0,-1);
+    init_screen(&frame,&z,packet);load_materials();nc_events(1,0,-1);
     for(;;) {
         int state=padGetState(0,0),zone,moving=0;
         buttons=0;
@@ -181,10 +250,12 @@ int main(void) {
         graph_wait_vsync();
         q=packet->data;q=draw_disable_tests(q,0,&z);
         q=draw_clear(q,0,OFFSET_X,OFFSET_Y,frame.width,frame.height,won?20:CLEAR_R,won?60:CLEAR_G,CLEAR_B);
-        q=wire(q,0,-0.5f,0,3.2f,0.02f,2.2f,0,0);
-        q=wire(q,player_x,moving?0.05f*sinf(tick*0.3f):0,player_z,0.22f,0.5f,0.22f,0,2);
-        if(!has_key)q=wire(q,ROOM_KEY_X,0,ROOM_KEY_Z,0.15f,0.15f,0.15f,tick*0.03f,1);
-        q=wire(q,ROOM_DOOR_X,0.3f,ROOM_DOOR_Z,0.08f,0.8f,0.65f,door_angle,has_key?2:3);
+        q=textured_box(q,0,-0.5f,0,3.2f,0.02f,2.2f,0,NC_MATERIAL_w_floor);
+        q=textured_box(q,0,1.5f,2.2f,3.2f,2.0f,0.04f,0,NC_MATERIAL_w_back_wall);
+        q=textured_box(q,-3.2f,1.0f,0,0.04f,1.5f,2.2f,0,NC_MATERIAL_w_side_wall);
+        q=textured_box(q,player_x,moving?0.05f*sinf(tick*0.3f):0,player_z,0.22f,0.5f,0.22f,0,NC_MATERIAL_o_player);
+        if(!has_key)q=textured_box(q,ROOM_KEY_X,0,ROOM_KEY_Z,0.15f,0.15f,0.15f,tick*0.03f,NC_MATERIAL_o_key);
+        q=textured_box(q,ROOM_DOOR_X,0.3f,ROOM_DOOR_Z,0.08f,0.8f,0.65f,door_angle,NC_MATERIAL_o_door);
         q=draw_finish(q);dma_wait_fast();dma_channel_send_normal(DMA_CHANNEL_GIF,packet->data,q-packet->data,0,0);draw_wait_finish();tick++;
     }
 }
