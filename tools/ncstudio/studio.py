@@ -166,8 +166,11 @@ class Studio:
         right.pack(side="right", fill="y", padx=(8, 0))
         right.pack_propagate(False)
 
-        system = tk.Frame(right, bg=BG)
-        inspector_holder = tk.Frame(right, bg=BG)
+        self.right_tabs = TabStack(right, {"system":"SYSTEM",
+                                           "inspector":"COMPONENTS / INSPECTOR"})
+        self.right_tabs.pack(fill="both", expand=True)
+        system = self.right_tabs.tabs['system'][1]
+        inspector_holder = self.right_tabs.tabs['inspector'][1]
         self._build_projects(system)
         self._build_target(system)
         self._build_actions(system)
@@ -181,9 +184,6 @@ class Studio:
         self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector)
         self.inspector.pack(fill="both", expand=True)
         self.viewport_panel.on_selection = self.on_viewport_selection
-        self.right_tabs = TabStack(right, {"system":("SYSTEM",system),
-                                           "inspector":("COMPONENTS / INSPECTOR",inspector_holder)})
-        self.right_tabs.pack(fill="both", expand=True)
         self._build_statusbar()
         self._bind_keys()
 

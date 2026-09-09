@@ -10,24 +10,24 @@ SYSTEM_TYPES=('Camera','Movement','Interaction','Inventory','Dialogue','Audio','
 
 class TabStack(tk.Frame):
     def __init__(self,parent,tabs):
-        super().__init__(parent,bg=BG);self.tabs=tabs;self.buttons={};self.active=None
+        super().__init__(parent,bg=BG);self.buttons={};self.active=None;self.tabs={}
         bar=tk.Frame(self,bg=BG);bar.pack(fill='x')
-        for key,(title,frame) in tabs.items():
+        for key,title in tabs.items():
+            frame=tk.Frame(self,bg=BG);self.tabs[key]=(title,frame)
             label=tk.Label(bar,text='  '+title+'  ',bg=PANEL,fg=DIM,font=UI_BOLD,pady=4,cursor='hand2')
             label.pack(side='left',padx=(0,2));label.bind('<Button-1>',lambda _e,k=key:self.show(k));self.buttons[key]=label
-            frame.pack_forget()
         self.show(next(iter(tabs)))
     def show(self,key):
         self.active=key
         for name,(_title,frame) in self.tabs.items():
-            frame.pack(in_=self,fill='both',expand=True) if name==key else frame.pack_forget()
+            frame.pack(fill='both',expand=True) if name==key else frame.pack_forget()
             self.buttons[name].configure(bg=PANEL_HI if name==key else PANEL,fg=AMBER if name==key else DIM)
 
 class AuthorSidebar(tk.Frame):
     def __init__(self,parent,on_flow,on_hierarchy):
         super().__init__(parent,bg=BG);self.project=None;self.on_flow=on_flow;self.on_hierarchy=on_hierarchy
-        self.flow=tk.Frame(self,bg=BG);self.systems=tk.Frame(self,bg=BG);self.hierarchy=tk.Frame(self,bg=BG)
-        self.stack=TabStack(self,{'flow':('GAME FLOW',self.flow),'systems':('GAME SYSTEMS',self.systems),'hierarchy':('HIERARCHY',self.hierarchy)});self.stack.pack(fill='both',expand=True)
+        self.stack=TabStack(self,{'flow':'GAME FLOW','systems':'GAME SYSTEMS','hierarchy':'HIERARCHY'});self.stack.pack(fill='both',expand=True)
+        self.flow=self.stack.tabs['flow'][1];self.systems=self.stack.tabs['systems'][1];self.hierarchy=self.stack.tabs['hierarchy'][1]
         self.flow_list=self._list(self.flow);self.flow_list.bind('<Double-Button-1>',self.open_flow)
         tk.Label(self.flow,text='Double-click a state to open its executable events.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=5)
         row=tk.Frame(self.systems,bg=BG);row.pack(fill='x',padx=5,pady=5)
