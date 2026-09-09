@@ -17,6 +17,7 @@ class World:
         self.original=self.path.read_text(encoding='utf-8')
         self.doc=json.loads(self.original)
         if name=='room-layout.json' and (self.doc.get('target')!=self.target or self.doc.get('version')!=1):raise ValueError('Layout target/version mismatch.')
+        if self.kind=='fixed_room_v1':self.doc.setdefault('materials',{})
         if self.kind == 'lab3d_v1':
             # Version 1 stored only an object's position. Keep those files valid
             # while adding editor/runtime rotation, scale, and a game camera.
@@ -42,6 +43,10 @@ class World:
         self.screens=json.loads(self.screen_original) if self.screen_original else {'version':1,'target':self.target,'screens':{}}
         if self.screens.get('target')!=self.target:raise ValueError('Screen target does not match project.')
         self.active_screen=None
+        self.world3d_path=self.root/'world3d.json'
+        self.world3d_original=self.world3d_path.read_text(encoding='utf-8') if self.world3d_path.exists() else None
+        self.world3d=json.loads(self.world3d_original) if self.world3d_original else None
+        if self.world3d and self.world3d.get('target')!=self.target:raise ValueError('3D world target does not match project.')
 
     def scenes(self):
         if self.kind=='ps1':return self.doc.get('scenes',[self.doc])
@@ -96,6 +101,12 @@ class World:
                     add('a:'+str(point['id']), point['name'], pos, [.12,.12,.12], '3d')
                     rows[-1]['readonly'] = True
                     rows[-1]['component'] = 'attachment'
+        if self.world3d:
+            for name,obj in self.world3d.get('objects',{}).items():
+                scale=obj.get('scale',[1,1,1]);add('w:'+name,name,obj.get('position',[0,0,0]),[2*v for v in scale],'3d')
+                rows[-1].update(rot=list(obj.get('rotation',[0,0,0])),scale=list(scale),material={'texture':obj.get('material','')} if obj.get('material') else {})
+            if self.kind=='vn' and self.world3d.get('camera'):
+                camera=self.world3d['camera'];add('camera','Main Camera',camera['pos'],[.35,.35,.35],'3d');rows[-1]['target']=camera['target']
         for t in self.triggers['triggers']:
             if t['room']==room:add('t:'+str(t['id']),t['name'],t['min'],[b-a for a,b in zip(t['min'],t['max'])],t['space'])
         if self.kind=='vn':rows.sort(key=lambda r: 3 if r['key'].startswith('t:') else 2 if r['key']=='dialogue' else 0 if r['key']=='background' else 1)
@@ -105,6 +116,8 @@ class World:
     def move(self,room,key,pos):
         if key.startswith('u:') and self.active_screen:
             self.screens['screens'][self.active_screen]['objects'][int(key[2:])]['rect'][:2]=list(map(int,pos));return
+        if key.startswith('w:') and self.world3d:
+            self.world3d['objects'][key[2:]]['position']=list(pos);return
         if key.startswith('t:'):
             t=next(t for t in self.triggers['triggers'] if t['id']==int(key[2:]));size=[b-a for a,b in zip(t['min'],t['max'])]
             pos=list(map(int,pos)) if self.target=='ps1' else pos
@@ -129,6 +142,8 @@ class World:
 
     def set_transform(self, key, rotation, scale):
         """Update an editable PS2 3D object's local transform."""
+        if key.startswith('w:') and self.world3d:
+            obj=self.world3d['objects'][key[2:]];obj['rotation']=list(rotation);obj['scale']=list(scale);return
         if self.kind != 'lab3d_v1' or not key.startswith('o:'):
             raise ValueError('Rotation and scale are available for PS2 3D objects.')
         name = key[2:]
@@ -136,6 +151,10 @@ class World:
         self.doc['scales'][name] = list(scale)
 
     def set_material(self, key, texture):
+        if key.startswith('w:') and self.world3d:
+            self.world3d['objects'][key[2:]]['material']=texture;return
+        if self.kind=='fixed_room_v1' and key.startswith('o:'):
+            self.doc.setdefault('materials',{})[key[2:]]={'texture':texture};return
         if self.kind != 'lab3d_v1' or not key.startswith('o:'):
             raise ValueError('Materials are currently editable on PS2 3D objects.')
         self.doc.setdefault('materials', {})[key[2:]] = {'texture': texture}
@@ -151,12 +170,15 @@ class World:
         for room in range(len(self.scenes())):
             for r in self.records(room):
                 if any(type(v) not in (int,float) or not math.isfinite(v) or abs(v)>32767 for v in r['pos']+r['size']):raise ValueError('Invalid coordinates: '+r['name'])
-                if self.kind=='vn' and not r['key'].startswith('t:'):
+                if self.kind=='vn' and r['space']=='2d' and not r['key'].startswith('t:'):
                     x,y=r['pos'];w,h=r['size']
                     if x<0 or y<0 or x+w>640 or y+h>448:raise ValueError('VN layouts must fit 640x448.')
         if self.kind=='fixed_room_v1':
             from .roomlayout import validate
             validate(self.doc)
+            for material in self.doc.get('materials',{}).values():
+                texture=material.get('texture','')
+                if not texture or Path(texture).is_absolute() or Path(texture).suffix.lower()!='.png' or not (self.root/texture).is_file():raise ValueError('Fixed-camera material must reference a project-local PNG.')
         if self.kind=='pad2d_v1':
             if set(self.doc['objects'])!={'box'} or len(self.doc['objects']['box'])!=2:raise ValueError('Pad demo needs one 2D box.')
             x,y=self.doc['objects']['box']
@@ -201,11 +223,21 @@ class World:
                 if not texture or Path(texture).is_absolute() or not (self.root/texture).is_file():
                     raise ValueError('Material texture must be a project-relative PNG.')
                 if Path(texture).suffix.lower()!='.png':raise ValueError('PS2 material textures must be PNG files.')
+        if self.world3d:
+            objects=self.world3d.get('objects',{})
+            if len(objects)>64:raise ValueError('PS2 shared 3D world supports at most 64 objects.')
+            for name,obj in objects.items():
+                for field,default in (('position',[0,0,0]),('rotation',[0,0,0]),('scale',[1,1,1])):
+                    values=obj.get(field,default)
+                    if len(values)!=3 or any(type(v) not in (int,float) or not math.isfinite(v) for v in values):raise ValueError('Invalid 3D %s for %s.'%(field,name))
+                texture=obj.get('material','')
+                if texture and (Path(texture).is_absolute() or Path(texture).suffix.lower()!='.png' or not (self.root/texture).is_file()):raise ValueError('3D material must reference a project-local PNG.')
         validate_triggers(self)
 
     def save(self):
         self.validate()
         changes=[(self.path,self.original,self.doc),(self.trigger_path,self.trigger_original,self.triggers),(self.screen_path,self.screen_original,self.screens)]
+        if self.world3d is not None:changes.append((self.world3d_path,self.world3d_original,self.world3d))
         # Check every source before writing either file.
         for path,original,doc in changes:
             if (path.read_text(encoding='utf-8') if path.exists() else None)!=original:raise ValueError('External changes to '+path.name+'; reload before saving.')
@@ -216,7 +248,8 @@ class World:
             text=json.dumps(doc,indent=2)+'\n';temp=path.with_suffix('.json.tmp');temp.write_text(text,encoding='utf-8');temp.replace(path)
             if path==self.path:self.original=text
             elif path==self.trigger_path:self.trigger_original=text
-            else:self.screen_original=text
+            elif path==self.screen_path:self.screen_original=text
+            else:self.world3d_original=text
 
 
 def validate_triggers(world):

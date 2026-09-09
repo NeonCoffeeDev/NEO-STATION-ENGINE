@@ -19,5 +19,10 @@
     0.45,
     -0.65,
     0.0
-  ]
+  ],
+  "materials": {
+    "player": {"texture": "textures/checker.png"},
+    "key": {"texture": "textures/checker.png"},
+    "door": {"texture": "textures/checker.png"}
+  }
 }

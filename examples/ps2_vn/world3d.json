@@ -1,0 +1,1 @@
+{"version":1,"target":"ps2","camera":{"pos":[0,2.8,-7],"target":[0,0.5,0],"fov":50},"objects":{"Stage Floor":{"position":[0,-1,0],"rotation":[0,0,0],"scale":[4,0.08,3],"material":"godot/assets/cafe.png"},"Backdrop":{"position":[0,1.2,2.8],"rotation":[0,0,0],"scale":[4,2.2,0.08],"material":"godot/assets/cafe.png"}}}

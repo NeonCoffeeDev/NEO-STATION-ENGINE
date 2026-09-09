@@ -44,7 +44,7 @@ class ViewportPanel(tk.Frame):
     def load(self,project,force=False):
         if project==self.project and not force:
             if self.world and not self.dirty():
-                if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original or (self.world.screen_path.read_text(encoding='utf-8') if self.world.screen_path.exists() else None)!=self.world.screen_original:force=True
+                if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original or (self.world.screen_path.read_text(encoding='utf-8') if self.world.screen_path.exists() else None)!=self.world.screen_original or (self.world.world3d_path.read_text(encoding='utf-8') if self.world.world3d_path.exists() else None)!=self.world.world3d_original:force=True
             if not force:return
         if self.project and self.world:self.drafts[self.project]=self.world
         self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[];self.stage.set('');self.stage['values']=[];self.stages=[]
@@ -60,16 +60,16 @@ class ViewportPanel(tk.Frame):
                     self.stage['values']=['%s: %s'%(n.get('kind','State'),n.get('value','')) for n in self.stages]
                     if self.stages:self.stage.current(0)
                 records=self.world.records(0)
-                is_2d=any(r['space']=='2d' for r in records)
-                self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','XY','XZ','YZ']
-                self.plane.set('2D' if is_2d else 'PERSPECTIVE')
+                has_2d=any(r['space']=='2d' for r in records);has_3d=any(r['space']=='3d' for r in records)
+                self.plane['values']=(['2D'] if has_2d else [])+(['PERSPECTIVE','XY','XZ','YZ'] if has_3d else [])
+                self.plane.set('PERSPECTIVE' if has_3d else '2D')
             except (OSError,ValueError,KeyError,TypeError) as exc:self.note.configure(text=str(exc))
         self.fit()
         if self.world:self.note.configure(text='SCENE editor: place and edit world objects with the free editor camera. The GAME tab renders the placed Main Camera. Select an object, then ADD TRIGGER. SAVE/BUILD applies changes.')
 
     def dirty(self):
         w=self.world
-        return w and (json.loads(w.original)!=w.doc or (json.loads(w.trigger_original) if w.trigger_original else dict(version=1,target=w.target,triggers=[]))!=w.triggers or (json.loads(w.screen_original) if w.screen_original else dict(version=1,target=w.target,screens={}))!=w.screens)
+        return w and (json.loads(w.original)!=w.doc or (json.loads(w.trigger_original) if w.trigger_original else dict(version=1,target=w.target,triggers=[]))!=w.triggers or (json.loads(w.screen_original) if w.screen_original else dict(version=1,target=w.target,screens={}))!=w.screens or (json.loads(w.world3d_original) if w.world3d_original else None)!=w.world3d)
     def reload(self):
         if self.dirty() and not messagebox.askyesno('Reload','Discard unsaved viewport changes?',parent=self):return
         self.load(self.project,True)
@@ -165,14 +165,14 @@ class ViewportPanel(tk.Frame):
         if not self.dragging:return
         x,y,start=self.dragging
         if self.is_perspective():
-            if start.get('readonly') or not start['key'].startswith('o:'):return
+            if start.get('readonly') or not start['key'].startswith(('o:','w:')):return
             axis={'X':0,'Y':1,'Z':2}[self.axis.get()]
             pixels=(e.x-x)-(e.y-y)
             if self.tool.get()=='MOVE':
                 pos=list(start['pos']);step=.25 if self.snap.get() else .02
                 pos[axis]+=round(pixels/12)*step if self.snap.get() else pixels*step
                 self.world.move(self.index(),self.selected,pos)
-            elif self.world.kind=='lab3d_v1':
+            elif self.world.kind=='lab3d_v1' or start['key'].startswith('w:'):
                 rotation=list(start.get('rot',[0,0,0]));scale3=list(start.get('scale',[1,1,1]))
                 if self.tool.get()=='ROTATE':rotation[axis]+=round(pixels/3)*5 if self.snap.get() else pixels*.5
                 else:scale3[axis]=max(.05,scale3[axis]+(round(pixels/8)*.1 if self.snap.get() else pixels*.01))
@@ -268,7 +268,7 @@ class ViewportPanel(tk.Frame):
         if self.world:self.drafts[self.project]=self.world
         for world in self.drafts.values():
             try:
-                dirty=json.loads(world.original)!=world.doc or (json.loads(world.trigger_original) if world.trigger_original else dict(version=1,target=world.target,triggers=[]))!=world.triggers or (json.loads(world.screen_original) if world.screen_original else dict(version=1,target=world.target,screens={}))!=world.screens
+                dirty=json.loads(world.original)!=world.doc or (json.loads(world.trigger_original) if world.trigger_original else dict(version=1,target=world.target,triggers=[]))!=world.triggers or (json.loads(world.screen_original) if world.screen_original else dict(version=1,target=world.target,screens={}))!=world.screens or (json.loads(world.world3d_original) if world.world3d_original else None)!=world.world3d
                 if dirty:world.save()
             except (OSError,ValueError,KeyError,TypeError) as exc:messagebox.showerror('Viewport save',str(exc),parent=self);return False
         return True
@@ -299,6 +299,9 @@ class ViewportPanel(tk.Frame):
             if self.world.kind=='fixed_room_v1':
                 yaw=float(self.world.doc['camera_yaw'][0])
                 return [-math.sin(yaw)*10,5,-math.cos(yaw)*10],[0,0,0],55
+            if self.world.world3d and self.world.world3d.get('camera'):
+                camera=self.world.world3d['camera']
+                return list(camera['pos']),list(camera['target']),float(camera.get('fov',55))
             if self.world.kind=='ps1':
                 camera=self.world.scenes()[self.index()].get('camera',{})
                 pos=list(camera.get('pos',[0,0,0]));rot=camera.get('rot',[0,0,0])
@@ -342,7 +345,7 @@ class ViewportPanel(tk.Frame):
             for face in mesh.get('quads',[]):
                 for a,b in zip(face,face[1:]+face[:1]):edges.add(tuple(sorted((a,b))))
             return points,sorted(edges)
-        if self.world.kind=='lab3d_v1' and key.startswith('o:'):
+        if (self.world.kind=='lab3d_v1' and key.startswith('o:')) or key.startswith('w:'):
             points,edges=self.box_geometry([-1,-1,-1],[1,1,1])
             return [self.transform_point(v,record['pos'],record.get('rot',[0,0,0]),record.get('scale',[1,1,1])) for v in points],edges
         half=[max(.05,v*.5) for v in record['size']]
@@ -517,7 +520,7 @@ class ViewportPanel(tk.Frame):
             obj=self.world.scenes()[self.index()]['sprites'][int(key[2:])];field='size';old=[obj['w'],obj['h']];caption='Width, height in pixels:'
         elif self.world.kind=='vn':
             self.note.configure(text='Use ROOM for portrait size, image replacement and layers. VIEWPORT positions the same source layout.');return
-        elif self.world.kind=='lab3d_v1' and key.startswith('o:'):
+        elif (self.world.kind=='lab3d_v1' and key.startswith('o:')) or key.startswith('w:'):
             old=r.get('rot',[0,0,0])+r.get('scale',[1,1,1]);field='transform'
             caption='Rotation degrees X,Y,Z, then scale X,Y,Z:'
         else:self.note.configure(text='This adapter has fixed object geometry.');return
@@ -536,7 +539,7 @@ class ViewportPanel(tk.Frame):
 
     def material(self):
         r=self.record()
-        if not r or self.world.kind!='lab3d_v1' or not r['key'].startswith('o:'):
+        if not r or not ((self.world.kind in ('lab3d_v1','fixed_room_v1') and r['key'].startswith('o:')) or r['key'].startswith('w:')):
             self.note.configure(text='Select a PS2 3D object to assign a material texture.');return
         source=filedialog.askopenfilename(parent=self,title='Choose PS2 material texture',filetypes=[('PNG texture','*.png')])
         if not source:return
@@ -568,7 +571,8 @@ class ViewportPanel(tk.Frame):
         try:
             self.canvas=canvas;self.objects=object_sink
             records=self.records()
-            is_2d=any(r['space']=='2d' for r in records)
+            has_3d=any(r['space']=='3d' for r in records)
+            is_2d=bool(self.world.active_screen) or not has_3d or self.plane.get()=='2D'
             self.game_mode=not is_2d;self.output_mode=True
             self.plane.set('2D' if is_2d else 'PERSPECTIVE')
             if is_2d:
