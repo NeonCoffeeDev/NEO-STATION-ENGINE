@@ -2,17 +2,169 @@
   "version": 1,
   "target": "ps2",
   "screens": {
-    "splash": {"objects": [
-      {"name": "Splash Background", "type": "panel", "rect": [0, 0, 640, 448], "text": ""},
-      {"name": "Neon Coffee Logo", "type": "text", "rect": [170, 130, 300, 80], "text": "NEON COFFEE"},
-      {"name": "Disclaimer", "type": "text", "rect": [90, 360, 460, 32], "text": "UNOFFICIAL HOMEBREW SOFTWARE"}
-    ]},
-    "main_menu": {"objects": [
-      {"name": "Menu Background", "type": "panel", "rect": [0, 0, 640, 448], "text": ""},
-      {"name": "Game Title", "type": "text", "rect": [150, 72, 340, 56], "text": "NEON COFFEE"},
-      {"name": "New Game", "type": "button", "rect": [220, 210, 200, 36], "text": "NEW GAME"},
-      {"name": "Continue", "type": "button", "rect": [220, 258, 200, 36], "text": "CONTINUE"},
-      {"name": "Options", "type": "button", "rect": [220, 306, 200, 36], "text": "OPTIONS"}
-    ]}
+    "splash": {
+      "objects": [
+        {
+          "name": "Splash Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "text": "",
+          "id": "splash_splash_background",
+          "layer": 0,
+          "visible": true,
+          "components": [
+            "Transform",
+            "Panel2D"
+          ]
+        },
+        {
+          "name": "Neon Coffee Logo",
+          "type": "sprite2d",
+          "rect": [
+            165,
+            96,
+            310,
+            255
+          ],
+          "role": "brand_logo",
+          "texture": "textures/ui/neon-coffee-logo.png",
+          "layer": 10,
+          "details": {
+            "filter": "nearest",
+            "blend": "cutout"
+          },
+          "id": "splash_neon_coffee_logo",
+          "visible": true,
+          "components": [
+            "Transform",
+            "Sprite2D"
+          ]
+        },
+        {
+          "name": "Disclaimer",
+          "type": "text",
+          "rect": [
+            90,
+            360,
+            460,
+            32
+          ],
+          "text": "UNOFFICIAL HOMEBREW SOFTWARE",
+          "id": "splash_disclaimer",
+          "layer": 2,
+          "visible": true,
+          "components": [
+            "Transform",
+            "Text2D"
+          ]
+        }
+      ],
+      "name": "Splash"
+    },
+    "main_menu": {
+      "objects": [
+        {
+          "name": "Menu Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "text": "",
+          "id": "main_menu_menu_background",
+          "layer": 0,
+          "visible": true,
+          "components": [
+            "Transform",
+            "Panel2D"
+          ]
+        },
+        {
+          "name": "Neon Coffee Logo",
+          "type": "sprite2d",
+          "rect": [
+            32,
+            36,
+            97,
+            80
+          ],
+          "role": "brand_logo",
+          "texture": "textures/ui/neon-coffee-logo.png",
+          "layer": 10,
+          "details": {
+            "filter": "nearest",
+            "blend": "cutout"
+          },
+          "id": "main_menu_neon_coffee_logo",
+          "visible": true,
+          "components": [
+            "Transform",
+            "Sprite2D"
+          ]
+        },
+        {
+          "name": "New Game",
+          "type": "button",
+          "rect": [
+            220,
+            210,
+            200,
+            36
+          ],
+          "text": "NEW GAME",
+          "id": "main_menu_new_game",
+          "layer": 2,
+          "visible": true,
+          "components": [
+            "Transform",
+            "Button2D"
+          ]
+        },
+        {
+          "name": "Continue",
+          "type": "button",
+          "rect": [
+            220,
+            258,
+            200,
+            36
+          ],
+          "text": "CONTINUE",
+          "id": "main_menu_continue",
+          "layer": 3,
+          "visible": true,
+          "components": [
+            "Transform",
+            "Button2D"
+          ]
+        },
+        {
+          "name": "Options",
+          "type": "button",
+          "rect": [
+            220,
+            306,
+            200,
+            36
+          ],
+          "text": "OPTIONS",
+          "id": "main_menu_options",
+          "layer": 4,
+          "visible": true,
+          "components": [
+            "Transform",
+            "Button2D"
+          ]
+        }
+      ],
+      "name": "Main Menu"
+    }
   }
 }

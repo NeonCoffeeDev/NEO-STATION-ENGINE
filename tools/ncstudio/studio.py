@@ -16,6 +16,8 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
@@ -182,7 +184,7 @@ class Studio:
         self.author_sidebar = AuthorSidebar(left, self.open_flow_from_sidebar,
                                             self.select_from_hierarchy,self.add_ready_object)
         self.author_sidebar.pack(fill="both", expand=True)
-        self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector)
+        self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector, self.choose_sprite_image)
         self.inspector.pack(fill="both", expand=True)
         self.viewport_panel.on_selection = self.on_viewport_selection
         self._build_statusbar()
@@ -727,6 +729,13 @@ class Studio:
             if self.active_tab=='structure':self.author_sidebar.stack.show('flow')
 
     def select_from_hierarchy(self,key):
+        if isinstance(key,tuple) and key and key[0] in ('screen','screen_object'):
+            screen_key=key[1];world=self.viewport_panel.world
+            if not world:return
+            world.active_screen=screen_key;self.show_tab('viewport');self.viewport_panel.plane.set('2D')
+            if key[0]=='screen_object':self.viewport_panel.selected=key[2]
+            else:self.viewport_panel.selected=None
+            self.viewport_panel.draw();self.inspector.show_record(self.viewport_panel.record());return
         if isinstance(key,tuple) and key and key[0]=='scene':
             room=key[1];self.show_tab('viewport');self.viewport_panel.room.current(room);self.viewport_panel.change_room();self.update_author_context();return
         if isinstance(key,tuple) and key and key[0]=='object':
@@ -786,6 +795,14 @@ class Studio:
                 scale=self._numbers(values['scale'],3) if values['scale'] else record.get('scale',[1,1,1])
                 world.set_transform(key,rotation,scale)
             if values['material'] and values['material']!=record.get('material',{}).get('texture',''):world.set_material(key,values['material'])
+            if key.startswith('u:') and world.active_screen:
+                obj=world.screens['screens'][world.active_screen]['objects'][int(key[2:])]
+                if values['image']:obj['texture']=values['image'];obj['type']='sprite2d'
+                if values['layer']:obj['layer']=int(values['layer'])
+                if values['text'] or obj.get('type') in ('text','button'):obj['text']=values['text']
+                if values['visible']!='':obj['visible']=values['visible'].lower() not in ('0','false','off','no')
+                if values['size']:
+                    size=self._numbers(values['size'],2);obj['rect'][2:]=list(map(int,size))
             if key.startswith('camera:') and world.kind=='fixed_room_v1':
                 camera=world.doc['cameras'][int(key.split(':')[1])]
                 if values['target']:camera['target']=self._numbers(values['target'],3)
@@ -795,11 +812,32 @@ class Studio:
                 if values['fov']:world.doc['camera']['fov']=float(values['fov'])
             name=values['name']
             if name and name!=record.get('name'):
-                world.doc.setdefault('editor_names',{})[key]=name
+                if key.startswith('u:') and world.active_screen:
+                    world.screens['screens'][world.active_screen]['objects'][int(key[2:])]['name']=name
+                else:world.doc.setdefault('editor_names',{})[key]=name
             world.validate();self.viewport_panel.save();self.viewport_panel.draw();self.update_author_context();self.inspector.show_record(self.viewport_panel.record())
             self.set_status('GameObject properties saved',GREEN)
         except (ValueError,TypeError,OSError) as exc:
             self.viewport_panel.undo();messagebox.showerror('Inspector',str(exc),parent=self.root)
+
+    def choose_sprite_image(self,record,entry):
+        world=self.viewport_panel.world
+        if not world or not record.get('key','').startswith('u:'):return
+        source=filedialog.askopenfilename(parent=self.root,title='Choose Sprite2D PNG',filetypes=[('PNG image','*.png')])
+        if not source:return
+        try:
+            from PIL import Image
+            with Image.open(source) as image:
+                limit=256 if world.target=='ps1' else 512
+                if image.width>limit or image.height>limit:raise ValueError('%s Sprite2D images must fit within %dx%d.'%(world.target.upper(),limit,limit))
+            folder=world.root/'textures'/'ui';folder.mkdir(parents=True,exist_ok=True)
+            destination=folder/Path(source).name
+            if Path(source).resolve()!=destination.resolve():
+                import shutil;shutil.copy2(source,destination)
+            relative=destination.relative_to(world.root).as_posix()
+            entry.configure(state='normal');entry.delete(0,'end');entry.insert(0,relative)
+            self.set_status('Sprite image selected; Apply to save it.',CYAN)
+        except (OSError,ValueError) as exc:messagebox.showerror('Sprite2D image',str(exc),parent=self.root)
 
     def toggle_hub(self):
         self.hub_visible = not self.hub_visible

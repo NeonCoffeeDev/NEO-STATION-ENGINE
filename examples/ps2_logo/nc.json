@@ -2,5 +2,6 @@
   "format": 1,
   "name": "ps2_logo",
   "template": "ps2_logo",
-  "target": "ps2"
+  "target": "ps2",
+  "event_adapter": "screen2d_v1"
 }

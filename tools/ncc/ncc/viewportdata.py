@@ -11,6 +11,7 @@ class World:
         self.target=meta['target'];self.adapter=meta.get('event_adapter','')
         if self.target=='ps1' and (self.root/'scene.json').exists():self.kind='ps1';name='scene.json'
         elif self.target=='ps2' and (self.root/'vn.json').exists():self.kind='vn';name='vn.json'
+        elif self.target=='ps2' and self.adapter=='screen2d_v1' and (self.root/'screens.json').exists():self.kind='screen2d_v1';name='screens.json'
         elif self.adapter in ('fixed_room_v1','lab3d_v1','pad2d_v1'):self.kind=self.adapter;name='room-layout.json'
         else:raise ValueError('This native demo has no editable scene adapter yet.')
         self.path=self.root/name
@@ -41,8 +42,8 @@ class World:
         self.triggers=json.loads(self.trigger_original) if self.trigger_original else dict(version=1,target=self.target,triggers=[])
         if self.triggers.get('target')!=self.target:raise ValueError('Trigger target does not match project.')
         self.screen_path=self.root/'screens.json'
-        self.screen_original=self.screen_path.read_text(encoding='utf-8') if self.screen_path.exists() else None
-        self.screens=json.loads(self.screen_original) if self.screen_original else {'version':1,'target':self.target,'screens':{}}
+        self.screen_original=self.original if self.path==self.screen_path else (self.screen_path.read_text(encoding='utf-8') if self.screen_path.exists() else None)
+        self.screens=self.doc if self.path==self.screen_path else (json.loads(self.screen_original) if self.screen_original else {'version':1,'target':self.target,'screens':{}})
         if self.screens.get('target')!=self.target:raise ValueError('Screen target does not match project.')
         self.active_screen=None
         self.world3d_path=self.root/'world3d.json'
@@ -53,16 +54,20 @@ class World:
     def scenes(self):
         if self.kind=='ps1':return self.doc.get('scenes',[self.doc])
         if self.kind=='vn':return self.doc['kit']['scenes']
+        if self.kind=='screen2d_v1':return [dict(name=value.get('name',key),screen_key=key) for key,value in self.doc.get('screens',{}).items()]
         return [dict(name='World')]
 
     def records(self, room):
         rows=[]
         def add(key,name,pos,size,space):rows.append(dict(key=key,name=name,pos=list(pos),size=list(size),space=space))
+        if self.kind=='screen2d_v1':
+            keys=list(self.doc.get('screens',{}));self.active_screen=keys[min(room,len(keys)-1)] if keys else None
         if self.active_screen and self.active_screen in self.screens.get('screens',{}):
             for i,obj in enumerate(self.screens['screens'][self.active_screen].get('objects',[])):
                 add('u:'+str(i),obj.get('name','UI Object '+str(i)),obj.get('rect',[0,0,64,32])[:2],obj.get('rect',[0,0,64,32])[2:],'2d')
-                rows[-1].update(ui_type=obj.get('type','panel'),text=obj.get('text',''),texture=obj.get('texture',''))
-            return rows
+                ui_type=obj.get('type','panel');component={'sprite2d':'Sprite2D','text':'Text2D','button':'Button2D','panel':'Panel2D'}.get(ui_type,'Transform')
+                rows[-1].update(ui_type=ui_type,text=obj.get('text',''),texture=obj.get('texture',''),image=obj.get('texture',''),layer=obj.get('layer',i),visible=obj.get('visible',True),details=obj.get('details',{}),component=component)
+            return sorted(rows,key=lambda row:row.get('layer',0))
         if self.kind=='ps1':
             sc=self.scenes()[room]
             for i,s in enumerate(sc.get('sprites',[])):add('s:'+str(i),s.get('name','Sprite '+str(i)),[s.get('x',0),s.get('y',0)],[s['w'],s['h']],'2d')
@@ -176,6 +181,16 @@ class World:
         self.doc.setdefault('materials', {})[key[2:]] = {'texture': texture}
 
     def validate(self):
+        active_screen=self.active_screen
+        if self.kind=='screen2d_v1':
+            for key,screen in self.screens.get('screens',{}).items():
+                for obj in screen.get('objects',[]):
+                    rect=obj.get('rect',[])
+                    if len(rect)!=4 or any(type(v) not in (int,float) for v in rect):raise ValueError('Screen objects need X, Y, width, height.')
+                    x,y,w,h=rect
+                    if w<=0 or h<=0 or x<0 or y<0 or x+w>640 or y+h>448:raise ValueError('%s must fit the 640x448 PS2 canvas.'%obj.get('name','Screen object'))
+                    texture=obj.get('texture','')
+                    if texture and (Path(texture).is_absolute() or Path(texture).suffix.lower()!='.png' or not (self.root/texture).is_file()):raise ValueError('Sprite2D image must reference a project-local PNG.')
         if self.kind=='ps1':
             for sc in self.scenes():
                 if len(sc.get('sprites',[]))>64 or len(sc.get('instances',[]))>128:raise ValueError('PS1 room budget: 64 sprites / 128 mesh instances.')
@@ -253,11 +268,12 @@ class World:
                 if len(light.get('position',[]))!=3 or len(light.get('direction',[]))!=3:raise ValueError('Light %s needs position and direction.'%name)
                 if not 0<=light.get('intensity',1)<=2 or not 0<=light.get('ambient',.3)<=1:raise ValueError('Light intensity/ambient is outside the PS2 starter range.')
             if len(self.world3d.get('shadows',{}))>32:raise ValueError('The starter PS2 shadow budget is 32 blobs.')
-        validate_triggers(self)
+        validate_triggers(self);self.active_screen=active_screen
 
     def save(self):
         self.validate()
-        changes=[(self.path,self.original,self.doc),(self.trigger_path,self.trigger_original,self.triggers),(self.screen_path,self.screen_original,self.screens)]
+        changes=[(self.path,self.original,self.doc),(self.trigger_path,self.trigger_original,self.triggers)]
+        if self.screen_path!=self.path:changes.append((self.screen_path,self.screen_original,self.screens))
         if self.world3d is not None:changes.append((self.world3d_path,self.world3d_original,self.world3d))
         # Check every source before writing either file.
         for path,original,doc in changes:

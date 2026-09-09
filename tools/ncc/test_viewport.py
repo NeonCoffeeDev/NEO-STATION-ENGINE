@@ -102,6 +102,18 @@ class ViewportTests(unittest.TestCase):
             fresh=World(root);fresh.active_screen='splash'
             self.assertEqual(fresh.records(0)[0]['pos'],[30,40])
 
+    def test_ps2_sprite_screen_roundtrip(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'textures').mkdir();Image.new('RGBA',(16,16),(255,0,255,255)).save(root/'textures/logo.png')
+            (root/'nc.json').write_text('{"target":"ps2","event_adapter":"screen2d_v1"}')
+            screen={'version':1,'target':'ps2','screens':{'logo':{'name':'Logo Screen','objects':[{'name':'Logo','type':'sprite2d','role':'brand_logo','rect':[10,20,64,64],'layer':3,'texture':'textures/logo.png'}]}}}
+            (root/'screens.json').write_text(json.dumps(screen))
+            world=World(root);self.assertEqual(world.scenes()[0]['name'],'Logo Screen')
+            row=world.records(0)[0];self.assertEqual((row['image'],row['layer']),('textures/logo.png',3))
+            world.move(0,'u:0',[30,40]);world.save();fresh=World(root)
+            self.assertEqual(fresh.records(0)[0]['pos'],[30,40])
+
     def test_ps2_materials_compile_to_aligned_native_data(self):
         from PIL import Image
         with tempfile.TemporaryDirectory() as d:

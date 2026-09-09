@@ -122,6 +122,12 @@ class AuthorSidebar(tk.Frame):
         self.context.configure(text=title);self.hierarchy_list.delete(0,'end');self.hierarchy_keys=[]
         active=world.active_screen;world.active_screen=None
         try:
+            for screen_key,screen in world.screens.get('screens',{}).items():
+                label=screen.get('name',screen_key.replace('_',' ').title())
+                self.hierarchy_keys.append(('screen',screen_key));self.hierarchy_list.insert('end','  SCREEN  '+label)
+                for index,obj in enumerate(screen.get('objects',[])):
+                    self.hierarchy_keys.append(('screen_object',screen_key,'u:'+str(index)))
+                    self.hierarchy_list.insert('end','    + '+obj.get('name','UI Object '+str(index)))
             for room,scene in enumerate(world.scenes()):
                 name=scene.get('name',scene.get('title',scene.get('id','Scene %d'%room)))
                 self.hierarchy_keys.append(('scene',room));self.hierarchy_list.insert('end',('> ' if room==active_room else '  ')+'SCENE %d  %s'%(room,name))
@@ -137,9 +143,9 @@ class AuthorSidebar(tk.Frame):
         if sel:self.on_hierarchy(self.hierarchy_keys[sel[0]])
 
 class InspectorSidebar(tk.Frame):
-    FIELDS=('name','position','rotation','scale','size','target','fov','material')
-    def __init__(self,parent,on_apply):
-        super().__init__(parent,bg=BG);self.on_apply=on_apply;self.record=None;self.entries={}
+    FIELDS=('name','position','rotation','scale','size','text','target','fov','image','layer','visible','material')
+    def __init__(self,parent,on_apply,on_choose_image=None):
+        super().__init__(parent,bg=BG);self.on_apply=on_apply;self.on_choose_image=on_choose_image;self.record=None;self.entries={}
         self.title=tk.Label(self,text='No GameObject selected',bg=BG,fg=AMBER,font=UI_BOLD,anchor='w');self.title.pack(fill='x',padx=7,pady=7)
         for key in self.FIELDS:
             row=tk.Frame(self,bg=BG);row.pack(fill='x',padx=6,pady=2)
@@ -149,7 +155,10 @@ class InspectorSidebar(tk.Frame):
         tk.Label(self,text='ATTACHED COMPONENT / NC-CODE',bg=BG,fg=CYAN,font=UI_BOLD,anchor='w').pack(fill='x',padx=7,pady=(8,2))
         self.component=ttk.Combobox(self,state='readonly',values=list(COMPONENTS));self.component.pack(fill='x',padx=7);self.component.bind('<<ComboboxSelected>>',self.show_component)
         self.component_help=tk.Label(self,bg=SUNKEN,fg=FG,justify='left',anchor='nw',wraplength=270);self.component_help.pack(fill='x',padx=7,pady=5)
+        Button(self,'CHOOSE SPRITE IMAGE',self.choose_image,CYAN).pack(fill='x',padx=6,pady=(3,0))
         Button(self,'APPLY EXPOSED PROPERTIES',self.apply,AMBER).pack(fill='x',padx=6,pady=5)
+    def choose_image(self):
+        if self.record and self.on_choose_image:self.on_choose_image(self.record,self.entries['image'])
     def show_component(self,_event=None):
         info=COMPONENTS.get(self.component.get())
         if not info:self.component_help.configure(text='');return
@@ -160,7 +169,7 @@ class InspectorSidebar(tk.Frame):
         for entry in self.entries.values():entry.delete(0,'end')
         if not record:self.title.configure(text='No GameObject selected');self.meta.configure(text='Select an instance in SCENE or HIERARCHY.');return
         self.title.configure(text=record.get('name',record.get('key','GameObject')))
-        values={'name':record.get('name',''),'position':record.get('pos',[]),'rotation':record.get('rot',[]),'scale':record.get('scale',[]),'size':record.get('size',[]),'target':record.get('target',[]),'fov':record.get('fov',''),'material':record.get('material',{}).get('texture','')}
+        values={'name':record.get('name',''),'position':record.get('pos',[]),'rotation':record.get('rot',[]),'scale':record.get('scale',[]),'size':record.get('size',[]),'text':record.get('text',''),'target':record.get('target',[]),'fov':record.get('fov',''),'image':record.get('image',''),'layer':record.get('layer',''),'visible':record.get('visible',''),'material':record.get('material',{}).get('texture','')}
         for key,value in values.items():
             editable=key in ('name','position') or key in record or (key=='material' and 'material' in record)
             self.entries[key].configure(state='normal');self.entries[key].insert(0,', '.join(map(str,value)) if isinstance(value,list) else str(value));self.entries[key].configure(state='normal' if editable and not record.get('readonly') else 'disabled')

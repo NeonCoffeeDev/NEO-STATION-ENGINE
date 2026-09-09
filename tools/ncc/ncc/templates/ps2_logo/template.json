@@ -3,6 +3,7 @@
   "title": "PS2 texture test",
   "order": 11,
   "target": "ps2",
+  "event_adapter": "screen2d_v1",
   "description": "One texture on a cleared screen. A bisection tool for a black screen, not a game.",
   "detail": "Draws exactly one thing: the logo, as a texture. If this shows the logo, the texture path works and a fault is elsewhere. If it shows a blue screen, the frame loop runs but the texture does not. If it is black, the GS never came up. Guessing which of those is true from a black screen is not debugging."
 }

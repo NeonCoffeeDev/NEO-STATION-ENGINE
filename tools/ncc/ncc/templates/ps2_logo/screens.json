@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "screens": {
+    "logo": {
+      "name": "Logo Screen",
+      "objects": [
+        {
+          "name": "Background",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "text": "",
+          "id": "logo_background",
+          "visible": true,
+          "components": [
+            "Transform",
+            "Panel2D"
+          ]
+        },
+        {
+          "name": "Neon Coffee Logo",
+          "type": "sprite2d",
+          "role": "brand_logo",
+          "rect": [
+            165,
+            96,
+            310,
+            255
+          ],
+          "layer": 10,
+          "texture": "textures/ui/neon-coffee-logo.png",
+          "details": {
+            "filter": "nearest",
+            "blend": "cutout"
+          },
+          "id": "logo_neon_coffee_logo",
+          "visible": true,
+          "components": [
+            "Transform",
+            "Sprite2D"
+          ]
+        }
+      ]
+    }
+  }
+}

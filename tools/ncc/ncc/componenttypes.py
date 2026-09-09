@@ -2,6 +2,9 @@
 COMPONENTS={
  'Transform':dict(icon='XYZ',targets=('ps1','ps2'),fields=('position','rotation','scale'),code=('set_pos(object,x,y,z)','set_rot(object,x,y,z)','move(object,x,y,z)')),
  'Sprite2D':dict(icon='IMG',targets=('ps1','ps2'),fields=('image','frame','layer','visible','flip'),code=('sprite_frame(sprite,x,y)','sprite_show(sprite)','sprite_hide(sprite)')),
+ 'Text2D':dict(icon='TXT',targets=('ps1','ps2'),fields=('text','font','color','align','layer','visible'),code=('draw_text(x,y,text)','set_text(object,text)','show(object)','hide(object)')),
+ 'Panel2D':dict(icon='PNL',targets=('ps1','ps2'),fields=('size','color','layer','visible'),code=('show(object)','hide(object)')),
+ 'Button2D':dict(icon='BTN',targets=('ps1','ps2'),fields=('text','action','selected','layer','visible'),code=('button_pressed(object)','set_text(object,text)','show(object)','hide(object)')),
  'Mesh3D':dict(icon='MSH',targets=('ps1','ps2'),fields=('mesh','material','visible'),code=('show(object)','hide(object)')),
  'Material':dict(icon='MAT',targets=('ps1','ps2'),fields=('texture','tint','lighting'),code=('show(object)',)),
  'Camera':dict(icon='CAM',targets=('ps1','ps2'),fields=('target','fov','active'),code=('camera_set(x,y,z,pitch,yaw,roll)','camera_move(x,y,z)')),
@@ -17,6 +20,9 @@ COMPONENTS={
 READY_OBJECTS={
  'Empty GameObject':('Transform',),
  '2D Sprite':('Transform','Sprite2D'),
+ '2D Text':('Transform','Text2D'),
+ 'Menu Button':('Transform','Button2D'),
+ 'UI Panel':('Transform','Panel2D'),
  '3D Mesh':('Transform','Mesh3D','Material'),
  'Main Camera':('Transform','Camera'),
  'Solid Object':('Transform','Collision Box'),
