@@ -1,5 +1,5 @@
 /*
- * NEOStationStarter - a Neon Coffee visual novel for the PlayStation 2
+ * @NAME@ - a Neon Coffee visual novel for the PlayStation 2
  *
  * A title screen with the logo, a menu you navigate with the pad, and a scene
  * of text you advance a line at a time. That is most of what a visual novel is,
@@ -63,7 +63,7 @@ extern const int nc_logo_used_w, nc_logo_used_h;
 extern unsigned int nc_font[];
 extern const int nc_font_width, nc_font_height;
 
-enum { SCENE_TITLE, SCENE_MENU, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
+enum { SCENE_TITLE, SCENE_MENU, SCENE_WORLD3D, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
 
 /* Where START was pressed, so RESUME puts you back rather than somewhere
  * sensible-looking. */
@@ -92,11 +92,12 @@ static qword_t *packet_limit;
  * runs of text are drawn together rather than interleaved with the logo. */
 static texbuffer_t *bound;
 
-static const char *MENU_ITEMS[] = { "BEGIN", "ABOUT", "TITLE SCREEN" };
+static const char *MENU_ITEMS[] = { "3D LAB", "VISUAL NOVEL", "ABOUT", "TITLE SCREEN" };
 #define MENU_COUNT 3
 
 #include "vn_content.h"
 #include "nc_audio.h"
+#include "nc_world3d.h"
 
 /* How many frames each character of dialogue takes. vn_runtime.h reads it,
  * so it is declared here and seeded from the kit once VN_SPEED exists. */
@@ -594,7 +595,7 @@ int main(void)
     dma_channel_initialize(DMA_CHANNEL_GIF, NULL, 0);
     dma_channel_fast_waits(DMA_CHANNEL_GIF);
 
-    printf("NEOStationStarter: Neon Coffee, PlayStation 2\n");
+    printf("@NAME@: Neon Coffee, PlayStation 2\n");
 
     load_pad_modules();
     padInit(0);
@@ -606,7 +607,7 @@ int main(void)
         have_pad = (state == PAD_STATE_STABLE || state == PAD_STATE_FINDCTP1);
     } while (!have_pad);
     if (!have_pad)
-        printf("NEOStationStarter: no controller in port 1\n");
+        printf("@NAME@: no controller in port 1\n");
 
     /* Ask for a generous packet, but never stop dead if it cannot be had. A
      * console that hangs at startup is indistinguishable from a crash, and a
@@ -616,10 +617,10 @@ int main(void)
     if (packet == NULL) {
         limit_qwords = 1024;
         packet = packet_init(limit_qwords, PACKET_NORMAL);
-        printf("NEOStationStarter: large packet refused, using %d qwords\n", limit_qwords);
+        printf("@NAME@: large packet refused, using %d qwords\n", limit_qwords);
     }
     if (packet == NULL) {
-        printf("NEOStationStarter: no draw packet at all\n");
+        printf("@NAME@: no draw packet at all\n");
         return 1;
     }
     packet_limit = packet->data + limit_qwords;
@@ -628,6 +629,7 @@ int main(void)
 
     upload(nc_logo, nc_logo_width, nc_logo_height, &logo_tex);
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
+    nc_world_upload();
     if (!vn_init()) return 1;
     text_speed = VN_SPEED;
 
@@ -688,14 +690,19 @@ int main(void)
             }
             if (pressed & PAD_CROSS) {
                 nc_sfx_family(nc_role_confirm);
-                if (selected == 0) { scene = SCENE_STORY; vn_begin(); }
-                else if (selected == 1) { scene = SCENE_ABOUT; }
+                if (selected == 0) { scene = SCENE_WORLD3D; }
+                else if (selected == 1) { scene = SCENE_STORY; vn_begin(); }
+                else if (selected == 2) { scene = SCENE_ABOUT; }
                 else scene = SCENE_TITLE;
             }
             break;
 
         case SCENE_STORY:
             if (!vn_update(pressed)) scene = SCENE_MENU;
+            break;
+
+        case SCENE_WORLD3D:
+            if (pressed & PAD_TRIANGLE) scene = SCENE_MENU;
             break;
 
         case SCENE_ABOUT:
@@ -728,6 +735,9 @@ int main(void)
             break;
         case SCENE_MENU:
             q = draw_menu(q, selected);
+            break;
+        case SCENE_WORLD3D:
+            q = nc_world_draw(q);
             break;
         case SCENE_STORY:
             q = vn_draw(q);

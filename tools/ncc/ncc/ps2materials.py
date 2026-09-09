@@ -56,6 +56,24 @@ def compile_project(root):
         for index,relative,width,height,used_w,used_h,words in arrays:source.append('  {%d,%d,%d,%d,nc_tex_%d},'%(width,height,used_w,used_h,index))
     else:source.append('  {0,0,0,0,0},')
     source.append('};')
+    objects=list(world.get('objects',{}).items())
+    camera=world.get('camera',{'pos':[6,4.5,-8],'target':[0,0,0],'fov':60})
+    def cfloat(value):
+        text=('%g'%value)
+        return (text+'.0' if '.' not in text and 'e' not in text.lower() else text)+'f'
+    header += ['#define NC_WORLD_OBJECT_COUNT %d'%len(objects),
+               'extern float nc_world_pos[%d][3];'%max(1,len(objects)),
+               'extern float nc_world_rot[%d][3];'%max(1,len(objects)),
+               'extern float nc_world_scale[%d][3];'%max(1,len(objects)),
+               'extern int nc_world_material[%d];'%max(1,len(objects)),
+               '#define NC_WORLD_CAMERA_POS {%s}'%(','.join(cfloat(v) for v in camera['pos'])),
+               '#define NC_WORLD_CAMERA_TARGET {%s}'%(','.join(cfloat(v) for v in camera['target'])),
+               '#define NC_WORLD_CAMERA_FOV %s'%cfloat(camera.get('fov',60))]
+    def triples(field,default):return ','.join('{%s}'%','.join(cfloat(v) for v in obj.get(field,default)) for _,obj in objects) or '{0,0,0}'
+    source += ['float nc_world_pos[%d][3]={%s};'%(max(1,len(objects)),triples('position',[0,0,0])),
+               'float nc_world_rot[%d][3]={%s};'%(max(1,len(objects)),triples('rotation',[0,0,0])),
+               'float nc_world_scale[%d][3]={%s};'%(max(1,len(objects)),triples('scale',[1,1,1])),
+               'int nc_world_material[%d]={%s};'%(max(1,len(objects)),','.join(str(paths.index(obj['material'])) if obj.get('material') in paths else '-1' for _,obj in objects) or '-1')]
     out=root/'src';out.mkdir(exist_ok=True)
     (out/'nc_materials.h').write_text('\n'.join(header)+'\n',encoding='utf-8')
     (out/'nc_materials.c').write_text('\n'.join(source)+'\n',encoding='utf-8')
