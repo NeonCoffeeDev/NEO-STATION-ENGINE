@@ -16,7 +16,7 @@
   },
   "materials": {
     "cube": {
-      "texture": "textures/checker.png"
+      "texture": "textures/nc-logo.png"
     }
   },
   "camera": {

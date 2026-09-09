@@ -128,21 +128,25 @@ static void load_materials(void) {
     q=draw_texture_flush(q);dma_channel_send_chain(DMA_CHANNEL_GIF,upload->data,q-upload->data,0,0);dma_wait_fast();packet_free(upload);
 }
 
-static qword_t *draw_textured_cube(qword_t *q,float *px,float *py,int *visible,int material) {
+static qword_t *draw_textured_cube(qword_t *q,float *px,float *py,float *depth,int *visible,int material) {
     static const int faces[6][4]={{0,1,3,2},{4,5,7,6},{0,1,5,4},{2,3,7,6},{0,2,6,4},{1,3,7,5}};
     static const int tri[6]={0,1,2,0,2,3};
-    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};int f,i;
+    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};int f,i,order[6]={0,1,2,3,4,5};float face_depth[6];
     if(material<0||material>=NC_MATERIAL_COUNT)return q;
     lod.calculation=LOD_USE_K;lod.mag_filter=LOD_MAG_NEAREST;lod.min_filter=LOD_MIN_NEAREST;
     clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
     q=draw_texture_sampling(q,0,&lod);q=draw_texturebuffer(q,0,&material_tex[material],&clut);
     prim.type=PRIM_TRIANGLE;prim.shading=PRIM_SHADE_FLAT;prim.mapping=DRAW_ENABLE;prim.mapping_type=PRIM_MAP_UV;prim.colorfix=PRIM_FIXED;
     color.a=0x80;color.q=1.0f;
-    for(f=0;f<6;f++) {
+    for(f=0;f<6;f++)face_depth[f]=(depth[faces[f][0]]+depth[faces[f][1]]+depth[faces[f][2]]+depth[faces[f][3]])*.25f;
+    for(i=0;i<5;i++)for(f=i+1;f<6;f++)if(face_depth[order[i]]<face_depth[order[f]]){int swap=order[i];order[i]=order[f];order[f]=swap;}
+    for(i=0;i<6;i++) {
+        f=order[i];
         u64 *dw;if(!visible[faces[f][0]]||!visible[faces[f][1]]||!visible[faces[f][2]]||!visible[faces[f][3]])continue;
         color.r=color.g=color.b=(f==3?0x80:(f==5?0x68:0x4c));dw=(u64*)draw_prim_start(q,0,&prim,&color);
-        for(i=0;i<6;i++) {int corner=tri[i],v=faces[f][corner];int u=(corner==1||corner==2)?nc_materials[material].used_width-1:0;int t=corner>=2?nc_materials[material].used_height-1:0;texel_t uv;xyz_t xyz;
+        {int vertex_index;for(vertex_index=0;vertex_index<6;vertex_index++) {int corner=tri[vertex_index],v=faces[f][corner];int u=(corner==1||corner==2)?nc_materials[material].used_width-1:0;int t=corner>=2?nc_materials[material].used_height-1:0;texel_t uv;xyz_t xyz;
             uv.uv=(u64)ftoi4(u)|((u64)ftoi4(t)<<32);xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=32;*dw++=uv.uv;*dw++=xyz.xyz;}
+        }
         q=draw_prim_end((qword_t*)dw,2,DRAW_UV_REGLIST);
     }return q;
 }
@@ -253,7 +257,7 @@ int main(void)
                 {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},
                 {0,4},{1,5},{2,6},{3,7}
             };
-            float px[8], py[8];
+            float px[8], py[8], vertex_depth[8];
             int i,object;
             if (buttons & PAD_LEFT) yaw -= 0.035f;
             if (buttons & PAD_RIGHT) yaw += 0.035f;
@@ -284,11 +288,12 @@ int main(void)
                 float ry=vy*cosf(pitch)-rz*sinf(pitch);
                 float depth=vy*sinf(pitch)+rz*cosf(pitch);
                 visible[i]=depth>=0.3f;
+                vertex_depth[i]=depth;
                 if(!visible[i])continue;
                 px[i]=rx*(focal*((float)size/96.0f))/depth;
                 py[i]=ry*(focal*((float)size/96.0f))/depth;
             }
-            if(nc_object_material[object]>=0)q=draw_textured_cube(q,px,py,visible,nc_object_material[object]);
+            if(nc_object_material[object]>=0)q=draw_textured_cube(q,px,py,vertex_depth,visible,nc_object_material[object]);
             else for(i=0;i<12;i++) {
                 line_t line = {0};
                 int a=edges[i][0], b=edges[i][1];
