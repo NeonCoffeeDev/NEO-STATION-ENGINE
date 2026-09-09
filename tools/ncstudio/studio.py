@@ -73,6 +73,16 @@ def save_settings(data):
     except OSError:
         pass          # settings are a convenience; never let them break startup
 
+def safe_geometry(root,value):
+    """Keep saved multi-monitor coordinates from hiding editor sidebars."""
+    match=re.fullmatch(r'(\d+)x(\d+)([+-]\d+)([+-]\d+)',str(value or ''))
+    if not match:return '1500x900+40+40'
+    width,height,x,y=map(int,match.groups())
+    screen_w,screen_h=root.winfo_screenwidth(),root.winfo_screenheight()
+    width=max(1180,min(width,screen_w));height=max(700,min(height,screen_h-60))
+    x=max(0,min(x,screen_w-width));y=max(0,min(y,screen_h-height-40))
+    return '%dx%d+%d+%d'%(width,height,x,y)
+
 
 def find_projects(root):
     """Any Neon Coffee project, at the root or under examples/.
@@ -128,8 +138,8 @@ class Studio:
 
         root.title("NC Studio")
         root.configure(bg=BG)
-        root.geometry(self.settings.get("geometry", "1120x720"))
-        root.minsize(940, 580)
+        root.geometry(safe_geometry(root,self.settings.get("geometry", "1500x900+40+40")))
+        root.minsize(1180, 700)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         style_ttk(root)     # before any ttk widget is built
 
@@ -705,7 +715,7 @@ class Studio:
     def update_author_context(self):
         if not getattr(self,'author_sidebar',None):return
         if self.active_tab in ('viewport','game') and self.viewport_panel.world:
-            self.author_sidebar.set_hierarchy('SCENE / '+os.path.basename(self.selected_project()),self.viewport_panel.records())
+            self.author_sidebar.set_scene_hierarchy('SCENE / '+os.path.basename(self.selected_project()),self.viewport_panel.world,self.viewport_panel.index())
             self.author_sidebar.stack.show('hierarchy')
         elif self.active_tab=='room' and getattr(self.room_panel,'objects',None):
             names=list(self.room_panel.objects.get(0,'end'))
@@ -716,6 +726,10 @@ class Studio:
             if self.active_tab=='structure':self.author_sidebar.stack.show('flow')
 
     def select_from_hierarchy(self,key):
+        if isinstance(key,tuple) and key and key[0]=='scene':
+            room=key[1];self.show_tab('viewport');self.viewport_panel.room.current(room);self.viewport_panel.change_room();self.update_author_context();return
+        if isinstance(key,tuple) and key and key[0]=='object':
+            room,key=key[1],key[2];self.show_tab('viewport');self.viewport_panel.room.current(room);self.viewport_panel.change_room()
         if key and key.startswith('room:'):
             index=int(key.split(':')[1]);self.room_panel.objects.selection_clear(0,'end');self.room_panel.objects.selection_set(index);self.room_panel.objects.event_generate('<<ListboxSelect>>');return
         if self.viewport_panel.world and key:

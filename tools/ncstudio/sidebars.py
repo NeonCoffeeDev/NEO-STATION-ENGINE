@@ -72,6 +72,7 @@ class AuthorSidebar(tk.Frame):
             if doc and doc.get('target')!=project_meta(self.project)['target']:raise ValueError('System target mismatch')
             self.system_rows=doc.get('systems',[])
         except (OSError,ValueError) as exc:messagebox.showerror('Game systems',str(exc),parent=self);return
+        if not self.system_rows:self.system_rows=[{'kit':name,'active':False,'modifiers':{}} for name in SYSTEM_TYPES]
         for row in self.system_rows:self.system_list.insert('end',('[ON]  ' if row.get('active',True) else '[OFF] ')+row['kit'])
     def save_systems(self):
         if not self.project:return
@@ -101,6 +102,20 @@ class AuthorSidebar(tk.Frame):
         for row in records:
             self.hierarchy_keys.append(row.get('key'));kind=row.get('component') or row.get('space','object')
             self.hierarchy_list.insert('end','%s  [%s]'%(row.get('name',row.get('key','Object')),kind))
+    def set_scene_hierarchy(self,title,world,active_room=0):
+        self.context.configure(text=title);self.hierarchy_list.delete(0,'end');self.hierarchy_keys=[]
+        active=world.active_screen;world.active_screen=None
+        try:
+            for room,scene in enumerate(world.scenes()):
+                name=scene.get('name',scene.get('title',scene.get('id','Scene %d'%room)))
+                self.hierarchy_keys.append(('scene',room));self.hierarchy_list.insert('end',('> ' if room==active_room else '  ')+'SCENE %d  %s'%(room,name))
+                for record in world.records(room):
+                    if record['key'].startswith('t:'):prefix='    [TRIGGER] '
+                    elif record.get('component'):prefix='      - '
+                    else:prefix='    + '
+                    self.hierarchy_keys.append(('object',room,record['key']))
+                    self.hierarchy_list.insert('end',prefix+record.get('name',record['key']))
+        finally:world.active_screen=active
     def pick_hierarchy(self,_event=None):
         sel=self.hierarchy_list.curselection()
         if sel:self.on_hierarchy(self.hierarchy_keys[sel[0]])
