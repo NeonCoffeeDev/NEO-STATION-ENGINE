@@ -160,12 +160,14 @@ class Studio:
 
         main = tk.PanedWindow(root, orient='horizontal', bg=BORDER, sashwidth=7,
                               sashrelief='raised', bd=0)
+        self.main_split=main
         main.pack(fill="both", expand=True, padx=8, pady=(0, 6))
 
         left = tk.Frame(main, bg=BG, width=270)
         left.pack_propagate(False)
         center = tk.Frame(main, bg=BG)
         right = tk.Frame(main, bg=BG, width=306)
+        self.left_dock=left;self.center_dock=center;self.right_dock=right
         right.pack_propagate(False)
         main.add(left,minsize=220,width=270,stretch='never')
         main.add(center,minsize=500,stretch='always')
@@ -224,7 +226,12 @@ class Studio:
         view.add_command(label='Scene',command=lambda:self.show_tab('viewport'))
         view.add_command(label='Game',command=lambda:self.show_tab('game'))
         view.add_command(label='GameObject',command=lambda:self.show_tab('room'))
-        view.add_command(label='Game Flow',command=lambda:self.show_tab('structure'))
+        view.add_command(label='GameFlow',command=lambda:self.show_tab('structure'))
+        view.add_separator()
+        view.add_command(label='Toggle Authoring Dock',command=lambda:self.toggle_dock('left'))
+        view.add_command(label='Toggle Inspector Dock',command=lambda:self.toggle_dock('right'))
+        view.add_command(label='Toggle Bottom Tools',command=lambda:self.toggle_dock('bottom'))
+        view.add_command(label='Reset Dock Layout',command=self.reset_docks)
         view.add_separator();view.add_command(label='Fullscreen',command=self.toggle_fullscreen,accelerator='F11')
         help_menu=tk.Menu(menu,tearoff=False);menu.add_cascade(label='Help',menu=help_menu)
         help_menu.add_command(label='Project Walkthrough',command=self.open_walkthrough)
@@ -242,6 +249,28 @@ class Studio:
         if self.viewport_panel.dirty() and not self.viewport_panel.save():return
         self.projects=[path];self.plist.delete(0,'end');self.plist.insert('end',os.path.basename(path));self.plist.selection_set(0)
         self.viewport_panel.drafts.clear();self.settings['project']=path;save_settings(self.settings);self.on_select()
+
+    @staticmethod
+    def _in_panes(split,widget):return str(widget) in tuple(map(str,split.panes()))
+
+    def toggle_dock(self,name):
+        if name=='left':
+            split,widget=self.main_split,self.left_dock
+            if self._in_panes(split,widget):split.forget(widget)
+            else:split.add(widget,before=self.center_dock,minsize=220,width=270,stretch='never')
+        elif name=='right':
+            split,widget=self.main_split,self.right_dock
+            if self._in_panes(split,widget):split.forget(widget)
+            else:split.add(widget,after=self.center_dock,minsize=250,width=306,stretch='never')
+        else:
+            split,widget=self.output_split,self.bottom_dock
+            if self._in_panes(split,widget):split.forget(widget)
+            else:split.add(widget,after=self.top_dock,minsize=140,height=240)
+
+    def reset_docks(self):
+        if not self._in_panes(self.main_split,self.left_dock):self.main_split.add(self.left_dock,before=self.center_dock,minsize=220,width=270,stretch='never')
+        if not self._in_panes(self.main_split,self.right_dock):self.main_split.add(self.right_dock,after=self.center_dock,minsize=250,width=306,stretch='never')
+        if not self._in_panes(self.output_split,self.bottom_dock):self.output_split.add(self.bottom_dock,after=self.top_dock,minsize=140,height=240)
 
     def _build_titlebar(self):
         bar = tk.Canvas(self.root, height=46, bg=BG, highlightthickness=0, bd=0)
@@ -439,9 +468,11 @@ class Studio:
         outer.pack(side="left", fill="both", expand=True)
 
         split = tk.PanedWindow(outer, orient="vertical", bg=BORDER, sashwidth=7)
+        self.output_split=split
         split.pack(fill="both", expand=True)
         top = tk.Frame(split, bg=BG)
         bottom = tk.Frame(split, bg=BG)
+        self.top_dock=top;self.bottom_dock=bottom
         split.add(top, minsize=180, stretch="always")
         split.add(bottom, minsize=140, height=240)
         topstrip = tk.Frame(top, bg=BG)
