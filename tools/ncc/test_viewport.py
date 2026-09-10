@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import tempfile
 import unittest
+import shutil
 from ncc.viewportdata import World
 from ncc.lablayout import compile_project as compile_lab
 from ncc import eventflow,ncscript
@@ -138,5 +139,19 @@ class ViewportTests(unittest.TestCase):
             count,size=compile_ps2_materials(root)
             self.assertEqual((count,size),(1,4*8*4))
             self.assertIn('NC_MATERIAL_o_cube 0',(root/'src/nc_materials.h').read_text())
+
+    def test_hybrid_main_camera_and_target_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/'hybrid'
+            shutil.copytree('tools/ncc/ncc/templates/ps2_hybrid',root)
+            (root/'nc.json').write_text('{"target":"ps2","event_adapter":"vn_v1"}')
+            world=World(root)
+            keys={row['key'] for row in world.records(0)}
+            self.assertIn('camera',keys);self.assertIn('camera_target',keys)
+            world.move(0,'camera',[8,5,-10])
+            world.move(0,'camera_target',[1,1,0])
+            world.save();fresh=World(root)
+            self.assertEqual(fresh.world3d['camera']['pos'],[8,5,-10])
+            self.assertEqual(fresh.world3d['camera']['target'],[1,1,0])
 
 if __name__=='__main__':unittest.main()

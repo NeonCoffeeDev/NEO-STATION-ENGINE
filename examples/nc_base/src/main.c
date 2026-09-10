@@ -802,8 +802,18 @@ int main(void)
             break;
         case SCENE_WORLD3D:
             q = nc_world_draw(q);
+            /* Same GS texture as the cubes, sampled as a flat diagnostic tile.
+             * If this is correct but a face is not, the fault is UV/projection;
+             * if both are purple, the material upload is the fault. */
+            if (NC_MATERIAL_COUNT > 0) {
+                q = bind_texture(q, &nc_world_tex[0]);
+                q = sprite(q, 520, 20, 96, 96, 0, 0,
+                           nc_materials[0].used_width,
+                           nc_materials[0].used_height, 0x80);
+            }
             q = panel(q, 20, 18, 190, 48, 0x0a, 0x0c, 0x12);
             q = text(q, 32, 28, "NC 3D LAB", 0x80);
+            q = text(q, 510, 120, "MATERIAL", 0x48);
             q = text(q, 344, 414, "SQUARE INVENTORY", 0x48);
             break;
         case SCENE_STORY:

@@ -124,7 +124,8 @@ class World:
                 scale=obj.get('scale',[1,1,1]);add('w:'+name,name,obj.get('position',[0,0,0]),[2*v for v in scale],'3d')
                 rows[-1].update(rot=list(obj.get('rotation',[0,0,0])),scale=list(scale),material={'texture':obj.get('material','')} if obj.get('material') else {},components=obj.get('components',['Transform','Lifecycle','Identity','Mesh3D','Material']),scripts=obj.get('scripts',[]))
             if self.kind=='vn' and self.world3d.get('camera'):
-                camera=self.world3d['camera'];add('camera','Main Camera',camera['pos'],[.35,.35,.35],'3d');rows[-1]['target']=camera['target']
+                camera=self.world3d['camera'];add('camera','Main Camera',camera['pos'],[.35,.35,.35],'3d');rows[-1].update(target=list(camera['target']),fov=camera.get('fov',60),components=['Transform','Lifecycle','Identity','Camera'])
+                add('camera_target','Main Camera Target',camera['target'],[.18,.18,.18],'3d');rows[-1].update(component='camera target',components=['Transform','Identity','Attachment Point'])
             for name,light in self.world3d.get('lights',{}).items():
                 add('l:'+name,name,light.get('position',[0,4,-3]),[.3,.3,.3],'3d');rows[-1].update(light=light,editor_only=True)
             for name,shadow in self.world3d.get('shadows',{}).items():
@@ -175,6 +176,10 @@ class World:
             self.world3d['shadows'][key[2:]]['position']=list(pos);return
         if key.startswith('q:') and self.world3d:
             self.world3d.setdefault('audio_sources',{})[key[2:]]['position']=list(pos);return
+        if key=='camera' and self.world3d:
+            self.world3d['camera']['pos']=list(pos);return
+        if key=='camera_target' and self.world3d:
+            self.world3d['camera']['target']=list(pos);return
         if key.startswith('camera:') and self.kind=='fixed_room_v1':
             self.doc['cameras'][int(key.split(':')[1])]['pos']=list(pos);return
         if key.startswith('t:'):
@@ -302,6 +307,11 @@ class World:
                 texture=obj.get('material','')
                 if texture and (Path(texture).is_absolute() or Path(texture).suffix.lower()!='.png' or not (self.root/texture).is_file()):raise ValueError('3D material must reference a project-local PNG.')
             if len(self.world3d.get('lights',{}))>4:raise ValueError('The starter PS2 lighting budget is four lights.')
+            camera=self.world3d.get('camera',{})
+            pos=camera.get('pos',[]);target=camera.get('target',[]);fov=camera.get('fov',60)
+            if len(pos)!=3 or len(target)!=3 or any(type(v) not in (int,float) or not math.isfinite(v) for v in pos+target+[fov]):raise ValueError('PS2 Main Camera needs finite position, target, and FOV values.')
+            if not 20<=fov<=100:raise ValueError('PS2 Main Camera FOV must be 20..100 degrees.')
+            if sum((a-b)*(a-b) for a,b in zip(pos,target))<.0001:raise ValueError('PS2 Main Camera cannot occupy its own target.')
             for name,light in self.world3d.get('lights',{}).items():
                 if len(light.get('position',[]))!=3 or len(light.get('direction',[]))!=3:raise ValueError('Light %s needs position and direction.'%name)
                 if not 0<=light.get('intensity',1)<=2 or not 0<=light.get('ambient',.3)<=1:raise ValueError('Light intensity/ambient is outside the PS2 starter range.')

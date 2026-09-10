@@ -49,7 +49,7 @@ static qword_t *nc_world_draw(qword_t *q) {
             ty=vy*cosf(ax)-vz*sinf(ax);tz=vy*sinf(ax)+vz*cosf(ax);vy=ty;vz=tz;tx=vx*cosf(ay)+vz*sinf(ay);tz=-vx*sinf(ay)+vz*cosf(ay);vx=tx;vz=tz;tx=vx*cosf(az)-vy*sinf(az);ty=vx*sinf(az)+vy*cosf(az);vx=tx;vy=ty;
             vx+=nc_world_pos[object][0]-camera_pos[0];vy+=nc_world_pos[object][1]-camera_pos[1];vz+=nc_world_pos[object][2]-camera_pos[2];
             {float rx=vx*cosf(yaw)+vz*sinf(yaw),rz=-vx*sinf(yaw)+vz*cosf(yaw),ry=vy*cosf(pitch)-rz*sinf(pitch),depth=vy*sinf(pitch)+rz*cosf(pitch);float focal=((float)SCREEN_H*.5f)/tanf(NC_WORLD_CAMERA_FOV*0.00872664626f);
-             visible[i]=depth>=0.3f;depths[i]=depth;if(visible[i]){px[i]=rx*focal/depth;py[i]=ry*focal/depth;}}
+             visible[i]=depth>=0.3f;depths[i]=depth;if(visible[i]){px[i]=rx*focal/depth;py[i]=-ry*focal/depth;}}
         }
         q=nc_world_cube(q,px,py,depths,visible,nc_world_material[object]);
     }return q;

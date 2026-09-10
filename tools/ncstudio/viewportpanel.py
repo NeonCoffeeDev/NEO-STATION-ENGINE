@@ -218,7 +218,7 @@ class ViewportPanel(tk.Frame):
         if not self.dragging:return
         x,y,start=self.dragging
         if self.is_perspective():
-            if start.get('readonly') or not start['key'].startswith(('o:','w:','l:','h:')):return
+            if start.get('readonly') or not start['key'].startswith(('o:','w:','l:','h:','camera')):return
             axis={'X':0,'Y':1,'Z':2}[self.axis.get()]
             pixels=(e.x-x)-(e.y-y)
             if self.tool.get()=='MOVE':
@@ -442,6 +442,9 @@ class ViewportPanel(tk.Frame):
             if origin and not self.output_mode:
                 x,y,_=origin;c.create_line(x-5,y,x+5,y,fill=AMBER,tags=('obj',r['key']));c.create_line(x,y-5,x,y+5,fill=AMBER,tags=('obj',r['key']))
                 c.create_text(x+7,y+7,text=r['name'],anchor='nw',fill=FG,tags=('obj',r['key']))
+            if r['key']=='camera' and origin and not self.output_mode:
+                target=project(r.get('target',[0,0,0]))
+                if target:c.create_line(origin[0],origin[1],target[0],target[1],arrow='last',fill=AMBER,dash=(4,3),tags=('obj','camera'))
             if r['key']==self.selected and not self.interactive:self.objects.selection_set(index)
         mode='GAME VIEWPORT / MAIN CAMERA' if self.game_mode else 'SCENE / EDITOR CAMERA (right orbit / middle pan / wheel dolly)'
         if not self.output_mode and self.selected and self.selected.startswith('camera'):self.draw_camera_inset(c)
@@ -587,21 +590,23 @@ class ViewportPanel(tk.Frame):
             caption='%s position X,Y,Z, target X,Y,Z, FOV:'%camera['name']
         elif self.world.kind=='ps1':
             old=self.world.scenes()[self.index()].get('camera',{}).get('rot',[0,0,0]);caption='Camera X,Y,Z rotation; 4096 = one turn:'
-        elif self.world.kind=='lab3d_v1':
-            camera=self.world.doc['camera'];old=camera['pos']+camera['target']+[camera['fov']]
+        elif self.world.kind=='lab3d_v1' or (self.world.world3d and self.world.world3d.get('camera')):
+            camera=self.world.doc['camera'] if self.world.kind=='lab3d_v1' else self.world.world3d['camera'];old=camera['pos']+camera['target']+[camera['fov']]
             caption='Game camera position X,Y,Z, target X,Y,Z, FOV:'
         else:self.note.configure(text='This adapter has no editable fixed-camera angles.');return
         value=simpledialog.askstring('Camera',caption,initialvalue=', '.join(map(str,old)),parent=self)
         if value is None:return
         checkpointed=False
         try:
-            vals=[float(v) if self.world.kind in ('fixed_room_v1','lab3d_v1') else int(v) for v in value.split(',')]
-            required=7 if self.world.kind in ('lab3d_v1','fixed_room_v1') else 3
+            decimal=self.world.kind in ('fixed_room_v1','lab3d_v1') or self.world.world3d is not None
+            vals=[float(v) if decimal else int(v) for v in value.split(',')]
+            required=7 if decimal else 3
             if len(vals)!=required:raise ValueError('%d values required.'%required)
             self.checkpoint();checkpointed=True
             if self.world.kind=='fixed_room_v1':self.world.doc['cameras'][self.active_camera].update(pos=vals[:3],target=vals[3:6],fov=vals[6])
-            elif self.world.kind=='lab3d_v1':
-                self.world.doc['camera']={'pos':vals[:3],'target':vals[3:6],'fov':vals[6]}
+            elif decimal:
+                camera=self.world.doc['camera'] if self.world.kind=='lab3d_v1' else self.world.world3d['camera']
+                camera.update(pos=vals[:3],target=vals[3:6],fov=vals[6])
             else:self.world.scenes()[self.index()].setdefault('camera',{})['rot']=vals
             self.world.validate();self.draw()
         except (ValueError,TypeError) as exc:

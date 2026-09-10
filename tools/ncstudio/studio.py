@@ -945,9 +945,10 @@ class Studio:
                 camera=world.doc['cameras'][int(key.split(':')[1])]
                 if values['target']:camera['target']=self._numbers(values['target'],3)
                 if values['fov']:camera['fov']=float(values['fov'])
-            elif key=='camera' and world.kind=='lab3d_v1':
-                if values['target']:world.doc['camera']['target']=self._numbers(values['target'],3)
-                if values['fov']:world.doc['camera']['fov']=float(values['fov'])
+            elif key=='camera' and (world.kind=='lab3d_v1' or world.world3d is not None):
+                camera=world.doc['camera'] if world.kind=='lab3d_v1' else world.world3d['camera']
+                if values['target']:camera['target']=self._numbers(values['target'],3)
+                if values['fov']:camera['fov']=float(values['fov'])
             name=values['name']
             if name and name!=record.get('name'):
                 if key.startswith('u:') and world.active_screen:
