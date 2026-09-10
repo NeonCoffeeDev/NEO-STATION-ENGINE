@@ -61,7 +61,9 @@ class ViewportPanel(tk.Frame):
                 if structure.exists():
                     self.stages=json.loads(structure.read_text(encoding='utf-8')).get('nodes',[])
                     self.stage['values']=['%s: %s'%(n.get('kind','State'),n.get('value','')) for n in self.stages]
-                    if self.stages:self.stage.current(0)
+                    if self.stages:
+                        self.stage.current(0)
+                        self.set_room_refs(self.stages[0])
                 records=self.world.records(0)
                 has_2d=any(r['space']=='2d' for r in records);has_3d=any(r['space']=='3d' for r in records)
                 self.plane['values']=(['2D'] if has_2d else [])+(['PERSPECTIVE','XY','XZ','YZ'] if has_3d else [])
@@ -107,6 +109,14 @@ class ViewportPanel(tk.Frame):
         self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','XY','XZ','YZ'];self.plane.set('2D' if is_2d else 'PERSPECTIVE')
         self.selected=None;self.fit()
         self.note.configure(text='%s is selected in GAME FLOW. SCENE and GAME show its assigned project composition.'%stage.get('kind','State'))
+    def select_stage(self,stage_id,scene_reference=None):
+        index=next((i for i,n in enumerate(self.stages) if n.get('id')==stage_id),None)
+        if index is None:return False
+        self.stage.current(index);self.change_stage()
+        if scene_reference is not None:
+            room=next((i for i,(kind,value,_label) in enumerate(self.room_refs) if ('screen:'+str(value) if kind=='screen' else 'world3d' if kind=='world3d' else 'vn:'+str(self.world.scenes()[value].get('id',''))) == scene_reference),None)
+            if room is not None:self.room.current(room);self.change_room()
+        return True
     def index(self):
         if self.room_refs:
             kind,value,_label=self.room_refs[max(0,self.room.current())]

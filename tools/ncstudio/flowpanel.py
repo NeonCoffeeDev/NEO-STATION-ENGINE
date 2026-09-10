@@ -16,12 +16,12 @@ class FlowPanel(tk.Frame):
         self.group=self; self.project=None; self.nodes=[]; self.edges=[]
         self.selected=None; self.source=None; self.readonly=False
         self.history=[];self.focus_roots=None;self.section_id=None;self.enabled=False
-        bar=tk.Frame(self,bg=BG); bar.pack(fill='x')
+        bar=tk.Frame(self,bg=BG); bar.pack(fill='x');self.topbar=bar
         self.kind=ttk.Combobox(bar,state='readonly',values=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Run kit'])
         self.kind.current(0); self.kind.pack(side='left')
         for label, fn in [('ADD NODE',self.add),('CONNECT',self.connect),('EDIT',self.edit),('DELETE',self.delete),('UNLINK',self.unlink),('SAVE',self.save),('ENABLE',self.enable),('DRAFT',self.disable)]:
             Button(bar,label,fn,CYAN).pack(side='left',padx=2)
-        kitbar=tk.Frame(self,bg=BG);kitbar.pack(fill='x')
+        kitbar=tk.Frame(self,bg=BG);kitbar.pack(fill='x');self.kitbar=kitbar
         self.kit_choice=ttk.Combobox(kitbar,state='readonly',width=34)
         self.kit_choice.pack(side='left')
         Button(kitbar,'INSERT KIT',self.insert_kit,CYAN).pack(side='left',padx=4)
@@ -32,10 +32,10 @@ class FlowPanel(tk.Frame):
         self.note=tk.Label(self,bg=BG,fg=AMBER,anchor='w',wraplength=850)
         self.note.pack(fill='x')
         self.canvas=tk.Canvas(self,bg='#10171b',highlightthickness=0)
-        horizontal=tk.Scrollbar(self,orient='horizontal',command=self.canvas.xview)
+        horizontal=tk.Scrollbar(self,orient='horizontal',command=self.canvas.xview);self.horizontal=horizontal
         horizontal.pack(side='bottom',fill='x')
         self.canvas.configure(xscrollcommand=horizontal.set)
-        scroll=tk.Scrollbar(self,command=self.canvas.yview)
+        scroll=tk.Scrollbar(self,command=self.canvas.yview);self.scroll=scroll
         scroll.pack(side='right',fill='y')
         self.canvas.configure(yscrollcommand=scroll.set)
         self.canvas.pack(fill='both',expand=True)

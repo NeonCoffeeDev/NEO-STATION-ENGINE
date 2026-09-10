@@ -560,7 +560,7 @@ class Studio:
         self.room_panel = RoomPanel(self.main_panes, self.log)
         self.flow_panel = FlowPanel(self.main_panes)
         self.flow_panel.on_back = lambda: self.show_tab("structure")
-        self.structure_panel = StructurePanel(self.main_panes,self.open_stage_events)
+        self.structure_panel = StructurePanel(self.main_panes,self.open_stage_events,self.open_stage_scene,self.select_flow_stage)
         self.viewport_panel = ViewportPanel(self.main_panes)
         self.game_panel = GamePanel(self.main_panes,self.viewport_panel)
         self.asset_panel = AssetPanel(self.panes)
@@ -814,7 +814,14 @@ class Studio:
     def open_flow_from_sidebar(self,node_id):
         self.show_tab('structure')
         self.structure_panel.selected=node_id
-        self.structure_panel.draw();self.structure_panel.open_events()
+        self.structure_panel.draw();self.structure_panel.open_state()
+
+    def select_flow_stage(self,stage):
+        if self.viewport_panel.select_stage(stage['id']):
+            self.game_panel.refresh();self.update_author_context()
+
+    def open_stage_scene(self,stage,reference):
+        self.viewport_panel.select_stage(stage['id'],reference);self.show_tab('viewport');self.update_author_context()
 
     def update_author_context(self):
         if not getattr(self,'author_sidebar',None):return
