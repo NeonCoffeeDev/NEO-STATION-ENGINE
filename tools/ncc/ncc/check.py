@@ -321,6 +321,13 @@ def check_ps2(path):
             print(f"  Layout adapter: {meta['event_adapter']}; {len(triggers)}/32 triggers validated")
     except (OSError,ValueError,KeyError,TypeError) as exc:
         print(f"Viewport content cannot export: {exc}");return 1
+    try:
+        from .nccode import compile_project as compile_nc_code
+        from .ps2flow import compile_project as compile_events
+        functions=compile_nc_code(path);compile_events(path)
+        print(f"  NC-CODE: {len(functions)} native function(s); visual event references validated")
+    except (OSError,ValueError,KeyError,TypeError) as exc:
+        print(f"NC-Code / Events cannot compile: {exc}");return 1
     vn_path = os.path.join(path, "vn.json")
     if os.path.isfile(vn_path):
         from .vn import compile_content

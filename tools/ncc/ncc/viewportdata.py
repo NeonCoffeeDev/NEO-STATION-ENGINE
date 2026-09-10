@@ -63,6 +63,10 @@ class World:
         def common(row,obj=None):
             values=(obj or {}).copy();values.update(self.doc.get('object_properties',{}).get(row['key'],{}))
             row.update(isActive=values.get('isActive',True),visible=values.get('visible',True),tag=values.get('tag',''),state=values.get('state','default'),persistent=values.get('persistent',False))
+            row['components']=list(values.get('components',row.get('components',['Transform','Lifecycle','Identity'])))
+            row['scripts']=list(values.get('scripts',row.get('scripts',[])))
+            for field in ('sound','volume','loop','autoplay','spatial','radius'):
+                if field in values:row[field]=values[field]
         if self.kind=='screen2d_v1':
             keys=list(self.doc.get('screens',{}));self.active_screen=keys[min(room,len(keys)-1)] if keys else None
         if self.active_screen and self.active_screen in self.screens.get('screens',{}):
@@ -118,13 +122,16 @@ class World:
         if self.world3d:
             for name,obj in self.world3d.get('objects',{}).items():
                 scale=obj.get('scale',[1,1,1]);add('w:'+name,name,obj.get('position',[0,0,0]),[2*v for v in scale],'3d')
-                rows[-1].update(rot=list(obj.get('rotation',[0,0,0])),scale=list(scale),material={'texture':obj.get('material','')} if obj.get('material') else {})
+                rows[-1].update(rot=list(obj.get('rotation',[0,0,0])),scale=list(scale),material={'texture':obj.get('material','')} if obj.get('material') else {},components=obj.get('components',['Transform','Lifecycle','Identity','Mesh3D','Material']),scripts=obj.get('scripts',[]))
             if self.kind=='vn' and self.world3d.get('camera'):
                 camera=self.world3d['camera'];add('camera','Main Camera',camera['pos'],[.35,.35,.35],'3d');rows[-1]['target']=camera['target']
             for name,light in self.world3d.get('lights',{}).items():
                 add('l:'+name,name,light.get('position',[0,4,-3]),[.3,.3,.3],'3d');rows[-1].update(light=light,editor_only=True)
             for name,shadow in self.world3d.get('shadows',{}).items():
                 size=shadow.get('size',[1,.04,1]);add('h:'+name,name,shadow.get('position',[0,-.5,0]),size,'3d');rows[-1].update(shadow=shadow,editor_only=True)
+            for name,audio in self.world3d.get('audio_sources',{}).items():
+                add('q:'+name,name,audio.get('position',[0,0,0]),[.25,.25,.25],'3d')
+                rows[-1].update(component='Audio Source',components=audio.get('components',['Transform','Lifecycle','Identity','Audio Source']),scripts=audio.get('scripts',[]),sound=audio.get('sound',''),volume=audio.get('volume',100),loop=audio.get('loop',False),autoplay=audio.get('autoplay',False),spatial=audio.get('spatial',True),radius=audio.get('radius',8),editor_only=True)
         for t in self.triggers['triggers']:
             if t['room']==room:add('t:'+str(t['id']),t['name'],t['min'],[b-a for a,b in zip(t['min'],t['max'])],t['space'])
         if self.kind=='vn':rows.sort(key=lambda r: 3 if r['key'].startswith('t:') else 2 if r['key']=='dialogue' else 0 if r['key']=='background' else 1)
@@ -137,6 +144,26 @@ class World:
             obj=self.screens['screens'][self.active_screen]['objects'][int(key[2:])];obj.update(values);return
         self.doc.setdefault('object_properties',{}).setdefault(key,{}).update(values)
 
+    def add_component(self,key,name):
+        """Persist an attached component on this object, independent of UI."""
+        record=next((r for room in range(len(self.scenes())) for r in self.records(room) if r['key']==key),None)
+        current=list(record.get('components',[])) if record else []
+        if name not in current:current.append(name)
+        self.set_common(key,{'components':current})
+
+    def remove_component(self,key,name):
+        if name in ('Transform','Lifecycle','Identity'):
+            raise ValueError(name+' is a base GameObject component.')
+        record=next((r for room in range(len(self.scenes())) for r in self.records(room) if r['key']==key),None)
+        current=[part for part in (record.get('components',[]) if record else []) if part!=name]
+        self.set_common(key,{'components':current})
+
+    def attach_script(self,key,relative):
+        record=next((r for room in range(len(self.scenes())) for r in self.records(room) if r['key']==key),None)
+        scripts=list(record.get('scripts',[])) if record else []
+        if relative not in scripts:scripts.append(relative)
+        self.set_common(key,{'scripts':scripts,'components':list(dict.fromkeys((record.get('components',[]) if record else [])+['NC-Code Script']))})
+
     def move(self,room,key,pos):
         if key.startswith('u:') and self.active_screen:
             self.screens['screens'][self.active_screen]['objects'][int(key[2:])]['rect'][:2]=list(map(int,pos));return
@@ -146,6 +173,8 @@ class World:
             self.world3d['lights'][key[2:]]['position']=list(pos);return
         if key.startswith('h:') and self.world3d:
             self.world3d['shadows'][key[2:]]['position']=list(pos);return
+        if key.startswith('q:') and self.world3d:
+            self.world3d.setdefault('audio_sources',{})[key[2:]]['position']=list(pos);return
         if key.startswith('camera:') and self.kind=='fixed_room_v1':
             self.doc['cameras'][int(key.split(':')[1])]['pos']=list(pos);return
         if key.startswith('t:'):
@@ -277,6 +306,11 @@ class World:
                 if len(light.get('position',[]))!=3 or len(light.get('direction',[]))!=3:raise ValueError('Light %s needs position and direction.'%name)
                 if not 0<=light.get('intensity',1)<=2 or not 0<=light.get('ambient',.3)<=1:raise ValueError('Light intensity/ambient is outside the PS2 starter range.')
             if len(self.world3d.get('shadows',{}))>32:raise ValueError('The starter PS2 shadow budget is 32 blobs.')
+            if len(self.world3d.get('audio_sources',{}))>32:raise ValueError('The starter PS2 audio-object budget is 32 sources.')
+            for name,audio in self.world3d.get('audio_sources',{}).items():
+                pos=audio.get('position',[])
+                if len(pos)!=3 or any(type(v) not in (int,float) or not math.isfinite(v) for v in pos):raise ValueError('Audio source %s needs a finite 3D position.'%name)
+                if not 0<=audio.get('volume',100)<=100 or not .1<=audio.get('radius',8)<=100:raise ValueError('Audio source %s volume/radius is outside the PS2 starter range.'%name)
         validate_triggers(self);self.active_screen=active_screen
 
     def save(self):

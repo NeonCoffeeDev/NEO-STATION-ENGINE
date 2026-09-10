@@ -79,7 +79,43 @@
         1,
         1
       ],
-      "material": "textures/nc-logo.png"
+      "material": "textures/nc-logo.png",
+      "components": [
+        "Transform",
+        "Lifecycle",
+        "Identity",
+        "Mesh3D",
+        "Material",
+        "NC-Code Script"
+      ],
+      "scripts": [
+        "scripts/demo_cube.nc"
+      ]
+    }
+  },
+  "audio_sources": {
+    "Menu Audio": {
+      "position": [
+        0,
+        1,
+        -1
+      ],
+      "sound": "family:SKY",
+      "volume": 90,
+      "loop": false,
+      "autoplay": false,
+      "spatial": false,
+      "radius": 8,
+      "components": [
+        "Transform",
+        "Lifecycle",
+        "Identity",
+        "Audio Source",
+        "NC-Code Script"
+      ],
+      "scripts": [
+        "scripts/demo_cube.nc"
+      ]
     }
   }
 }

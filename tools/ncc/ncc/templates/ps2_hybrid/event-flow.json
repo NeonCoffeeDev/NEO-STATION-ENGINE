@@ -1,44 +1,36 @@
 {
   "version": 2,
   "target": "ps2",
-  "status": "draft",
+  "status": "enabled",
   "entry": 5,
   "stages": [
     {
       "id": 1,
-      "name": "Target: ps2"
+      "name": "Initialize systems"
     },
     {
       "id": 2,
-      "name": "Disclaimer (planned)"
+      "name": "Disclaimer"
     },
     {
       "id": 3,
-      "name": "Entry / menu (planned)"
+      "name": "Intro / video placeholder"
     },
     {
       "id": 4,
-      "name": "cafe"
+      "name": "Title Screen"
     },
     {
       "id": 5,
-      "name": "cafe"
+      "name": "Main Menu"
     },
     {
       "id": 6,
-      "name": "street"
+      "name": "3D Gameplay"
     },
     {
       "id": 7,
-      "name": "street"
-    },
-    {
-      "id": 8,
-      "name": "Outcome (planned)"
-    },
-    {
-      "id": 9,
-      "name": "Restart / exit (planned)"
+      "name": "Return to Title"
     }
   ],
   "nodes": [
@@ -57,12 +49,32 @@
       "x": 230,
       "y": 30,
       "section_id": 5
+    },
+    {
+      "id": 3,
+      "kind": "On button",
+      "value": "SQUARE",
+      "x": 20,
+      "y": 130,
+      "section_id": 5
+    },
+    {
+      "id": 4,
+      "kind": "Call NC-Code",
+      "value": "on_demo_signal",
+      "x": 230,
+      "y": 130,
+      "section_id": 5
     }
   ],
   "edges": [
     [
       1,
       2
+    ],
+    [
+      3,
+      4
     ]
   ]
 }

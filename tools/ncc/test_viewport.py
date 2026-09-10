@@ -122,6 +122,13 @@ class ViewportTests(unittest.TestCase):
             self.assertFalse(row['isActive']);self.assertEqual(row['tag'],'player')
             self.assertEqual(row['state'],'hurt');self.assertTrue(row['persistent'])
 
+    def test_components_and_script_attachment_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);world=self.setup_world(root)
+            world.add_component('s:0','Audio Source');world.attach_script('s:0','scripts/ship.nc');world.save()
+            row=World(root).records(0)[0]
+            self.assertIn('Audio Source',row['components']);self.assertEqual(row['scripts'],['scripts/ship.nc'])
+
     def test_ps2_materials_compile_to_aligned_native_data(self):
         from PIL import Image
         with tempfile.TemporaryDirectory() as d:

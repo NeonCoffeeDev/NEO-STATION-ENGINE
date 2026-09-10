@@ -36,6 +36,7 @@ from assetpanel import AssetPanel
 from structurepanel import StructurePanel
 from viewportpanel import GamePanel, ViewportPanel
 from sidebars import AuthorSidebar, InspectorSidebar, TabStack
+from hub import ProjectHub
 
 from ncc import toolchain as tc
 from ncc import assets
@@ -151,6 +152,7 @@ class Studio:
         workspace = tk.Frame(root, bg=PANEL)
         workspace.pack(fill="x", padx=8, pady=(0, 6))
         Button(workspace, "OPEN PROJECT", self.open_project_dialog, CYAN).pack(side="left")
+        self._build_icon_toolbar(workspace)
         Button(workspace, "FULLSCREEN  F11", self.toggle_fullscreen, DIM).pack(side="right")
         self.workspace_name = tk.Label(workspace, text="Select a project", bg=PANEL,
                                        fg=AMBER, font=MONO_SM)
@@ -185,11 +187,13 @@ class Studio:
         self.author_sidebar = AuthorSidebar(left, self.open_flow_from_sidebar,
                                             self.select_from_hierarchy,self.add_ready_object)
         self.author_sidebar.pack(fill="both", expand=True)
-        self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector, self.choose_sprite_image)
+        self.inspector = InspectorSidebar(inspector_holder, self.apply_inspector, self.choose_sprite_image,
+                                          self.add_component, self.remove_component, self.open_object_script)
         self.inspector.pack(fill="both", expand=True)
         self.viewport_panel.on_selection = self.on_viewport_selection
         self._build_statusbar()
         self._bind_keys()
+        self.project_hub_page=ProjectHub(root,self.repo,self.activate_project,self.open_project_dialog,self.new_project)
 
         self._sync_config_button()
         self.set_target(self.settings.get("target", "ps1"))
@@ -204,12 +208,33 @@ class Studio:
         self.root.after(60, self._drain)
         self.root.after(1000, self._poll_tty)
         self.root.after(1200, self._poll_project_data)
+        self.root.after(80,self.show_project_hub)
 
     # ---- chrome ---------------------------------------------------------
+
+    def _build_icon_toolbar(self,parent):
+        """Compact project actions using the supplied licensed icon set."""
+        folder=Path(self.repo)/'assets'/'editor'/'icons';self.toolbar_images=[]
+        actions=[('play','Build + Run',lambda:self.run_ncc('run')),
+                 ('save','Save Scene',lambda:self.viewport_panel.save()),
+                 ('refresh','Check Project',self.check_project),
+                 ('grid','Scene',lambda:self.show_tab('viewport')),
+                 ('player','GameObject',lambda:self.show_tab('room')),
+                 ('sound_on','Assets',lambda:self.show_tab('assets')),
+                 ('book','GameFlow',lambda:self.show_tab('structure')),
+                 ('settings','Project Hub',self.show_project_hub)]
+        bar=tk.Frame(parent,bg=PANEL);bar.pack(side='left',padx=10)
+        for icon,tip,command in actions:
+            path=folder/(icon+'.png')
+            try:image=tk.PhotoImage(file=str(path));self.toolbar_images.append(image)
+            except tk.TclError:image=None
+            button=tk.Button(bar,image=image,text='' if image else tip[:1],command=command,bg=PANEL_HI,activebackground=BORDER,relief='flat',bd=0,width=24,height=24,cursor='hand2')
+            button.pack(side='left',padx=1);button.bind('<Enter>',lambda _e,t=tip:self.set_status(t,DIM))
 
     def _build_menubar(self):
         menu=tk.Menu(self.root,tearoff=False)
         file_menu=tk.Menu(menu,tearoff=False);menu.add_cascade(label='File',menu=file_menu)
+        file_menu.add_command(label='Project Hub',command=self.show_project_hub)
         file_menu.add_command(label='Open Project...',command=self.open_project_dialog,accelerator='Ctrl+O')
         file_menu.add_command(label='New Project...',command=self.new_project)
         file_menu.add_separator();file_menu.add_command(label='Open Project Folder',command=self.open_folder)
@@ -241,6 +266,18 @@ class Studio:
         path=filedialog.askdirectory(parent=self.root,title='Open NEO-STATION project',initialdir=self.settings.get('project',self.repo))
         if path:self.activate_project(path)
 
+    def show_project_hub(self):
+        current=self.selected_project();recent=list(self.settings.get('recent_projects',[]))
+        if current and current not in recent:recent.insert(0,current)
+        if not recent:recent=find_projects(self.repo)[:8]
+        self.project_hub_page.refresh(recent)
+        self.project_hub_page.place(x=8,y=60,relwidth=1,width=-16,relheight=1,height=-68)
+        self.project_hub_page.lift();self.hub_visible=True
+
+    def hide_project_hub(self):
+        if getattr(self,'project_hub_page',None):self.project_hub_page.place_forget()
+        self.hub_visible=False
+
     def activate_project(self,path):
         path=os.path.abspath(path)
         try:project_meta(path)
@@ -248,7 +285,9 @@ class Studio:
         if not os.path.isfile(os.path.join(path,'nc.json')):messagebox.showerror('Open Project','Choose a folder containing nc.json.',parent=self.root);return
         if self.viewport_panel.dirty() and not self.viewport_panel.save():return
         self.projects=[path];self.plist.delete(0,'end');self.plist.insert('end',os.path.basename(path));self.plist.selection_set(0)
-        self.viewport_panel.drafts.clear();self.settings['project']=path;save_settings(self.settings);self.on_select()
+        self.viewport_panel.drafts.clear();self.settings['project']=path
+        recent=[path]+[p for p in self.settings.get('recent_projects',[]) if p!=path and os.path.isfile(os.path.join(p,'nc.json'))]
+        self.settings['recent_projects']=recent[:8];save_settings(self.settings);self.on_select();self.hide_project_hub()
 
     @staticmethod
     def _in_panes(split,widget):return str(widget) in tuple(map(str,split.panes()))
@@ -756,6 +795,7 @@ class Studio:
             # hardware budgets, and whether building is even possible -- rather
             # than leave PS1 selected while you edit a PS2 game.
             self.set_target(project_meta(p)["target"], from_project=True)
+            self.inspector.set_target(project_meta(p)['target'])
         self.kit_panel.load(p)
         self.flow_panel.load(p)
         self.asset_panel.load(p)
@@ -820,8 +860,32 @@ class Studio:
             widget=self.root.winfo_containing(*screen_position)
             if widget is not self.viewport_panel.canvas:return
         try:
-            world.active_screen=None;self.viewport_panel.checkpoint();room=self.viewport_panel.index()
-            if world.kind=='lab3d_v1' and kind in ('Empty GameObject','3D Mesh','Solid Object'):
+            self.viewport_panel.checkpoint();room=self.viewport_panel.index()
+            if world.active_screen and kind in ('Empty GameObject','2D Sprite','2D Text','Menu Button','UI Panel','Scripted GameObject'):
+                objects=world.screens['screens'][world.active_screen].setdefault('objects',[])
+                ui_type={'2D Sprite':'sprite2d','2D Text':'text','Menu Button':'button','UI Panel':'panel'}.get(kind,'panel')
+                component={'sprite2d':'Sprite2D','text':'Text2D','button':'Button2D','panel':'Panel2D'}[ui_type]
+                name={'2D Sprite':'Sprite','2D Text':'Text','Menu Button':'Button','UI Panel':'Panel','Scripted GameObject':'GameObject'}.get(kind,'GameObject')
+                name += ' '+str(len(objects)+1)
+                obj={'name':name,'type':ui_type,'rect':[288,208,64,32],'layer':len(objects),'visible':True,'isActive':True,'components':['Transform','Lifecycle','Identity',component]}
+                if ui_type in ('text','button'):obj['text']=name.upper()
+                textures=list((world.root/'textures'/'ui').glob('*.png')) if (world.root/'textures'/'ui').exists() else []
+                if ui_type=='sprite2d' and textures:obj['texture']=textures[0].relative_to(world.root).as_posix()
+                objects.append(obj);self.viewport_panel.selected='u:'+str(len(objects)-1)
+            elif world.world3d is not None and kind in ('Empty GameObject','3D Mesh','Solid Object','Scripted GameObject'):
+                objects=world.world3d.setdefault('objects',{});base={'3D Mesh':'Mesh','Solid Object':'Solid','Scripted GameObject':'Scripted'}.get(kind,'GameObject');name=base;number=1
+                while name in objects:number+=1;name=base+str(number)
+                if len(objects)>=64:raise ValueError('PS2 shared 3D world currently supports 64 runtime objects.')
+                textures=list((world.root/'textures').glob('*.png'))
+                objects[name]={'position':list(self.viewport_panel.editor_camera['target']),'rotation':[0,0,0],'scale':[1,1,1]}
+                if kind=='3D Mesh' and textures:objects[name]['material']=textures[0].relative_to(world.root).as_posix()
+                self.viewport_panel.selected='w:'+name
+            elif world.world3d is not None and kind=='Audio Emitter':
+                rows=world.world3d.setdefault('audio_sources',{});name='Audio';number=1
+                while name in rows:number+=1;name='Audio'+str(number)
+                rows[name]={'position':list(self.viewport_panel.editor_camera['target']),'sound':'','volume':100,'loop':False,'autoplay':False,'spatial':True,'radius':8}
+                self.viewport_panel.selected='q:'+name
+            elif world.kind=='lab3d_v1' and kind in ('Empty GameObject','3D Mesh','Solid Object'):
                 base={'Empty GameObject':'object','3D Mesh':'mesh','Solid Object':'solid'}[kind];name=base;number=1
                 while name in world.doc['objects']:number+=1;name=base+str(number)
                 if len(world.doc['objects'])>=16:raise ValueError('PS2 3D Lab currently supports 16 runtime objects.')
@@ -865,7 +929,11 @@ class Studio:
                 if values['size']:
                     size=self._numbers(values['size'],2);obj['rect'][2:]=list(map(int,size))
             truth=lambda value:value.lower() not in ('0','false','off','no')
-            world.set_common(key,{'isActive':truth(values['isActive']),'visible':truth(values['visible']),'tag':values['tag'],'state':values['state'] or 'default','persistent':truth(values['persistent'])})
+            common={'isActive':truth(values['isActive']),'visible':truth(values['visible']),'tag':values['tag'],'state':values['state'] or 'default','persistent':truth(values['persistent'])}
+            if 'Audio Source' in record.get('components',[]):
+                common.update(sound=values['sound'],volume=int(values['volume'] or 100),loop=truth(values['loop']),autoplay=truth(values['autoplay']),spatial=truth(values['spatial']),radius=float(values['radius'] or 8))
+                if key.startswith('q:') and world.world3d is not None:world.world3d['audio_sources'][key[2:]].update(common)
+            world.set_common(key,common)
             if key.startswith('camera:') and world.kind=='fixed_room_v1':
                 camera=world.doc['cameras'][int(key.split(':')[1])]
                 if values['target']:camera['target']=self._numbers(values['target'],3)
@@ -882,6 +950,39 @@ class Studio:
             self.set_status('GameObject properties saved',GREEN)
         except (ValueError,TypeError,OSError) as exc:
             self.viewport_panel.undo();messagebox.showerror('Inspector',str(exc),parent=self.root)
+
+    def add_component(self,record,name):
+        world=self.viewport_panel.world
+        if not world:return
+        try:
+            self.viewport_panel.checkpoint();world.add_component(record['key'],name);world.validate();world.save();self.viewport_panel.draw()
+            self.inspector.show_record(self.viewport_panel.record());self.update_author_context();self.set_status(name+' attached',GREEN)
+        except (ValueError,TypeError,OSError) as exc:self.viewport_panel.undo();messagebox.showerror('Add Component',str(exc),parent=self.root)
+
+    def remove_component(self,record,name):
+        world=self.viewport_panel.world
+        if not world:return
+        try:
+            self.viewport_panel.checkpoint();world.remove_component(record['key'],name);world.validate();world.save();self.viewport_panel.draw();self.inspector.show_record(self.viewport_panel.record());self.set_status(name+' removed',AMBER)
+        except (ValueError,TypeError,OSError) as exc:self.viewport_panel.undo();messagebox.showerror('Remove Component',str(exc),parent=self.root)
+
+    def open_object_script(self,record):
+        p=self.selected_project()
+        if not p:return
+        from tkinter import simpledialog
+        from ncc import nccode
+        existing=record.get('scripts',[])
+        if existing:path=Path(p)/existing[0]
+        else:
+            default=re.sub(r'[^A-Za-z0-9_]+','_',record.get('name','object').lower()).strip('_') or 'object'
+            name=simpledialog.askstring('Attach NC-Code','Script name:',initialvalue=default,parent=self.root)
+            if not name:return
+            try:path=nccode.create(p,name)
+            except ValueError as exc:messagebox.showerror('NC-Code',str(exc),parent=self.root);return
+            relative=path.relative_to(Path(p)).as_posix();world=self.viewport_panel.world;self.viewport_panel.checkpoint();world.attach_script(record['key'],relative);world.save();self.viewport_panel.draw();self.inspector.show_record(self.viewport_panel.record())
+        err=self.editor.load(str(path))
+        if err:messagebox.showerror('NC-Code',err,parent=self.root);return
+        self.show_tab('script');self.set_status('editing NC-Code / '+path.name,CYAN)
 
     def choose_sprite_image(self,record,entry):
         world=self.viewport_panel.world

@@ -75,9 +75,9 @@ class FlowPanel(tk.Frame):
             if self.target=='ps1':
                 kinds=['On start','On button','Change room','Show pooled object','Hide object','Play effect','Show mesh','Hide mesh','Set sprite position','Set object position','After frames','Every frames','On trigger enter','On trigger exit']
             elif meta.get('event_adapter')=='fixed_room_v1':
-                kinds=['On start','On button','On zone','On arrival','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Stop movement','Set camera','Interact','Reset game','On trigger enter','On trigger exit']
+                kinds=['On start','On button','On zone','On arrival','After frames','Every frames','Once','Cooldown','Move to','Set variable','Add variable','If equal','If at least','Repeat','Stop movement','Set camera','Interact','Reset game','On trigger enter','On trigger exit','Call NC-Code']
             elif meta.get('event_adapter') in ('lab3d_v1','vn_v1','pad2d_v1'):
-                kinds=['On start','On button','After frames','Every frames','Once','Cooldown','Set variable','Add variable','If equal','If at least','Repeat','On trigger enter','On trigger exit']
+                kinds=['On start','On button','After frames','Every frames','Once','Cooldown','Set variable','Add variable','If equal','If at least','Repeat','On trigger enter','On trigger exit','Call NC-Code']
                 if meta['event_adapter']=='pad2d_v1':kinds += ['Reset game','Set colour','Set sprite position']
                 else:kinds += ['Reset game','Set colour','Set object position'] if meta['event_adapter']=='lab3d_v1' else ['Change room','Show main menu']
             else:
@@ -143,7 +143,7 @@ class FlowPanel(tk.Frame):
         if self.readonly:return
         for n in self.nodes:
             if n['id']==self.selected:
-                if n['kind'] in ('On trigger enter','On trigger exit','Go to Flow Box'):v=choose_reference(self,self.project,n['kind'],n.get('value',''))
+                if n['kind'] in ('On trigger enter','On trigger exit','Go to Flow Box','Call NC-Code'):v=choose_reference(self,self.project,n['kind'],n.get('value',''))
                 elif n['kind']=='Move to':v=MoveDialog(self,n.get('value','')).result
                 elif n['kind'] in ('Set variable','Add variable','If equal','If at least'):v=VariableDialog(self,n['kind'],n.get('value','')).result
                 else:v=simpledialog.askstring(n['kind'],HELP.get(n['kind'],'Existing project object index:'),initialvalue=n.get('value',''),parent=self)

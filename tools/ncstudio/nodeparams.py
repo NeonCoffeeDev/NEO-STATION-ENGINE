@@ -27,6 +27,7 @@ HELP = {
     'Move to':'Move the player to a destination over time. No pathfinding or collision avoidance.',
     'Change room':'Existing room index (0 is the first room).',
     'Play effect':'Existing sound index. Check that this project contains the sound.',
+    'Call NC-Code':'Function name from a project script, such as on_activate. The function is compiled into native console code.',
 }
 
 class MoveDialog(simpledialog.Dialog):
@@ -95,7 +96,13 @@ class ReferenceDialog(simpledialog.Dialog):
 def choose_reference(parent,project,kind,value):
     try:
         root=Path(project)
-        if kind.startswith('On trigger'):
+        if kind=='Call NC-Code':
+            from ncc.nccode import _parse
+            rows=[]
+            for script in sorted((root/'scripts').glob('*.nc')) if (root/'scripts').exists() else []:
+                rows.extend((name,script.name+'  /  '+name) for name in _parse(script))
+            if not rows:raise ValueError('Attach or create an NC-Code script from the Inspector first.')
+        elif kind.startswith('On trigger'):
             path=root/'triggers.json'
             if not path.exists():raise ValueError('Create and SAVE a trigger in VIEWPORT first.')
             rows=[(t['id'],'%s | %s | room %s | tracks %s'%(t['id'],t['name'],t['room'],t['subject'])) for t in json.loads(path.read_text(encoding='utf-8'))['triggers']]

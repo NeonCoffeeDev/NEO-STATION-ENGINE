@@ -8,16 +8,18 @@ from .flowstate import validate as validate_state
 from .triggercode import predicates
 
 def compile_project(project):
+    from .nccode import compile_project as compile_nc_code
     root=Path(project); path=root/'event-flow.json'
+    code_functions=compile_nc_code(root)
     if not path.exists():
         (root/'src').mkdir(parents=True,exist_ok=True)
-        (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n', encoding='utf-8')
+        (root/'src/nc_events.h').write_text('#include "nc_code_generated.h"\nstatic void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n', encoding='utf-8')
         return
     doc=json.loads(path.read_text())
     if doc.get('target')!='ps2': raise ValueError('PS2 build refuses a graph from another console.')
     if doc.get('status')=='draft':
         (root/'src').mkdir(parents=True,exist_ok=True)
-        (root/'src/nc_events.h').write_text('static void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n')
+        (root/'src/nc_events.h').write_text('#include "nc_code_generated.h"\nstatic void nc_events(int start, unsigned int pressed, int zone) {(void)start;(void)pressed;(void)zone;}\n')
         return
     if doc.get('status')!='enabled':raise ValueError('Invalid event status.')
     meta=json.loads((root/'nc.json').read_text())
@@ -39,7 +41,7 @@ def compile_project(project):
     for a,b in doc['edges']:
         if a not in lookup or b not in lookup or b in links[a]:raise ValueError('Invalid or duplicate edge.')
         links[a].append(b);incoming[b]+=1
-    output=['/* Generated PS2 fixed-room events. Do not edit. */','static void nc_events(int start, unsigned int pressed, int zone) {','    (void)start; (void)pressed; (void)zone;', '    static unsigned int tick;', '    if (start) tick = 0; else if (tick < 0xffffffffu) tick++;']
+    output=['/* Generated PS2 fixed-room events. Do not edit. */','#include "nc_code_generated.h"','static void nc_events(int start, unsigned int pressed, int zone) {','    (void)start; (void)pressed; (void)zone;', '    static unsigned int tick;', '    if (start) tick = 0; else if (tick < 0xffffffffu) tick++;']
     if scoped:
         output = output[:3] + [
             '    static int active, pending, initialized;',
@@ -81,6 +83,11 @@ def compile_project(project):
         reached.add(i)
         for j in links[i]:
             n=lookup[j]
+            if n['kind']=='Call NC-Code':
+                name=str(n.get('value','')).strip()
+                if name not in code_functions:raise ValueError('Call NC-Code references missing function: '+name)
+                output.append('        nc_code_%s();'%name)
+                reached.add(j);walk(j,stack|{i});continue
             if n['kind']=='Go to Flow Box' and scoped:
                 output.append('        if (!pending) pending = %d;' % int(n['value']))
                 reached.add(j)
@@ -168,7 +175,7 @@ def compile_project(project):
             v=int(value)
             if v not in (0,1):raise ValueError('Zone must be 0 or 1.')
             condition='zone == %d'%v
-        elif kind in actions or (adapter=='pad2d_v1' and kind=='Set sprite position') or (adapter=='lab3d_v1' and kind=='Set object position') or (scoped and kind=='Go to Flow Box') or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
+        elif kind in actions or kind=='Call NC-Code' or (adapter=='pad2d_v1' and kind=='Set sprite position') or (adapter=='lab3d_v1' and kind=='Set object position') or (scoped and kind=='Go to Flow Box') or kind in ('Once','Cooldown','Move to','Repeat') or kind in variable_kinds:continue
         else:raise ValueError('Unsupported PS2 node: '+kind)
         if incoming[n['id']]:raise ValueError('Events cannot have incoming links.')
         if scoped:

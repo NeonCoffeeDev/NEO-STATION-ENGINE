@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from ncc.ps2flow import compile_project
+from ncc.nccode import create as create_code
 
 class LogicTests(unittest.TestCase):
     def compile(self, actions, event='On button', value='CROSS'):
@@ -35,5 +36,23 @@ class LogicTests(unittest.TestCase):
         self.assertIn('nc_action(1, 0);',code)
     def test_cancel_opcode(self):
         self.assertIn('nc_action(3, 0);',self.compile([('Stop movement','0')]))
+    def test_visual_event_calls_compiled_nc_code(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'src').mkdir();(root/'scripts').mkdir()
+            (root/'nc.json').write_text('{"event_adapter":"vn_v1"}')
+            (root/'vn.json').write_text('{"kit":{"scenes":[{}]}}')
+            (root/'scripts/menu.nc').write_text('func confirm():\n    play_sound(3)\n')
+            nodes=[dict(id=1,kind='On button',value='CROSS'),dict(id=2,kind='Call NC-Code',value='confirm')]
+            (root/'event-flow.json').write_text(json.dumps(dict(target='ps2',status='enabled',nodes=nodes,edges=[[1,2]])))
+            compile_project(root)
+            self.assertIn('nc_code_confirm();',(root/'src/nc_events.h').read_text())
+            self.assertIn('nc_sfx_play(3);',(root/'src/nc_code_generated.h').read_text())
+    def test_nc_code_rejects_unknown_console_call(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'src').mkdir();path=create_code(root,'bad')
+            path.write_text('func run():\n    unlimited_gpu_magic(1)\n')
+            with self.assertRaisesRegex(ValueError,'unsupported call'):
+                from ncc.nccode import compile_project as compile_code
+                compile_code(root)
 
 if __name__=='__main__':unittest.main()

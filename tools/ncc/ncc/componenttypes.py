@@ -13,6 +13,7 @@ COMPONENTS={
  'Collision Box':dict(icon='COL',targets=('ps1','ps2'),fields=('center','size','solid'),code=('touching(a,b)','sprite_set_solid(sprite,enabled)')),
  'Trigger Volume':dict(icon='TRG',targets=('ps1','ps2'),fields=('center','size','event'),code=('touching(a,b)',)),
  'Audio Source':dict(icon='SFX',targets=('ps1','ps2'),fields=('sound','volume','loop','radius'),code=('play_sound(sound)',)),
+ 'NC-Code Script':dict(icon='CODE',targets=('ps2',),fields=('script','enabled'),code=('func on_activate():','    play_sound(0)')),
  'Light':dict(icon='LIT',targets=('ps2',),fields=('color','intensity','direction','range'),code=()),
  'FX Emitter':dict(icon='FX',targets=('ps1','ps2'),fields=('effect','rate','duration','layer'),code=('shake(strength)',)),
  'Attachment Point':dict(icon='PNT',targets=('ps1','ps2'),fields=('position','rotation','tag'),code=()),
@@ -30,6 +31,7 @@ READY_OBJECTS={
  'Solid Object':('Transform','Lifecycle','Identity','Collision Box'),
  'Trigger':('Transform','Lifecycle','Identity','Trigger Volume'),
  'Audio Emitter':('Transform','Lifecycle','Identity','Audio Source'),
+ 'Scripted GameObject':('Transform','Lifecycle','Identity','NC-Code Script'),
  'FX Emitter':('Transform','Lifecycle','Identity','FX Emitter'),
  'PS2 Light':('Transform','Lifecycle','Identity','Light'),
 }
