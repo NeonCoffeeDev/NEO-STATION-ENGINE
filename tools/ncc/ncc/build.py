@@ -444,6 +444,12 @@ def _build_ps2(src):
     fragile part of the toolchain in our hands for no gain.
     """
     name = os.path.basename(src)
+    from .ps2ui import compile_project as compile_ui
+    try:
+        menu_rows = compile_ui(src)
+        print("  UI kit -> src/nc_ui_generated.h (%d menu actions)" % len(menu_rows))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise SystemExit(f"ncc: PS2 UI -- {exc}")
     screens_path=Path(src)/'screens.json'
     if screens_path.exists():
         try:
@@ -457,6 +463,15 @@ def _build_ps2(src):
                 result=subprocess.run([sys.executable,str(tool),str(source),str(output),'nc_logo','128'],capture_output=True,text=True)
                 if result.returncode:raise ValueError(result.stderr or result.stdout)
                 print('  Sprite2D brand logo -> src/logo_data.c')
+            skin=next((obj for screen in screens.get('screens',{}).values() for obj in screen.get('objects',[]) if obj.get('role')=='ui_skin' and obj.get('texture')),None)
+            if skin:
+                root=Path(src).resolve();source=(root/skin['texture']).resolve()
+                if root not in source.parents or source.suffix.lower()!='.png' or not source.is_file():
+                    raise ValueError('ui_skin must reference a project-local PNG')
+                output=root/'src/ui_skin_data.c';tool=Path(tc.project_root())/'tools/png2ps2.py'
+                result=subprocess.run([sys.executable,str(tool),str(source),str(output),'nc_ui_skin'],capture_output=True,text=True)
+                if result.returncode:raise ValueError(result.stderr or result.stdout)
+                print('  UI Menu + HUD kit skin -> src/ui_skin_data.c')
         except (OSError,ValueError,KeyError,TypeError) as exc:raise SystemExit(f"ncc: screens.json brand logo -- {exc}")
     if project_meta(src).get("event_adapter") == "fixed_room_v1":
         from . import roomlayout

@@ -263,7 +263,7 @@
       "objects": [
         {
           "id": "menu_bg",
-          "name": "Menu Background",
+          "name": "Menu Canvas",
           "type": "panel",
           "rect": [
             0,
@@ -278,8 +278,32 @@
             "Transform",
             "Lifecycle",
             "Identity",
+            "Canvas2D",
             "Panel2D"
-          ]
+          ],
+          "kit": "PS2 Menu + HUD"
+        },
+        {
+          "id": "menu_frame",
+          "name": "Menu Frame",
+          "type": "sprite2d",
+          "rect": [
+            176,
+            142,
+            288,
+            80
+          ],
+          "layer": 5,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Texture Rect"
+          ],
+          "texture": "textures/ui/Skin04-Cropped_Text-Block.png",
+          "role": "ui_skin"
         },
         {
           "id": "menu_logo",
@@ -301,21 +325,17 @@
             "Sprite2D"
           ],
           "role": "brand_logo",
-          "texture": "textures/ui/neon-coffee-logo.png",
-          "details": {
-            "filter": "nearest",
-            "blend": "cutout"
-          }
+          "texture": "textures/ui/neon-coffee-logo.png"
         },
         {
-          "id": "new_game",
-          "name": "New Game Button",
+          "id": "level_3d",
+          "name": "3D Lab Button",
           "type": "button",
           "rect": [
-            220,
-            210,
-            200,
-            36
+            184,
+            188,
+            272,
+            32
           ],
           "layer": 20,
           "visible": true,
@@ -326,17 +346,18 @@
             "Identity",
             "Button2D"
           ],
-          "text": "NEW GAME"
+          "text": "3D LAB",
+          "action": "load:world3d"
         },
         {
-          "id": "continue",
-          "name": "Continue Button",
+          "id": "level_vn",
+          "name": "Visual Novel Button",
           "type": "button",
           "rect": [
-            220,
-            258,
-            200,
-            36
+            184,
+            228,
+            272,
+            32
           ],
           "layer": 21,
           "visible": true,
@@ -347,17 +368,18 @@
             "Identity",
             "Button2D"
           ],
-          "text": "CONTINUE"
+          "text": "VISUAL NOVEL",
+          "action": "load:vn"
         },
         {
-          "id": "options",
-          "name": "Options Button",
+          "id": "level_ui",
+          "name": "UI Lab Button",
           "type": "button",
           "rect": [
-            220,
-            306,
-            200,
-            36
+            184,
+            268,
+            272,
+            32
           ],
           "layer": 22,
           "visible": true,
@@ -368,7 +390,584 @@
             "Identity",
             "Button2D"
           ],
-          "text": "OPTIONS"
+          "text": "UI + INVENTORY LAB",
+          "action": "load:ui_lab"
+        },
+        {
+          "id": "menu_options",
+          "name": "Options Button",
+          "type": "button",
+          "rect": [
+            184,
+            308,
+            272,
+            32
+          ],
+          "layer": 23,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Button2D"
+          ],
+          "text": "OPTIONS",
+          "action": "open:options"
+        },
+        {
+          "id": "menu_help",
+          "name": "Menu Help",
+          "type": "text",
+          "rect": [
+            176,
+            390,
+            288,
+            20
+          ],
+          "layer": 30,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "X SELECT   TRIANGLE BACK"
+        }
+      ]
+    },
+    "hud_3d": {
+      "name": "3D Gameplay HUD",
+      "objects": [
+        {
+          "id": "hud_canvas",
+          "name": "3D HUD Canvas",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Canvas2D"
+          ]
+        },
+        {
+          "id": "hud_name",
+          "name": "Area Label",
+          "type": "text",
+          "rect": [
+            24,
+            20,
+            240,
+            20
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "NC 3D LAB"
+        },
+        {
+          "id": "hud_health",
+          "name": "Health Bar",
+          "type": "progress",
+          "rect": [
+            24,
+            48,
+            180,
+            16
+          ],
+          "layer": 11,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Progress Bar"
+          ],
+          "value": 75,
+          "maximum": 100,
+          "color": "#5fd4d0"
+        },
+        {
+          "id": "hud_prompt",
+          "name": "Interaction Prompt",
+          "type": "text",
+          "rect": [
+            320,
+            404,
+            296,
+            20
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "SQUARE INVENTORY  TRIANGLE MENU"
+        }
+      ]
+    },
+    "hud_2d": {
+      "name": "2D / VN HUD",
+      "objects": [
+        {
+          "id": "hud2_canvas",
+          "name": "2D HUD Canvas",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Canvas2D"
+          ]
+        },
+        {
+          "id": "hud2_title",
+          "name": "Story Label",
+          "type": "text",
+          "rect": [
+            24,
+            20,
+            280,
+            20
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "VISUAL NOVEL LAB"
+        },
+        {
+          "id": "hud2_prompt",
+          "name": "Story Prompt",
+          "type": "text",
+          "rect": [
+            340,
+            404,
+            276,
+            20
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "X ADVANCE  SQUARE INVENTORY"
+        }
+      ]
+    },
+    "inventory_grid": {
+      "name": "Grid Inventory",
+      "objects": [
+        {
+          "id": "inventory_canvas",
+          "name": "Inventory Canvas",
+          "type": "panel",
+          "rect": [
+            0,
+            0,
+            640,
+            448
+          ],
+          "layer": 0,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Canvas2D"
+          ]
+        },
+        {
+          "id": "inventory_frame",
+          "name": "Inventory Frame",
+          "type": "sprite2d",
+          "rect": [
+            176,
+            56,
+            288,
+            80
+          ],
+          "layer": 5,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Texture Rect"
+          ],
+          "texture": "textures/ui/Skin07-Cropped_Text-Block.png"
+        },
+        {
+          "id": "inventory_title",
+          "name": "Inventory Title",
+          "type": "text",
+          "rect": [
+            224,
+            72,
+            192,
+            24
+          ],
+          "layer": 10,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "GRID INVENTORY"
+        },
+        {
+          "id": "inventory_grid",
+          "name": "Inventory Grid",
+          "type": "inventory_grid",
+          "rect": [
+            146,
+            120,
+            348,
+            220
+          ],
+          "layer": 15,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Grid Container"
+          ],
+          "columns": 4,
+          "rows": 3,
+          "spacing": 12,
+          "selection": 0
+        },
+        {
+          "id": "slot_00",
+          "name": "Inventory Slot 01",
+          "type": "panel",
+          "rect": [
+            154,
+            128,
+            72,
+            60
+          ],
+          "layer": 20,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 0,
+          "item": "KEY"
+        },
+        {
+          "id": "slot_01",
+          "name": "Inventory Slot 02",
+          "type": "panel",
+          "rect": [
+            238,
+            128,
+            72,
+            60
+          ],
+          "layer": 21,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 1,
+          "item": "COFFEE"
+        },
+        {
+          "id": "slot_02",
+          "name": "Inventory Slot 03",
+          "type": "panel",
+          "rect": [
+            322,
+            128,
+            72,
+            60
+          ],
+          "layer": 22,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 2,
+          "item": "RELIC"
+        },
+        {
+          "id": "slot_03",
+          "name": "Inventory Slot 04",
+          "type": "panel",
+          "rect": [
+            406,
+            128,
+            72,
+            60
+          ],
+          "layer": 23,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 3,
+          "item": "MAP"
+        },
+        {
+          "id": "slot_04",
+          "name": "Inventory Slot 05",
+          "type": "panel",
+          "rect": [
+            154,
+            200,
+            72,
+            60
+          ],
+          "layer": 24,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 4,
+          "item": ""
+        },
+        {
+          "id": "slot_05",
+          "name": "Inventory Slot 06",
+          "type": "panel",
+          "rect": [
+            238,
+            200,
+            72,
+            60
+          ],
+          "layer": 25,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 5,
+          "item": ""
+        },
+        {
+          "id": "slot_06",
+          "name": "Inventory Slot 07",
+          "type": "panel",
+          "rect": [
+            322,
+            200,
+            72,
+            60
+          ],
+          "layer": 26,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 6,
+          "item": ""
+        },
+        {
+          "id": "slot_07",
+          "name": "Inventory Slot 08",
+          "type": "panel",
+          "rect": [
+            406,
+            200,
+            72,
+            60
+          ],
+          "layer": 27,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 7,
+          "item": ""
+        },
+        {
+          "id": "slot_08",
+          "name": "Inventory Slot 09",
+          "type": "panel",
+          "rect": [
+            154,
+            272,
+            72,
+            60
+          ],
+          "layer": 28,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 8,
+          "item": ""
+        },
+        {
+          "id": "slot_09",
+          "name": "Inventory Slot 10",
+          "type": "panel",
+          "rect": [
+            238,
+            272,
+            72,
+            60
+          ],
+          "layer": 29,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 9,
+          "item": ""
+        },
+        {
+          "id": "slot_10",
+          "name": "Inventory Slot 11",
+          "type": "panel",
+          "rect": [
+            322,
+            272,
+            72,
+            60
+          ],
+          "layer": 30,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 10,
+          "item": ""
+        },
+        {
+          "id": "slot_11",
+          "name": "Inventory Slot 12",
+          "type": "panel",
+          "rect": [
+            406,
+            272,
+            72,
+            60
+          ],
+          "layer": 31,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Panel2D"
+          ],
+          "slot": 11,
+          "item": ""
+        },
+        {
+          "id": "inventory_help",
+          "name": "Inventory Help",
+          "type": "text",
+          "rect": [
+            148,
+            380,
+            344,
+            20
+          ],
+          "layer": 40,
+          "visible": true,
+          "isActive": true,
+          "components": [
+            "Transform",
+            "Lifecycle",
+            "Identity",
+            "Text2D"
+          ],
+          "text": "D-PAD SELECT   TRIANGLE BACK"
         }
       ]
     }

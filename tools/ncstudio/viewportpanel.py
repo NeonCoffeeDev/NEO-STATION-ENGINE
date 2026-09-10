@@ -170,7 +170,7 @@ class ViewportPanel(tk.Frame):
             w,h=max(12,w),max(12,h)
             color=AMBER if r['key']==self.selected else ('#bd85ff' if trigger else '#ff667f' if r.get('component')=='collision' else '#80ffb0' if r.get('component')=='attachment' else CYAN)
             ui=r.get('ui_type')
-            fill='' if trigger else ('#111923' if ui=='panel' else '#29404d' if ui=='button' else '' if ui=='text' else '#23333b')
+            fill='' if trigger else ('#111923' if ui in ('panel','inventory_grid') else '#29404d' if ui=='button' else '#5fd4d0' if ui=='progress' else '' if ui=='text' else '#23333b')
             outline='' if self.output_mode and ui in ('panel','text') else color
             c.create_rectangle(x,y,x+w,y+h,outline=outline,fill=fill,width=2,tags=('obj',r['key']))
             if flat and not trigger:self.picture(r,x,y,w,h)

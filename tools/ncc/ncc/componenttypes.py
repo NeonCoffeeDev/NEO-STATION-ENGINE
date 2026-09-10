@@ -7,6 +7,11 @@ COMPONENTS={
  'Text2D':dict(icon='TXT',targets=('ps1','ps2'),fields=('text','font','color','align','layer','visible'),code=('draw_text(x,y,text)','set_text(object,text)','show(object)','hide(object)')),
  'Panel2D':dict(icon='PNL',targets=('ps1','ps2'),fields=('size','color','layer','visible'),code=('show(object)','hide(object)')),
  'Button2D':dict(icon='BTN',targets=('ps1','ps2'),fields=('text','action','selected','layer','visible'),code=('button_pressed(object)','set_text(object,text)','show(object)','hide(object)')),
+ 'Canvas2D':dict(icon='UI',targets=('ps1','ps2'),fields=('size','target_resolution','visible'),code=('show(object)','hide(object)')),
+ 'Container2D':dict(icon='BOX',targets=('ps1','ps2'),fields=('layout','padding','spacing','layer','visible'),code=('show(object)','hide(object)')),
+ 'Grid Container':dict(icon='GRID',targets=('ps1','ps2'),fields=('columns','rows','spacing','selection'),code=('inventory_select(slot)','inventory_show()','inventory_hide()')),
+ 'Texture Rect':dict(icon='TEX',targets=('ps1','ps2'),fields=('image','stretch','tint','layer','visible'),code=('show(object)','hide(object)')),
+ 'Progress Bar':dict(icon='BAR',targets=('ps1','ps2'),fields=('value','maximum','color','layer','visible'),code=('set_value(object,value)','show(object)','hide(object)')),
  'Mesh3D':dict(icon='MSH',targets=('ps1','ps2'),fields=('mesh','material','visible'),code=('show(object)','hide(object)')),
  'Material':dict(icon='MAT',targets=('ps1','ps2'),fields=('texture','tint','lighting'),code=('show(object)',)),
  'Camera':dict(icon='CAM',targets=('ps1','ps2'),fields=('target','fov','active'),code=('camera_set(x,y,z,pitch,yaw,roll)','camera_move(x,y,z)')),
@@ -20,12 +25,22 @@ COMPONENTS={
  'Custom Variables':dict(icon='VAR',targets=('ps1','ps2'),fields=('name','type','default','exposed'),code=('save_get(slot)','save_set(slot,value)')),
 }
 
+# The current compact Canvas subset. Anchors, responsive containers and themes
+# intentionally remain a later UI-canvas milestone; these calls already share
+# the NC-Code/runtime vocabulary used by visual Events.
+UI_NC_CODE=('open_inventory()','load_level(0)','load_level(1)','show_main_menu()')
+
 READY_OBJECTS={
  'Empty GameObject':('Transform','Lifecycle','Identity'),
  '2D Sprite':('Transform','Lifecycle','Identity','Sprite2D'),
  '2D Text':('Transform','Lifecycle','Identity','Text2D'),
  'Menu Button':('Transform','Lifecycle','Identity','Button2D'),
  'UI Panel':('Transform','Lifecycle','Identity','Panel2D'),
+ 'UI Canvas':('Transform','Lifecycle','Identity','Canvas2D'),
+ 'UI Container':('Transform','Lifecycle','Identity','Container2D'),
+ 'Texture Rect':('Transform','Lifecycle','Identity','Texture Rect'),
+ 'Progress Bar':('Transform','Lifecycle','Identity','Progress Bar'),
+ 'Inventory Grid':('Transform','Lifecycle','Identity','Panel2D','Grid Container'),
  '3D Mesh':('Transform','Lifecycle','Identity','Mesh3D','Material'),
  'Main Camera':('Transform','Lifecycle','Identity','Camera'),
  'Solid Object':('Transform','Lifecycle','Identity','Collision Box'),

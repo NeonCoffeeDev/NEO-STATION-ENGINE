@@ -20,6 +20,8 @@ PS2_CALLS = {
     "play_music": ("nc_music_play(%d);", 0, 255, 1, ('vn_v1',)),
     "change_scene": ("nc_action(4, %d);", 0, 255, 1, ('vn_v1',)),
     "show_main_menu": ("nc_action(6, 0);", 0, 0, 0, ('vn_v1',)),
+    "open_inventory": ("nc_action(7, 0);", 0, 0, 0, ('vn_v1',)),
+    "load_level": ("nc_action(8, %d);", 0, 2, 1, ('vn_v1',)),
     "reset_game": ("nc_action(2, 0);", 0, 0, 0, ('fixed_room_v1','lab3d_v1','pad2d_v1')),
     "set_camera": ("nc_action(0, %d);", 0, 31, 1, ('fixed_room_v1',)),
     "interact": ("nc_action(1, 0);", 0, 0, 0, ('fixed_room_v1',)),

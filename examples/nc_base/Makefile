@@ -8,7 +8,7 @@
 # exactly what PS2SDK's own samples do. That is M6.
 
 EE_BIN  = game.elf
-EE_OBJS = src/main.o src/logo_data.o src/font_data.o src/nc_materials.o src/audio/audio_data.o
+EE_OBJS = src/main.o src/logo_data.o src/ui_skin_data.o src/font_data.o src/nc_materials.o src/audio/audio_data.o
 
 EE_LIBS = -ldraw -lgraph -lmath3d -lpacket -ldma -lpad -laudsrv -lpatches -lm
 

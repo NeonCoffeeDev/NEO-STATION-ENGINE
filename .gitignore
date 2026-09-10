@@ -55,6 +55,8 @@ examples/*/src/audio/*.irx
 examples/*/src/nc_events.h
 **/src/nc_events.h
 **/src/nc_code_generated.h
+**/src/nc_ui_generated.h
+**/src/ui_skin_data.c
 examples/*/src/nc_materials.c
 examples/*/src/nc_materials.h
 examples/*/.ncc-cache/

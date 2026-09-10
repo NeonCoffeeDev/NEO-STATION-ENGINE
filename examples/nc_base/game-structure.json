@@ -46,7 +46,7 @@
     {
       "id": 5,
       "kind": "Menu",
-      "value": "Main Menu",
+      "value": "Level Select",
       "x": 30,
       "y": 150,
       "scenes": [
@@ -56,20 +56,41 @@
     {
       "id": 6,
       "kind": "Play",
-      "value": "3D Gameplay",
+      "value": "3D Lab",
       "x": 235,
       "y": 150,
       "scenes": [
         "world3d",
+        "screen:hud_3d"
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "Play",
+      "value": "Visual Novel Lab",
+      "x": 440,
+      "y": 150,
+      "scenes": [
         "vn:cafe",
-        "vn:street"
+        "vn:street",
+        "screen:hud_2d"
+      ]
+    },
+    {
+      "id": 9,
+      "kind": "Play",
+      "value": "UI / Inventory Lab",
+      "x": 645,
+      "y": 150,
+      "scenes": [
+        "screen:inventory_grid"
       ]
     },
     {
       "id": 7,
       "kind": "Ending",
       "value": "Return to Title",
-      "x": 440,
+      "x": 850,
       "y": 150,
       "scenes": [
         "screen:title_screen"
@@ -98,7 +119,23 @@
       6
     ],
     [
+      5,
+      8
+    ],
+    [
+      5,
+      9
+    ],
+    [
       6,
+      7
+    ],
+    [
+      8,
+      7
+    ],
+    [
+      9,
       7
     ]
   ]

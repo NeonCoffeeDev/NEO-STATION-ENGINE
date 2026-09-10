@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "target": "ps2",
+  "systems": [
+    {
+      "kit": "Camera",
+      "active": true,
+      "modifiers": {
+        "mode": "perspective",
+        "preview": "game"
+      }
+    },
+    {
+      "kit": "Inventory",
+      "active": true,
+      "modifiers": {
+        "layout": "grid",
+        "columns": "4",
+        "rows": "3"
+      }
+    },
+    {
+      "kit": "Audio",
+      "active": true,
+      "modifiers": {
+        "music": "streamed",
+        "sfx": "resident"
+      }
+    },
+    {
+      "kit": "Transitions",
+      "active": true,
+      "modifiers": {
+        "boot": "init>splash>intro>title>menu"
+      }
+    },
+    {
+      "kit": "Save Data",
+      "active": false,
+      "modifiers": {
+        "slots": "3"
+      }
+    },
+    {
+      "kit": "UI Menu + HUD",
+      "active": true,
+      "modifiers": {
+        "menu": "level_select",
+        "hud_2d": "hud_2d",
+        "hud_3d": "hud_3d"
+      }
+    }
+  ]
+}

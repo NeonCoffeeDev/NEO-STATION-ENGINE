@@ -60,10 +60,13 @@ extern const int nc_logo_width, nc_logo_height;
 /* The logo does not fill its power-of-two canvas, and it is not square. Both
  * facts have to reach the draw call or it comes out squashed. */
 extern const int nc_logo_used_w, nc_logo_used_h;
+extern unsigned int nc_ui_skin[];
+extern const int nc_ui_skin_width, nc_ui_skin_height;
+extern const int nc_ui_skin_used_w, nc_ui_skin_used_h;
 extern unsigned int nc_font[];
 extern const int nc_font_width, nc_font_height;
 
-enum { SCENE_INIT, SCENE_SPLASH, SCENE_INTRO, SCENE_TITLE, SCENE_MENU, SCENE_WORLD3D, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
+enum { SCENE_INIT, SCENE_SPLASH, SCENE_INTRO, SCENE_TITLE, SCENE_MENU, SCENE_WORLD3D, SCENE_STORY, SCENE_ABOUT, SCENE_UI_LAB, SCENE_PAUSE };
 
 /* Where START was pressed, so RESUME puts you back rather than somewhere
  * sensible-looking. */
@@ -73,7 +76,7 @@ static char pad_buffer[256] __attribute__((aligned(64)));
 
 static framebuffer_t frame;
 static zbuffer_t z;
-static texbuffer_t logo_tex, font_tex;
+static texbuffer_t logo_tex, ui_skin_tex, font_tex;
 static packet_t *packet;
 
 /* How many quadwords a frame may build. A textured rect costs several, and a
@@ -92,8 +95,7 @@ static qword_t *packet_limit;
  * runs of text are drawn together rather than interleaved with the logo. */
 static texbuffer_t *bound;
 
-static const char *MENU_ITEMS[] = { "3D LAB", "VISUAL NOVEL", "ABOUT", "TITLE SCREEN" };
-#define MENU_COUNT 3
+#include "nc_ui_generated.h"
 
 #include "vn_content.h"
 #include "nc_audio.h"
@@ -148,6 +150,15 @@ static void init_gs(void)
     logo_tex.info.height = draw_log2(nc_logo_height);
     logo_tex.info.components = TEXTURE_COMPONENTS_RGBA;
     logo_tex.info.function = TEXTURE_FUNCTION_DECAL;
+
+    ui_skin_tex.width = nc_ui_skin_width;
+    ui_skin_tex.psm = GS_PSM_32;
+    ui_skin_tex.address = graph_vram_allocate(nc_ui_skin_width, nc_ui_skin_height,
+                                               GS_PSM_32, GRAPH_ALIGN_PAGE);
+    ui_skin_tex.info.width = draw_log2(nc_ui_skin_width);
+    ui_skin_tex.info.height = draw_log2(nc_ui_skin_height);
+    ui_skin_tex.info.components = TEXTURE_COMPONENTS_RGBA;
+    ui_skin_tex.info.function = TEXTURE_FUNCTION_DECAL;
 
     font_tex.width = nc_font_width;
     font_tex.psm = GS_PSM_32;
@@ -374,6 +385,13 @@ static qword_t *draw_title(qword_t *q, int frames)
     return q;
 }
 
+static qword_t *ui_skin(qword_t *q, int x, int y, int w, int h)
+{
+    q = bind_texture(q, &ui_skin_tex);
+    return sprite(q, x, y, w, h, 0, 0,
+                  nc_ui_skin_used_w, nc_ui_skin_used_h, 0x80);
+}
+
 static qword_t *draw_boot(qword_t *q, int scene)
 {
     if (scene == SCENE_INIT) return text_center(q, 214, "INITIALIZING...", 0x80);
@@ -391,10 +409,11 @@ static qword_t *draw_menu(qword_t *q, int selected)
     int i;
     int height = 80;
 
+    q = ui_skin(q, 132, 154, 376, 190);
     q = logo(q, 32, 36, height);
     q = text(q, 48 + logo_width_for(height), 64, "NEON COFFEE", 0x80);
 
-    for (i = 0; i < MENU_COUNT; i++) {
+    for (i = 0; i < NC_UI_MENU_COUNT; i++) {
         int y = 200 + i * 40;
         if (i == selected) {
             q = panel(q, 140, y - 6, 360, 28, 0x2e, 0x36, 0x39);
@@ -402,7 +421,7 @@ static qword_t *draw_menu(qword_t *q, int selected)
         }
         /* The unselected items are drawn dimmer rather than in another colour:
          * one texture, one palette, and the eye still knows where it is. */
-        q = text(q, 184, y, MENU_ITEMS[i], i == selected ? 0x80 : 0x48);
+        q = text(q, 184, y, NC_UI_MENU_LABELS[i], i == selected ? 0x80 : 0x48);
     }
 
     q = text_center(q, 400, "X SELECT   TRIANGLE BACK", 0x40);
@@ -428,10 +447,12 @@ static qword_t *draw_lines(qword_t *q, const char *const *lines, int count,
 
 
 #include "vn_runtime.h"
-static int nc_requested_room=-1,nc_request_menu,nc_vn_scene=-1;
+static int nc_requested_room=-1,nc_request_menu,nc_request_inventory,nc_request_level=-1,nc_vn_scene=-1;
 static void nc_action(int action,int value) {
     if(action==4) nc_requested_room=value;
     if(action==6) nc_request_menu=1;
+    if(action==7) nc_request_inventory=1;
+    if(action==8) nc_request_level=value;
 }
 #include "nc_events.h"
 
@@ -599,6 +620,8 @@ int main(void)
 
     int scene = SCENE_INIT;
     int selected = 0;
+    int inventory_selected = 0;
+    int inventory_return_scene = SCENE_MENU;
     int frames = 0;
     int limit_qwords;
 
@@ -639,6 +662,7 @@ int main(void)
     init_environment();
 
     upload(nc_logo, nc_logo_width, nc_logo_height, &logo_tex);
+    upload(nc_ui_skin, nc_ui_skin_width, nc_ui_skin_height, &ui_skin_tex);
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
     nc_world_upload();
     if (!vn_init()) return 1;
@@ -699,9 +723,9 @@ int main(void)
 
         case SCENE_MENU:
             if (pressed & PAD_UP)
-                selected = (selected + MENU_COUNT - 1) % MENU_COUNT;
+                selected = (selected + NC_UI_MENU_COUNT - 1) % NC_UI_MENU_COUNT;
             if (pressed & PAD_DOWN)
-                selected = (selected + 1) % MENU_COUNT;
+                selected = (selected + 1) % NC_UI_MENU_COUNT;
             if (pressed & (PAD_UP | PAD_DOWN))
                 nc_sfx_family(nc_role_move);
             if (pressed & PAD_TRIANGLE) {
@@ -709,20 +733,33 @@ int main(void)
                 nc_sfx_family(nc_role_shift);
             }
             if (pressed & PAD_CROSS) {
+                int action = NC_UI_MENU_ACTIONS[selected];
                 nc_sfx_family(nc_role_confirm);
-                if (selected == 0) { scene = SCENE_WORLD3D; }
-                else if (selected == 1) { scene = SCENE_STORY; vn_begin(); }
-                else if (selected == 2) { scene = SCENE_ABOUT; }
+                if (action == NC_UI_LOAD_WORLD3D) scene = SCENE_WORLD3D;
+                else if (action == NC_UI_LOAD_VN) { scene = SCENE_STORY; vn_begin(); }
+                else if (action == NC_UI_LOAD_LAB) { scene = SCENE_UI_LAB; inventory_selected = 0; }
+                else if (action == NC_UI_OPTIONS) { scene_before_pause = SCENE_MENU; scene = SCENE_PAUSE; option_selected = OPT_RESUME; }
                 else scene = SCENE_TITLE;
             }
             break;
 
         case SCENE_STORY:
+            if (pressed & PAD_SQUARE) { inventory_return_scene=SCENE_STORY; scene=SCENE_UI_LAB; }
             if (!vn_update(pressed)) scene = SCENE_MENU;
             break;
 
         case SCENE_WORLD3D:
+            if (pressed & PAD_SQUARE) { inventory_return_scene=SCENE_WORLD3D; scene=SCENE_UI_LAB; }
             if (pressed & PAD_TRIANGLE) scene = SCENE_MENU;
+            break;
+
+        case SCENE_UI_LAB:
+            if (pressed & PAD_LEFT && inventory_selected % 4) inventory_selected--;
+            if (pressed & PAD_RIGHT && inventory_selected % 4 < 3) inventory_selected++;
+            if (pressed & PAD_UP && inventory_selected >= 4) inventory_selected -= 4;
+            if (pressed & PAD_DOWN && inventory_selected < 8) inventory_selected += 4;
+            if (pressed & (PAD_LEFT|PAD_RIGHT|PAD_UP|PAD_DOWN)) nc_sfx_family(nc_role_move);
+            if (pressed & PAD_TRIANGLE) { scene=inventory_return_scene; nc_sfx_family(nc_role_shift); }
             break;
 
         case SCENE_ABOUT:
@@ -749,6 +786,8 @@ int main(void)
             nc_requested_room=-1;
         }
         if(nc_request_menu) {scene=SCENE_MENU;nc_request_menu=0;}
+        if(nc_request_inventory) {inventory_return_scene=scene;scene=SCENE_UI_LAB;nc_request_inventory=0;}
+        if(nc_request_level>=0) {scene=nc_request_level==0?SCENE_WORLD3D:nc_request_level==1?SCENE_STORY:SCENE_UI_LAB;if(scene==SCENE_STORY)vn_begin();nc_request_level=-1;}
         switch (scene == SCENE_PAUSE ? scene_before_pause : scene) {
         case SCENE_INIT:
         case SCENE_SPLASH:
@@ -763,10 +802,28 @@ int main(void)
             break;
         case SCENE_WORLD3D:
             q = nc_world_draw(q);
+            q = panel(q, 20, 18, 190, 48, 0x0a, 0x0c, 0x12);
+            q = text(q, 32, 28, "NC 3D LAB", 0x80);
+            q = text(q, 344, 414, "SQUARE INVENTORY", 0x48);
             break;
         case SCENE_STORY:
             q = vn_draw(q);
+            q = text(q, 24, 22, "VISUAL NOVEL LAB", 0x48);
             break;
+        case SCENE_UI_LAB: {
+            static const char *const item[4]={"KEY","COFFEE","RELIC","MAP"};
+            int i;
+            q=panel(q,120,44,400,340,0x0a,0x0c,0x12);
+            q=ui_skin(q,176,50,288,80);
+            q=text_center(q,66,"GRID INVENTORY",0x80);
+            for(i=0;i<12;i++) {
+                int x=150+(i%4)*84,y=116+(i/4)*72;
+                q=panel(q,x,y,72,60,i==inventory_selected?0x38:0x18,i==inventory_selected?0x48:0x20,i==inventory_selected?0x48:0x24);
+                if(i<4) q=text(q,x+8,y+22,item[i],i==inventory_selected?0x80:0x50);
+            }
+            q=text_center(q,402,"D-PAD SELECT   TRIANGLE BACK",0x48);
+            break;
+        }
         case SCENE_ABOUT:
             q = draw_lines(q, ABOUT, ABOUT_LINES, ABOUT_LINES,
                            "X BACK");

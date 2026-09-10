@@ -22,11 +22,19 @@
     },
     {
       "id": 5,
-      "name": "Main Menu"
+      "name": "Level Select"
     },
     {
       "id": 6,
-      "name": "3D Gameplay"
+      "name": "3D Lab"
+    },
+    {
+      "id": 8,
+      "name": "Visual Novel Lab"
+    },
+    {
+      "id": 9,
+      "name": "UI / Inventory Lab"
     },
     {
       "id": 7,

@@ -7,7 +7,7 @@ from theme import BG,PANEL,PANEL_HI,SUNKEN,FG,DIM,CYAN,GREEN,AMBER,RED,UI_BOLD,B
 from ncc.build import project_meta
 from ncc.componenttypes import COMPONENTS,ready_for
 
-SYSTEM_TYPES=('Camera','Movement','Interaction','Inventory','Dialogue','Audio','FX','Save Data','Transitions')
+SYSTEM_TYPES=('Camera','Movement','Interaction','Inventory','Dialogue','Audio','FX','Save Data','Transitions','UI Menu + HUD')
 
 class TabStack(tk.Frame):
     def __init__(self,parent,tabs):

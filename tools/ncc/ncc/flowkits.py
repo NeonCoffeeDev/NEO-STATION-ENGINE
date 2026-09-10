@@ -56,4 +56,7 @@ KITS['pad2d_v1']={
 KITS['vn_v1']={
     'Timed room change':[('After frames','180'),('Change room','0')],
     'Return to main menu':[('On button','SELECT'),('Show main menu','0')],
+    'Open grid inventory':[('On button','SQUARE'),('Call NC-Code','open_inventory_example')],
+    'Load 3D level from code':[('On button','L2'),('Call NC-Code','load_3d_example')],
+    'Load VN level from code':[('On button','R2'),('Call NC-Code','load_vn_example')],
 }

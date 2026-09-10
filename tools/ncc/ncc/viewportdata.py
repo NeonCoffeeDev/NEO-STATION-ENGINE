@@ -72,7 +72,7 @@ class World:
         if self.active_screen and self.active_screen in self.screens.get('screens',{}):
             for i,obj in enumerate(self.screens['screens'][self.active_screen].get('objects',[])):
                 add('u:'+str(i),obj.get('name','UI Object '+str(i)),obj.get('rect',[0,0,64,32])[:2],obj.get('rect',[0,0,64,32])[2:],'2d')
-                ui_type=obj.get('type','panel');component={'sprite2d':'Sprite2D','text':'Text2D','button':'Button2D','panel':'Panel2D'}.get(ui_type,'Transform')
+                ui_type=obj.get('type','panel');component={'sprite2d':'Sprite2D','text':'Text2D','button':'Button2D','panel':'Panel2D','inventory_grid':'Grid Container','progress':'Progress Bar'}.get(ui_type,'Transform')
                 rows[-1].update(ui_type=ui_type,text=obj.get('text',''),texture=obj.get('texture',''),image=obj.get('texture',''),layer=obj.get('layer',i),details=obj.get('details',{}),component=component,components=obj.get('components',['Transform','Lifecycle','Identity',component]));common(rows[-1],obj)
             return sorted(rows,key=lambda row:row.get('layer',0))
         if self.kind=='ps1':
