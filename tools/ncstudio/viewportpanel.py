@@ -51,13 +51,12 @@ class ViewportPanel(tk.Frame):
                 if self.world.path.read_text(encoding='utf-8')!=self.world.original or (self.world.trigger_path.read_text(encoding='utf-8') if self.world.trigger_path.exists() else None)!=self.world.trigger_original or (self.world.screen_path.read_text(encoding='utf-8') if self.world.screen_path.exists() else None)!=self.world.screen_original or (self.world.world3d_path.read_text(encoding='utf-8') if self.world.world3d_path.exists() else None)!=self.world.world3d_original:force=True
             if not force:return
         if self.project and self.world:self.drafts[self.project]=self.world
-        self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[];self.stage.set('');self.stage['values']=[];self.stages=[]
+        self.project=project;self.world=None;self.history=[];self.selected=None;self.room.set('');self.room['values']=[];self.room_refs=[];self.stage.set('');self.stage['values']=[];self.stages=[]
         if project:
             try:
                 self.world=World(project) if force or project not in self.drafts else self.drafts[project]
                 self.drafts[project]=self.world
-                self.room['values']=['%d: %s'%(i,s.get('name',s.get('title',s.get('id','Room')))) for i,s in enumerate(self.world.scenes())]
-                self.room.current(0)
+                self.set_room_refs(None)
                 structure=Path(project)/'game-structure.json'
                 if structure.exists():
                     self.stages=json.loads(structure.read_text(encoding='utf-8')).get('nodes',[])
@@ -77,22 +76,42 @@ class ViewportPanel(tk.Frame):
     def reload(self):
         if self.dirty() and not messagebox.askyesno('Reload','Discard unsaved viewport changes?',parent=self):return
         self.load(self.project,True)
-    def change_room(self):self.selected=None;self.fit()
+    def set_room_refs(self,stage):
+        refs=[];requested=stage.get('scenes',[]) if stage else []
+        scenes=self.world.scenes() if self.world else []
+        for reference in requested:
+            if reference.startswith('screen:') and reference[7:] in self.world.screens.get('screens',{}):
+                key=reference[7:];refs.append(('screen',key,self.world.screens['screens'][key].get('name',key)))
+            elif reference=='world3d' and self.world.world3d:refs.append(('world3d',0,'3D World'))
+            elif reference.startswith('vn:'):
+                key=reference[3:]
+                for i,scene in enumerate(scenes):
+                    if str(scene.get('id',''))==key:refs.append(('room',i,scene.get('name',key)))
+        if not refs:
+            refs=[('room',i,s.get('name',s.get('title',s.get('id','Scene %d'%i)))) for i,s in enumerate(scenes)]
+        self.room_refs=refs;self.room['values']=[label for _kind,_value,label in refs]
+        if refs:self.room.current(0);self.apply_room_ref()
+
+    def apply_room_ref(self):
+        if not self.world or not self.room_refs:return
+        kind,value,_label=self.room_refs[max(0,self.room.current())]
+        self.world.active_screen=value if kind=='screen' else None
+        self.plane.set('PERSPECTIVE' if kind=='world3d' else '2D' if kind in ('screen','room') and self.world.kind=='vn' else self.plane.get())
+
+    def change_room(self):self.selected=None;self.apply_room_ref();self.fit()
     def change_stage(self):
         if not self.world or not self.stages:return
         stage=self.stages[max(0,self.stage.current())]
-        screen_key={'Initialize':'init','Splash':'splash','Intro':'intro','Title':'title_screen','Menu':'main_menu'}.get(stage.get('kind'))
-        self.world.active_screen=screen_key if screen_key in self.world.screens.get('screens',{}) else None
-        value=str(stage.get('value',''))
-        for index,scene in enumerate(self.world.scenes()):
-            name=str(scene.get('name',scene.get('title',scene.get('id',''))))
-            if name and name==value:
-                self.room.current(index);break
+        self.set_room_refs(stage)
         records=self.world.records(self.index());is_2d=any(r['space']=='2d' for r in records)
         self.plane['values']=['2D'] if is_2d else ['PERSPECTIVE','XY','XZ','YZ'];self.plane.set('2D' if is_2d else 'PERSPECTIVE')
         self.selected=None;self.fit()
         self.note.configure(text='%s is selected in GAME FLOW. SCENE and GAME show its assigned project composition.'%stage.get('kind','State'))
-    def index(self):return max(0,self.room.current())
+    def index(self):
+        if self.room_refs:
+            kind,value,_label=self.room_refs[max(0,self.room.current())]
+            if kind=='room':return value
+        return 0
     def records(self):return self.world.records(self.index()) if self.world else []
     def axes(self):return {'2D':(0,1),'XY':(0,1),'XZ':(0,2),'YZ':(1,2)}[self.plane.get()]
     def is_perspective(self):return self.plane.get()=='PERSPECTIVE' or self.game_mode

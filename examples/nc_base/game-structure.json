@@ -8,49 +8,72 @@
       "kind": "Initialize",
       "value": "Initialize systems",
       "x": 30,
-      "y": 30
+      "y": 30,
+      "scenes": [
+        "screen:init"
+      ]
     },
     {
       "id": 2,
       "kind": "Splash",
       "value": "Disclaimer",
       "x": 235,
-      "y": 30
+      "y": 30,
+      "scenes": [
+        "screen:splash"
+      ]
     },
     {
       "id": 3,
       "kind": "Intro",
       "value": "Intro / video placeholder",
       "x": 440,
-      "y": 30
+      "y": 30,
+      "scenes": [
+        "screen:intro"
+      ]
     },
     {
       "id": 4,
       "kind": "Title",
       "value": "Title Screen",
       "x": 645,
-      "y": 30
+      "y": 30,
+      "scenes": [
+        "screen:title_screen"
+      ]
     },
     {
       "id": 5,
       "kind": "Menu",
       "value": "Main Menu",
       "x": 30,
-      "y": 150
+      "y": 150,
+      "scenes": [
+        "screen:main_menu"
+      ]
     },
     {
       "id": 6,
       "kind": "Play",
       "value": "3D Gameplay",
       "x": 235,
-      "y": 150
+      "y": 150,
+      "scenes": [
+        "world3d",
+        "vn:cafe",
+        "vn:street"
+      ]
     },
     {
       "id": 7,
       "kind": "Ending",
       "value": "Return to Title",
       "x": 440,
-      "y": 150
+      "y": 150,
+      "scenes": [
+        "screen:title_screen"
+      ]
     }
   ],
   "edges": [

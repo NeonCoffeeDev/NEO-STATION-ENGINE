@@ -27,7 +27,7 @@ class TabStack(tk.Frame):
 class AuthorSidebar(tk.Frame):
     def __init__(self,parent,on_flow,on_hierarchy,on_ready):
         super().__init__(parent,bg=BG);self.project=None;self.on_flow=on_flow;self.on_hierarchy=on_hierarchy;self.on_ready=on_ready
-        self.stack=TabStack(self,{'flow':'GAME FLOW','systems':'GAME SYSTEMS','hierarchy':'HIERARCHY','ready':'READY OBJECTS'});self.stack.pack(fill='both',expand=True)
+        self.stack=TabStack(self,{'flow':'GAMEFLOW','systems':'GAME SYSTEMS','hierarchy':'HIERARCHY','ready':'READY OBJECTS'});self.stack.pack(fill='both',expand=True)
         self.flow=self.stack.tabs['flow'][1];self.systems=self.stack.tabs['systems'][1];self.hierarchy=self.stack.tabs['hierarchy'][1];self.ready=self.stack.tabs['ready'][1]
         self.flow_list=self._list(self.flow);self.flow_list.bind('<Double-Button-1>',self.open_flow)
         tk.Label(self.flow,text='Double-click a state to open its executable events.',bg=BG,fg=DIM,wraplength=235,justify='left').pack(fill='x',padx=6,pady=5)

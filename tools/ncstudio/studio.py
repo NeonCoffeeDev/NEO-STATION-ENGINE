@@ -587,9 +587,9 @@ class Studio:
 
     # Which console each tab belongs to. ROOM and CONSOLE are common ground;
     # everything else is specific to one machine's toolchain.
-    TAB_ORDER = ("console", "tty", "script", "layers", "design", "room", "kits", "flow", "assets", "structure", "viewport", "game")
+    TAB_ORDER = ("console", "tty", "script", "layers", "design", "room", "flow", "assets", "structure", "viewport", "game")
     TAB_LABELS = {"console": "CONSOLE", "tty": "PS1 TTY", "script": "SCRIPT",
-                  "layers": "LAYERS", "design": "DESIGN", "room": "GAMEOBJECT", "kits": "KITS", "flow": "EVENTS", "assets": "ASSETS", "structure": "GAME FLOW", "viewport": "SCENE", "game": "GAME"}
+                  "layers": "LAYERS", "design": "DESIGN", "room": "GAMEOBJECT", "kits": "KITS", "flow": "EVENTS", "assets": "ASSETS", "structure": "GAMEFLOW", "viewport": "SCENE", "game": "GAME"}
     TAB_TARGETS = {"console": ("ps1", "ps2"), "tty": ("ps1",), "script": ("ps1",),
                    "layers": ("ps1",), "design": ("ps2",), "room": ("ps1", "ps2"), "kits": ("ps1", "ps2"), "flow": ("ps1", "ps2"), "assets": ("ps1", "ps2"), "structure": ("ps1", "ps2"), "viewport": ("ps1", "ps2"), "game": ("ps1", "ps2")}
 
