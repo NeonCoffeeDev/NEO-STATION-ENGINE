@@ -63,7 +63,7 @@ extern const int nc_logo_used_w, nc_logo_used_h;
 extern unsigned int nc_font[];
 extern const int nc_font_width, nc_font_height;
 
-enum { SCENE_TITLE, SCENE_MENU, SCENE_WORLD3D, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
+enum { SCENE_INIT, SCENE_SPLASH, SCENE_INTRO, SCENE_TITLE, SCENE_MENU, SCENE_WORLD3D, SCENE_STORY, SCENE_ABOUT, SCENE_PAUSE };
 
 /* Where START was pressed, so RESUME puts you back rather than somewhere
  * sensible-looking. */
@@ -374,6 +374,17 @@ static qword_t *draw_title(qword_t *q, int frames)
     return q;
 }
 
+static qword_t *draw_boot(qword_t *q, int scene)
+{
+    if (scene == SCENE_INIT) return text_center(q, 214, "INITIALIZING...", 0x80);
+    if (scene == SCENE_SPLASH) {
+        q = logo(q, (SCREEN_W - logo_width_for(176)) / 2, 72, 176);
+        return text_center(q, 376, "UNOFFICIAL HOMEBREW SOFTWARE", 0x60);
+    }
+    q = text_center(q, 196, "INTRO / VIDEO SLOT", 0x80);
+    return text_center(q, 226, "START: SKIP", 0x48);
+}
+
 
 static qword_t *draw_menu(qword_t *q, int selected)
 {
@@ -586,7 +597,7 @@ int main(void)
     unsigned int buttons = 0, last = 0, pressed;
     int have_pad = 0, state;
 
-    int scene = SCENE_TITLE;
+    int scene = SCENE_INIT;
     int selected = 0;
     int frames = 0;
     int limit_qwords;
@@ -657,6 +668,15 @@ int main(void)
         }
 
         switch (scene) {
+        case SCENE_INIT:
+            if (frames >= 30) scene = SCENE_SPLASH;
+            break;
+        case SCENE_SPLASH:
+            if (frames >= 180 || (pressed & (PAD_START | PAD_CROSS))) scene = SCENE_INTRO;
+            break;
+        case SCENE_INTRO:
+            if (frames >= 330 || (pressed & (PAD_START | PAD_CROSS))) scene = SCENE_TITLE;
+            break;
         case SCENE_PAUSE: {
             int verdict = options_update(pressed);
             if (verdict == 0) {
@@ -730,6 +750,11 @@ int main(void)
         }
         if(nc_request_menu) {scene=SCENE_MENU;nc_request_menu=0;}
         switch (scene == SCENE_PAUSE ? scene_before_pause : scene) {
+        case SCENE_INIT:
+        case SCENE_SPLASH:
+        case SCENE_INTRO:
+            q = draw_boot(q, scene);
+            break;
         case SCENE_TITLE:
             q = draw_title(q, frames);
             break;
