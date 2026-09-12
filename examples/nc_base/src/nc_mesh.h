@@ -21,15 +21,23 @@
  * culling before it wants a bigger buffer. */
 #define NC_MESH_MAX_VERTS 4096
 
-static float nc_mv_x[NC_MESH_MAX_VERTS];
-static float nc_mv_y[NC_MESH_MAX_VERTS];
-static float nc_mv_depth[NC_MESH_MAX_VERTS];
-/* 1/depth, kept because both the texture coordinate and the depth value want
- * it and a divide is not free. Computing it once per vertex instead of twice
- * per triangle corner is 720 divides a frame on this character alone. */
-static float nc_mv_w[NC_MESH_MAX_VERTS];
-static unsigned char nc_mv_visible[NC_MESH_MAX_VERTS];
-static unsigned char nc_mv_shade[NC_MESH_MAX_VERTS];
+/* One record a vertex, sixteen bytes, four to a cache line.
+ *
+ * This was five parallel arrays, and it cost about what five parallel arrays
+ * cost. The emit reads a vertex by index, and an index list is scattered, so
+ * every corner missed the cache once per array: measured at 572 ticks a
+ * triangle, of which five misses times 31 ticks times three corners is 468.
+ * Interleaved, a corner touches one line instead of five.
+ *
+ * The projected depth is not kept at all. Only 1/depth is ever read again --
+ * by the texture coordinate and by the depth value -- so keeping both was a
+ * fifth of a cache line spent on a number nothing wanted. */
+typedef struct {
+    float x, y, w;
+    unsigned short shade, visible;
+} NCScreenVertex;
+
+static NCScreenVertex nc_mv[NC_MESH_MAX_VERTS];
 
 static int nc_stat_mesh_tris, nc_stat_mesh_culled, nc_stat_mesh_dropped;
 
@@ -116,15 +124,14 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
         ry = vy * cp - rz * sp;
         depth = vy * sp + rz * cp;
 
-        nc_mv_depth[i] = depth;
-        nc_mv_visible[i] = depth >= 0.3f;
-        if (nc_mv_visible[i]) {
+        nc_mv[i].visible = (unsigned short)(depth >= 0.3f);
+        if (nc_mv[i].visible) {
             w = 1.f / depth;                 /* the frame's only divide here */
-            nc_mv_w[i] = w;
-            nc_mv_x[i] = rx * focal * NC_PIXEL_ASPECT * w;
-            nc_mv_y[i] = -ry * focal * w;
+            nc_mv[i].w = w;
+            nc_mv[i].x = rx * focal * NC_PIXEL_ASPECT * w;
+            nc_mv[i].y = -ry * focal * w;
         } else {
-            nc_mv_w[i] = 0.f;
+            nc_mv[i].w = 0.f;
         }
 
         /* Lit per vertex, which is what the Gouraud path can carry. A model
@@ -148,10 +155,10 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
         if (nc_opt_boost) shade *= 2;
         if (shade > 255) shade = 255;
         if (shade < 0) shade = 0;
-        nc_mv_shade[i] = (unsigned char)shade;
+        nc_mv[i].shade = (unsigned short)shade;
     }
     for (i = count; i < data->vertices && i < NC_MESH_MAX_VERTS; i++)
-        nc_mv_visible[i] = 0;
+        nc_mv[i].visible = 0;
 }
 
 /* Triangles are buffered and emitted together, and the batch is always an
@@ -196,9 +203,10 @@ static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
     dw = (u64 *)draw_prim_start(q, 0, prim, color);
     for (corner = 0; corner < total; corner++) {
         int v = nc_mesh_run[corner];
-        float w = nc_mv_w[v];
+        const NCScreenVertex *sv = &nc_mv[v];   /* one line, not five */
+        float w = sv->w;
         texel_t st; xyz_t xyz;
-        int shade = nc_mv_shade[v];
+        int shade = sv->shade;
         st.s = data->uv[v * 2] * far_s * w;
         st.t = data->uv[v * 2 + 1] * far_t * w;
         color->r = (model->tint[0] * shade) >> 7;
@@ -208,8 +216,8 @@ static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
         if (color->g > ceiling) color->g = ceiling;
         if (color->b > ceiling) color->b = ceiling;
         color->q = w;
-        xyz.x = (u16)ftoi4(2048 + nc_mv_x[v]);
-        xyz.y = (u16)ftoi4(2048 + nc_mv_y[v]);
+        xyz.x = (u16)ftoi4(2048 + sv->x);
+        xyz.y = (u16)ftoi4(2048 + sv->y);
         xyz.z = nc_depth_from_w(w);
         *dw++ = st.uv; *dw++ = color->rgbaq; *dw++ = xyz.xyz;
     }
@@ -271,14 +279,14 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
             int a = data->index[at], b = data->index[at + 1], c = data->index[at + 2];
             float area;
 
-            if (!nc_mv_visible[a] || !nc_mv_visible[b] || !nc_mv_visible[c]) {
+            if (!nc_mv[a].visible || !nc_mv[b].visible || !nc_mv[c].visible) {
                 nc_stat_mesh_dropped++;
                 continue;
             }
             /* Same winding rule the boxes cull by, so a model and a box
              * disagree about nothing. */
-            area = (nc_mv_x[b] - nc_mv_x[a]) * (nc_mv_y[c] - nc_mv_y[a])
-                 - (nc_mv_x[c] - nc_mv_x[a]) * (nc_mv_y[b] - nc_mv_y[a]);
+            area = (nc_mv[b].x - nc_mv[a].x) * (nc_mv[c].y - nc_mv[a].y)
+                 - (nc_mv[c].x - nc_mv[a].x) * (nc_mv[b].y - nc_mv[a].y);
             if (nc_opt_cull && area <= 0.f) { nc_stat_mesh_culled++; continue; }
 
             nc_mesh_run[nc_mesh_run_count * 3] = (unsigned short)a;

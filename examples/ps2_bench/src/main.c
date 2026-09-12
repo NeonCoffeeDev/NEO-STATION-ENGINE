@@ -67,12 +67,21 @@ static unsigned char bench_bone[BENCH_VERTS];
 static unsigned short bench_index[BENCH_TRIS * 3];
 static float bench_matrix[BENCH_BONES][12];
 
+/* Five parallel arrays, which is how the engine held this. */
 static float out_x[BENCH_VERTS];
 static float out_y[BENCH_VERTS];
 static float out_w[BENCH_VERTS];
 static float out_depth[BENCH_VERTS];
 static unsigned char out_vis[BENCH_VERTS];
 static unsigned char out_shade[BENCH_VERTS];
+
+/* The same numbers, sixteen bytes to a vertex, four to a cache line. An index
+ * list is scattered, so the question is how many lines a corner touches. */
+typedef struct {
+    float x, y, w;
+    unsigned short shade, visible;
+} ScreenVertex;
+static ScreenVertex out_soa[BENCH_VERTS];
 
 static float scratch[8192];
 
@@ -181,7 +190,7 @@ static qword_t *pass_emit(qword_t *q, int triangles)
         if (q + total * 2 + 32 >= packet_limit) break;
         dw = (u64 *)draw_prim_start(q, 0, &prim, &color);
         for (corner = 0; corner < total; corner++) {
-            int v = bench_index[(done * 3 + corner) % (BENCH_TRIS * 3)];
+            int v = bench_index[done * 3 + corner];
             float w = out_w[v];
             texel_t st; xyz_t xyz;
             st.s = bench_uv[v * 2] * w;
@@ -190,6 +199,49 @@ static qword_t *pass_emit(qword_t *q, int triangles)
             color.q = w;
             xyz.x = (u16)ftoi4(2048 + out_x[v]);
             xyz.y = (u16)ftoi4(2048 + out_y[v]);
+            xyz.z = 32;
+            *dw++ = st.uv; *dw++ = color.rgbaq; *dw++ = xyz.xyz;
+        }
+        q = draw_prim_end((qword_t *)dw, 3, DRAW_STQ2_REGLIST);
+        done += batch;
+    }
+    return q;
+}
+
+/* The identical emit, reading one interleaved record instead of five arrays.
+ * Nothing else differs -- same arithmetic, same registers, same packet. */
+static qword_t *pass_emit_interleaved(qword_t *q, int triangles)
+{
+    prim_t prim = {0};
+    color_t color = {0};
+    int done = 0;
+
+    prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
+    prim.colorfix = PRIM_FIXED; prim.shading = PRIM_SHADE_GOURAUD;
+    prim.mapping_type = PRIM_MAP_ST;
+    color.a = 0x80; color.q = 1.0f;
+
+    while (done < triangles) {
+        int batch = triangles - done;
+        int corner, total;
+        u64 *dw;
+        if (batch > 96) batch = 96;
+        batch &= ~1;
+        if (!batch) break;
+        total = batch * 3;
+        if (q + total * 2 + 32 >= packet_limit) break;
+        dw = (u64 *)draw_prim_start(q, 0, &prim, &color);
+        for (corner = 0; corner < total; corner++) {
+            int v = bench_index[done * 3 + corner];
+            const ScreenVertex *sv = &out_soa[v];
+            float w = sv->w;
+            texel_t st; xyz_t xyz;
+            st.s = bench_uv[v * 2] * w;
+            st.t = bench_uv[v * 2 + 1] * w;
+            color.r = color.g = color.b = sv->shade;
+            color.q = w;
+            xyz.x = (u16)ftoi4(2048 + sv->x);
+            xyz.y = (u16)ftoi4(2048 + sv->y);
             xyz.z = 32;
             *dw++ = st.uv; *dw++ = color.rgbaq; *dw++ = xyz.xyz;
         }
@@ -264,6 +316,19 @@ static void run_benchmarks(void)
         (void)q;
     }
     record("EMIT TRI", best, BENCH_TRIS);
+
+    for (i = 0; i < BENCH_VERTS; i++) {
+        out_soa[i].x = out_x[i]; out_soa[i].y = out_y[i]; out_soa[i].w = out_w[i];
+        out_soa[i].shade = out_shade[i]; out_soa[i].visible = out_vis[i];
+    }
+    best = 0xFFFFFFFFu;
+    for (r = 0; r < REPEATS; r++) {
+        qword_t *q = packet->data;
+        mark = cpu_ticks(); q = pass_emit_interleaved(q, BENCH_TRIS);
+        { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
+        (void)q;
+    }
+    record("EMIT TRI 1LINE", best, BENCH_TRIS);
 
     best = 0xFFFFFFFFu;
     for (r = 0; r < REPEATS; r++) {
