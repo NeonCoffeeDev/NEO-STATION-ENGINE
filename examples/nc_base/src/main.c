@@ -111,7 +111,7 @@ static packet_t *packet;
  * showing nothing at all. 8192 qwords is 128 KB, which is nothing against
  * 32 MB, and the guard below means overshooting drops primitives instead of
  * corrupting memory. */
-#define DRAW_QWORDS 8192
+#define DRAW_QWORDS 16384
 #define QWORD_MARGIN 16
 
 static qword_t *packet_limit;
@@ -125,6 +125,8 @@ static texbuffer_t *bound;
 #include "vn_content.h"
 #include "nc_audio.h"
 #include "nc_world3d.h"
+#include "nc_figure_mesh.h"
+#include "nc_mesh.h"
 
 /* How many frames each character of dialogue takes. vn_runtime.h reads it,
  * so it is declared here and seeded from the kit once VN_SPEED exists. */
@@ -916,6 +918,9 @@ int main(void)
              * anything else is drawn. */
             q = nc_lab_backdrop(q);
             q = nc_world_draw(q);
+            /* The model goes in after the boxes and sorts against them through
+             * the depth buffer, not through the order it is drawn in. */
+            q = nc_mesh_draw(q, &nc_avatar);
             /* The world is drawn first and the readout over it, so the numbers
              * describe the frame underneath them. */
             q = nc_lab_draw(q);

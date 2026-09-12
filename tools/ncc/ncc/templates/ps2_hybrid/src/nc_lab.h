@@ -162,12 +162,19 @@ static qword_t *nc_lab_backdrop(qword_t *q)
 
 enum { LAB_SPIN, LAB_TEXTURE, LAB_FILTER, LAB_LIGHT, LAB_CULL, LAB_WIRE,
        LAB_BLEND, LAB_BRIGHT, LAB_MATERIAL, LAB_TINT, LAB_FOV, LAB_SPAWN,
-       LAB_SPRITE, LAB_COLLIDE, LAB_BACKDROP, LAB_CAMERA, LAB_LEVEL, LAB_ROWS };
+       LAB_SPRITE, LAB_AVATAR, LAB_COLLIDE, LAB_BACKDROP, LAB_CAMERA,
+       LAB_LEVEL, LAB_ROWS };
 
 static const char *const LAB_NAMES[LAB_ROWS] = {
     "SPIN", "TEXTURE", "FILTER", "LIGHTING", "CULLING", "WIREFRAME",
     "BLEND", "BRIGHTNESS", "MATERIAL", "TINT", "FOV", "BOXES",
-    "SPRITES", "COLLISION", "BACKDROP", "CAMERA", "LEVEL"};
+    "SPRITES", "AVATAR", "COLLISION", "BACKDROP", "CAMERA", "LEVEL"};
+
+/* The character you drive, as an imported model rather than a box. The box
+ * stays selectable because it is the control that says whether a problem is
+ * in the mesh renderer or in everything around it. */
+static NCModel nc_avatar;
+static int nc_opt_avatar = 1;
 
 /* Open on arrival. This is a test build; the menu is the reason to be here,
  * and it was being missed entirely on the first visit. */
@@ -220,6 +227,7 @@ static void nc_lab_value(int row, char *out)
     case LAB_FOV:      sprintf(out, "%d DEG", (int)nc_cam_fov); break;
     case LAB_SPAWN:    sprintf(out, "%d OF %d", nc_object_count, NC_WORLD_MAX); break;
     case LAB_SPRITE:   sprintf(out, "%d OF %d", nc_sprite_count, NC_SPRITE_MAX); break;
+    case LAB_AVATAR:   strcpy(out, nc_opt_avatar ? "FIGURE" : "BOX"); break;
     case LAB_COLLIDE:  strcpy(out, nc_opt_collide ? "ON" : "OFF"); break;
     case LAB_BACKDROP: strcpy(out, nc_opt_backdrop ? "PARALLAX" : "OFF"); break;
     case LAB_CAMERA:   strcpy(out, NC_CAM_NAMES[nc_cam_mode]); break;
@@ -292,6 +300,7 @@ static void nc_lab_adjust(int row, int step)
             nc_sprite_count--;
         }
         break;
+    case LAB_AVATAR:   nc_opt_avatar = !nc_opt_avatar; break;
     case LAB_COLLIDE:  nc_opt_collide = !nc_opt_collide; break;
     case LAB_BACKDROP: nc_opt_backdrop = !nc_opt_backdrop; break;
     case LAB_CAMERA:
@@ -306,8 +315,30 @@ static void nc_lab_adjust(int row, int step)
 }
 
 /* Returns 0 when the lab wants to hand the button back to the scene. */
+/* The model stands where the character stands. Keeping them in step here,
+ * once a frame, rather than making the model the thing that moves, means the
+ * collision and camera code never has to know which one is being drawn. */
+static void nc_lab_sync_avatar(void)
+{
+    int i;
+    if (nc_player < 0 || nc_player >= nc_object_count) {
+        nc_avatar.active = 0;
+        return;
+    }
+    nc_avatar.active = nc_opt_avatar;
+    nc_objects[nc_player].active = !nc_opt_avatar;
+    for (i = 0; i < 3; i++) nc_avatar.pos[i] = nc_objects[nc_player].pos[i];
+    /* The box is a metre and a half of character squashed into 0.8; the
+     * figure is built at human scale, so it stands on the box's feet. */
+    nc_avatar.pos[1] -= nc_objects[nc_player].scale[1];
+    nc_avatar.yaw = nc_objects[nc_player].rot[1];
+    nc_avatar.scale = 1.f;
+}
+
+
 static int nc_lab_update(unsigned int pressed, unsigned int held)
 {
+    nc_lab_sync_avatar();
     if (pressed & PAD_SELECT) {
         nc_lab_open = !nc_lab_open;
         nc_sfx_family(nc_role_shift);
@@ -380,7 +411,7 @@ static qword_t *nc_lab_draw(qword_t *q)
     /* Always on, menu or not. The numbers are the reason this screen exists,
      * and hiding them behind the menu would mean never seeing what the menu
      * just changed. */
-    q = panel(q, 16, 14, 316, 104, 0x0a, 0x0c, 0x12);
+    q = panel(q, 16, 14, 316, 122, 0x0a, 0x0c, 0x12);
     /* Culling reported as a share of what it was offered. "CULLED 74" alone
      * cannot be checked against anything; "74 OF 144" can. */
     sprintf(line, "DRAWN %2d  TRI %4d  CULL %3d/%3d  SPR %d",
@@ -396,6 +427,9 @@ static qword_t *nc_lab_draw(qword_t *q)
             (int)nc_cam_pos[0], (int)nc_cam_pos[1], (int)nc_cam_pos[2],
             (int)nc_cam_fov);
     q = text(q, 26, 76, line, 0x70);
+    sprintf(line, "MESH %4d TRI  %4d CULL  %4d OFF",
+            nc_stat_mesh_tris, nc_stat_mesh_culled, nc_stat_mesh_dropped);
+    q = text(q, 26, 112, line, 0x70);
     sprintf(line, "%s %s %s TOUCH %d",
             nc_opt_perspective ? "PERSP" : "AFFIN",
             nc_opt_cull ? "CULL" : "NOCULL",
@@ -451,4 +485,6 @@ static void nc_lab_init(void)
     nc_persist.level = NC_LEVEL_AUTHORED;
     nc_lab_load_level(NC_LEVEL_AUTHORED);
     nc_lab_apply_spin();
+    nc_model_init(&nc_avatar, &nc_figure_mesh);
+    nc_avatar.tint[0] = 128; nc_avatar.tint[1] = 110; nc_avatar.tint[2] = 90;
 }

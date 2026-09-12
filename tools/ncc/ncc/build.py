@@ -497,6 +497,16 @@ def _build_ps2(src):
         from .ps2materials import compile_project as compile_materials
         try:compile_materials(src)
         except (OSError,ValueError,KeyError,TypeError) as exc:raise SystemExit(f"ncc: PS2 materials -- {exc}")
+        # The reference figure, compiled in so the mesh renderer has something
+        # to draw that is original geometry rather than somebody's asset.
+        if os.path.exists(os.path.join(src,'src','nc_mesh.h')):
+            from .ncfigure import figure
+            from .meshcompile import compile_mesh, report
+            try:
+                stats=compile_mesh(figure(),'nc_figure_mesh',
+                                   os.path.join(src,'src','nc_figure_mesh.h'))
+                print(report(stats,'reference figure'))
+            except (OSError,ValueError) as exc:raise SystemExit(f"ncc: figure mesh -- {exc}")
     print(f"Building {name}  [PS2]")
     from .vn import compile_content
     try:
