@@ -316,3 +316,42 @@ class PacketAlignmentTests(unittest.TestCase):
                         'nc_mesh.h no longer makes an odd triangle count even '
                         'before emitting, so the last primitive of a run lands '
                         'half a quadword out of alignment')
+
+
+class TextureRegisterTests(unittest.TestCase):
+    """The GS UV register is not the GS ST register, and they are not packed
+    the same way.
+
+    ST is two floats, the second at bit 32, which is what PS2SDK's texel_t
+    describes. UV is two 14-bit fixed-point fields at bits 0 and 16. Writing a
+    UV through the ST layout puts V where nothing reads it, so V is zero, and
+    every surface samples the top row of its texture stretched down the face.
+    That does not look like a missing texture -- it looks like a smear -- which
+    is why it survived several rounds of looking at it.
+    """
+
+    RUNTIME = (Path(__file__).resolve().parents[1]
+               / 'ncc' / 'templates' / 'ps2_hybrid' / 'src' / 'nc_world3d.h')
+
+    def test_v_is_packed_at_bit_sixteen(self):
+        text = self.RUNTIME.read_text(encoding='utf-8')
+        line = [l for l in text.split('\n')
+                if 'uv.uv=' in l and 'ftoi4' in l]
+        self.assertEqual(len(line), 1, 'expected exactly one UV pack site')
+        self.assertIn('<<16', line[0].replace(' ', ''),
+                      'V is not being shifted to bit 16: %s' % line[0].strip())
+        self.assertNotIn('<<32', line[0].replace(' ', ''),
+                         'V is still at bit 32, where the GS does not read it')
+
+    def test_the_packing_round_trips_through_the_hardware_fields(self):
+        """Evaluated the way the GS decodes it, not the way we wrote it."""
+        for texels in (0, 1, 63, 127, 511):
+            fixed = texels * 16
+            word = (fixed & 0x3FFF) | ((fixed & 0x3FFF) << 16)
+            self.assertEqual(word & 0x3FFF, fixed)
+            self.assertEqual((word >> 16) & 0x3FFF, fixed)
+
+    def test_a_full_texture_span_fits_the_field(self):
+        """14 bits of 12.4 fixed point tops out at 1023 texels."""
+        self.assertLessEqual(511 * 16, 0x3FFF)
+        self.assertGreater(1024 * 16, 0x3FFF)

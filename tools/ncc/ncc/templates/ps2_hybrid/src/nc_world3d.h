@@ -416,7 +416,15 @@ static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float 
                 texel_t uv;
                 int u=(int)(face_u*(float)(nc_materials[material].used_width-1));
                 int t=(int)(face_v*(float)(nc_materials[material].used_height-1));
-                uv.uv=(u64)ftoi4(u)|((u64)ftoi4(t)<<32);
+                /* The GS UV register is two 14-bit fixed-point fields: U at
+                 * bit 0 and V at bit *16*. PS2SDK's texel_t describes the ST
+                 * register -- two floats, the second at bit 32 -- and using
+                 * that layout here put V somewhere the hardware does not read
+                 * it, so V was always zero and every surface sampled the top
+                 * row of its texture stretched down the whole face. A grid
+                 * whose top row is its border came out solid border colour;
+                 * a logo whose top row is background came out flat dark. */
+                uv.uv=((u64)ftoi4(u)&0x3FFF)|(((u64)ftoi4(t)&0x3FFF)<<16);
                 *dw++=uv.uv;*dw++=xyz.xyz;
             }
         }
