@@ -141,8 +141,10 @@ static texbuffer_t *bound;
 #include "nc_audio.h"
 #include "nc_world3d.h"
 #include "nc_figure_mesh.h"
-#include "nc_mesh.h"
+/* The skeleton before the renderer: the mesh pass skins each vertex inline,
+ * so it needs the posed bone matrices to exist first. */
 #include "nc_skin.h"
+#include "nc_mesh.h"
 
 /* How many frames each character of dialogue takes. vn_runtime.h reads it,
  * so it is declared here and seeded from the kit once VN_SPEED exists. */
@@ -900,7 +902,11 @@ int main(void)
 
 
         nc_vn_scene=(scene==SCENE_STORY && vn_current>=0)?vn_lines[vn_current].scene:-1;
-        nc_events(0,pressed,-1);
+        /* SELECT belongs to the lab while the lab is on screen. An authored
+         * event also listens for it and asks for the main menu, so without
+         * this one press did both: opened the menu you wanted and left the
+         * scene you wanted it for. */
+        nc_events(0, scene == SCENE_WORLD3D ? (pressed & ~PAD_SELECT) : pressed, -1);
         if(nc_requested_room>=0) {
             int i;
             for(i=0;i<(int)(sizeof(vn_lines)/sizeof(vn_lines[0]));i++) {

@@ -25,6 +25,15 @@
  * the GS test is GREATER -- and the value is 1/z rather than z, which spends
  * the sixteen bits on the distances a player is close enough to notice. */
 #define NC_Z_NEAR 0.3f
+/* The same value from 1/depth, for callers that already have it. */
+static unsigned int nc_depth_from_w(float w)
+{
+    float value = 65535.f * NC_Z_NEAR * w;
+    if (value >= 65535.f) return 65535u;
+    if (value <= 1.f) return 1u;
+    return (unsigned int)value;
+}
+
 static unsigned int nc_depth_value(float depth)
 {
     float value = 65535.f * NC_Z_NEAR / depth;

@@ -382,9 +382,8 @@ static void nc_lab_sync_avatar(void)
 
         nc_skin_pose(&nc_figure_mesh_skeleton, &nc_figure_mesh_clips[clip],
                      nc_anim_time, 1.f);
-        nc_skin_mesh(&nc_figure_mesh, nc_figure_mesh_vbone);
-        nc_avatar.skin_pos = nc_skin_pos;
-        nc_avatar.skin_nrm = nc_skin_nrm;
+        nc_avatar.vbone = nc_figure_mesh_vbone;
+        nc_avatar.posed = 1;
     }
 }
 

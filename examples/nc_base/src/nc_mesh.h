@@ -24,6 +24,10 @@
 static float nc_mv_x[NC_MESH_MAX_VERTS];
 static float nc_mv_y[NC_MESH_MAX_VERTS];
 static float nc_mv_depth[NC_MESH_MAX_VERTS];
+/* 1/depth, kept because both the texture coordinate and the depth value want
+ * it and a divide is not free. Computing it once per vertex instead of twice
+ * per triangle corner is 720 divides a frame on this character alone. */
+static float nc_mv_w[NC_MESH_MAX_VERTS];
 static unsigned char nc_mv_visible[NC_MESH_MAX_VERTS];
 static unsigned char nc_mv_shade[NC_MESH_MAX_VERTS];
 
@@ -39,10 +43,15 @@ typedef struct {
     float scale;
     int tint[3];
     int active;
-    /* Where the vertices are this frame, if something is posing them. Null
-     * means the mesh stands in its bind pose and the renderer reads the
-     * compiled arrays straight. */
-    const float *skin_pos, *skin_nrm;
+    /* The rig posing this mesh, if one is. Null means the mesh stands in its
+     * bind pose and the compiled arrays are read straight.
+     *
+     * The skinned vertices are deliberately *not* stored anywhere. Writing
+     * them to an array and reading them back in the next pass costs 11 KB of
+     * traffic through an 8 KB data cache, so the skin happens inside the
+     * transform loop and the result never leaves a register. */
+    const unsigned char *vbone;
+    int posed;
 } NCModel;
 
 static void nc_model_init(NCModel *model, const NCMeshData *data)
@@ -53,8 +62,8 @@ static void nc_model_init(NCModel *model, const NCMeshData *data)
     model->yaw = 0.f;
     model->scale = 1.f;
     model->active = 1;
-    model->skin_pos = 0;
-    model->skin_nrm = 0;
+    model->vbone = 0;
+    model->posed = 0;
 }
 
 /* Pass one: every vertex, once. */
@@ -69,16 +78,31 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
     int i;
 
     for (i = 0; i < count; i++) {
-        const float *p = model->skin_pos ? &model->skin_pos[i * 3] : &data->pos[i * 3];
-        const float *n = model->skin_nrm ? &model->skin_nrm[i * 3] : &data->nrm[i * 3];
-        float vx, vy, vz, tx, tz, rx, rz, ry, depth, lit;
+        const float *p = &data->pos[i * 3];
+        const float *n = &data->nrm[i * 3];
+        float sx, sy, sz, nx0, ny0, nz0;
+        float vx, vy, vz, tx, tz, rx, rz, ry, depth, lit, w;
         int l, shade;
 
+        if (model->posed) {
+            /* Skinned here rather than in a pass of its own. */
+            const float *m = nc_bone_skin[model->vbone[i]];
+            sx = m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3];
+            sy = m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7];
+            sz = m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11];
+            nx0 = m[0] * n[0] + m[1] * n[1] + m[2] * n[2];
+            ny0 = m[4] * n[0] + m[5] * n[1] + m[6] * n[2];
+            nz0 = m[8] * n[0] + m[9] * n[1] + m[10] * n[2];
+        } else {
+            sx = p[0]; sy = p[1]; sz = p[2];
+            nx0 = n[0]; ny0 = n[1]; nz0 = n[2];
+        }
+
         /* Model yaw, then scale, then into the world. */
-        tx = p[0] * mc + p[2] * ms;
-        tz = -p[0] * ms + p[2] * mc;
+        tx = sx * mc + sz * ms;
+        tz = -sx * ms + sz * mc;
         vx = tx * scale + model->pos[0] - nc_cam_pos[0];
-        vy = p[1] * scale + model->pos[1] - nc_cam_pos[1];
+        vy = sy * scale + model->pos[1] - nc_cam_pos[1];
         vz = tz * scale + model->pos[2] - nc_cam_pos[2];
 
         rx = vx * cy + vz * sy;
@@ -89,8 +113,12 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
         nc_mv_depth[i] = depth;
         nc_mv_visible[i] = depth >= 0.3f;
         if (nc_mv_visible[i]) {
-            nc_mv_x[i] = rx * focal * NC_PIXEL_ASPECT / depth;
-            nc_mv_y[i] = -ry * focal / depth;
+            w = 1.f / depth;                 /* the frame's only divide here */
+            nc_mv_w[i] = w;
+            nc_mv_x[i] = rx * focal * NC_PIXEL_ASPECT * w;
+            nc_mv_y[i] = -ry * focal * w;
+        } else {
+            nc_mv_w[i] = 0.f;
         }
 
         /* Lit per vertex, which is what the Gouraud path can carry. A model
@@ -98,9 +126,9 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
          * has. */
         lit = NC_WORLD_AMBIENT;
         if (nc_opt_lighting) {
-            float nx = n[0] * mc + n[2] * ms;
-            float ny = n[1];
-            float nz = -n[0] * ms + n[2] * mc;
+            float nx = nx0 * mc + nz0 * ms;
+            float ny = ny0;
+            float nz = -nx0 * ms + nz0 * mc;
             for (l = 0; l < NC_WORLD_LIGHT_COUNT; l++) {
                 float d = nx * nc_world_light_dir[l][0]
                         + ny * nc_world_light_dir[l][1]
@@ -161,7 +189,7 @@ static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
     dw = (u64 *)draw_prim_start(q, 0, prim, color);
     for (corner = 0; corner < total; corner++) {
         int v = nc_mesh_run[corner];
-        float w = 1.f / nc_mv_depth[v];
+        float w = nc_mv_w[v];
         texel_t st; xyz_t xyz;
         int shade = nc_mv_shade[v];
         st.s = data->uv[v * 2] * far_s * w;
@@ -175,7 +203,7 @@ static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
         color->q = w;
         xyz.x = (u16)ftoi4(2048 + nc_mv_x[v]);
         xyz.y = (u16)ftoi4(2048 + nc_mv_y[v]);
-        xyz.z = nc_depth_value(nc_mv_depth[v]);
+        xyz.z = nc_depth_from_w(w);
         *dw++ = st.uv; *dw++ = color->rgbaq; *dw++ = xyz.xyz;
     }
     q = draw_prim_end((qword_t *)dw, 3, DRAW_STQ2_REGLIST);

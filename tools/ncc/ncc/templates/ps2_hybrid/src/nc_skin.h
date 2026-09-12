@@ -25,9 +25,6 @@
 static float nc_bone_local[NC_SKIN_MAX_BONES][12];
 static float nc_bone_world[NC_SKIN_MAX_BONES][12];
 static float nc_bone_skin[NC_SKIN_MAX_BONES][12];
-static float nc_skin_pos[NC_MESH_MAX_VERTS * 3];
-static float nc_skin_nrm[NC_MESH_MAX_VERTS * 3];
-
 /* out = a * b, both 3x4 with an implied 0,0,0,1 bottom row. */
 static void nc_mat34_mul(float *out, const float *a, const float *b)
 {
@@ -129,24 +126,9 @@ static void nc_skin_pose(const NCSkeletonData *rig, const NCClipData *clip,
     }
 }
 
-/* Move the mesh. One matrix pick and one multiply per vertex. */
-static void nc_skin_mesh(const NCMeshData *mesh, const unsigned char *vbone)
-{
-    int i, count = mesh->vertices > NC_MESH_MAX_VERTS
-                 ? NC_MESH_MAX_VERTS : mesh->vertices;
-    for (i = 0; i < count; i++) {
-        const float *m = nc_bone_skin[vbone[i]];
-        const float *p = &mesh->pos[i * 3];
-        const float *n = &mesh->nrm[i * 3];
-        float *op = &nc_skin_pos[i * 3];
-        float *on = &nc_skin_nrm[i * 3];
-        op[0] = m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3];
-        op[1] = m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7];
-        op[2] = m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11];
-        /* Rotation only. A normal is a direction, and translating one points
-         * every surface at the origin. */
-        on[0] = m[0] * n[0] + m[1] * n[1] + m[2] * n[2];
-        on[1] = m[4] * n[0] + m[5] * n[1] + m[6] * n[2];
-        on[2] = m[8] * n[0] + m[9] * n[1] + m[10] * n[2];
-    }
-}
+/* There is deliberately no nc_skin_mesh here. Skinning used to write every
+ * posed vertex into an array that the transform pass then read back: 11 KB of
+ * traffic through an 8 KB data cache, for data that is used once. The skin now
+ * happens inside nc_mesh_transform, where the result goes straight into the
+ * projection without ever reaching memory.
+ */
