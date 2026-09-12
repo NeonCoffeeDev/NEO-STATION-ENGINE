@@ -162,19 +162,35 @@ static qword_t *nc_lab_backdrop(qword_t *q)
 
 enum { LAB_SPIN, LAB_TEXTURE, LAB_FILTER, LAB_LIGHT, LAB_CULL, LAB_WIRE,
        LAB_BLEND, LAB_BRIGHT, LAB_MATERIAL, LAB_TINT, LAB_FOV, LAB_SPAWN,
-       LAB_SPRITE, LAB_AVATAR, LAB_COLLIDE, LAB_BACKDROP, LAB_CAMERA,
-       LAB_LEVEL, LAB_ROWS };
+       LAB_SPRITE, LAB_AVATAR, LAB_ANIM, LAB_COLLIDE, LAB_BACKDROP,
+       LAB_CAMERA, LAB_LEVEL, LAB_ROWS };
 
 static const char *const LAB_NAMES[LAB_ROWS] = {
     "SPIN", "TEXTURE", "FILTER", "LIGHTING", "CULLING", "WIREFRAME",
     "BLEND", "BRIGHTNESS", "MATERIAL", "TINT", "FOV", "BOXES",
-    "SPRITES", "AVATAR", "COLLISION", "BACKDROP", "CAMERA", "LEVEL"};
+    "SPRITES", "AVATAR", "ANIMATION", "COLLISION", "BACKDROP", "CAMERA",
+    "LEVEL"};
 
 /* The character you drive, as an imported model rather than a box. The box
  * stays selectable because it is the control that says whether a problem is
  * in the mesh renderer or in everything around it. */
 static NCModel nc_avatar;
 static int nc_opt_avatar = 1;
+
+/* Clip 0 is the bind pose, 1 is idle, 2 is walk; AUTO picks between the last
+ * two from whether the character is actually moving, which is the only one of
+ * the four that is a game rather than a test. */
+enum { ANIM_REST, ANIM_IDLE, ANIM_WALK, ANIM_AUTO, ANIM_MODES };
+static const char *const ANIM_NAMES[ANIM_MODES] = {"REST", "IDLE", "WALK", "AUTO"};
+static int nc_anim_mode = ANIM_AUTO;
+static int nc_anim_playing;
+static float nc_anim_time;
+static float nc_anim_last[3];
+
+/* How far the character travels per cycle of the walk. Driving the clip from
+ * distance rather than from time is what keeps the feet from sliding: change
+ * the walking speed and the legs change with it. */
+#define NC_STRIDE 1.4f
 
 /* Open on arrival. This is a test build; the menu is the reason to be here,
  * and it was being missed entirely on the first visit. */
@@ -228,6 +244,7 @@ static void nc_lab_value(int row, char *out)
     case LAB_SPAWN:    sprintf(out, "%d OF %d", nc_object_count, NC_WORLD_MAX); break;
     case LAB_SPRITE:   sprintf(out, "%d OF %d", nc_sprite_count, NC_SPRITE_MAX); break;
     case LAB_AVATAR:   strcpy(out, nc_opt_avatar ? "FIGURE" : "BOX"); break;
+    case LAB_ANIM:     strcpy(out, ANIM_NAMES[nc_anim_mode]); break;
     case LAB_COLLIDE:  strcpy(out, nc_opt_collide ? "ON" : "OFF"); break;
     case LAB_BACKDROP: strcpy(out, nc_opt_backdrop ? "PARALLAX" : "OFF"); break;
     case LAB_CAMERA:   strcpy(out, NC_CAM_NAMES[nc_cam_mode]); break;
@@ -301,6 +318,9 @@ static void nc_lab_adjust(int row, int step)
         }
         break;
     case LAB_AVATAR:   nc_opt_avatar = !nc_opt_avatar; break;
+    case LAB_ANIM:
+        nc_anim_mode = (nc_anim_mode + ANIM_MODES + step) % ANIM_MODES;
+        break;
     case LAB_COLLIDE:  nc_opt_collide = !nc_opt_collide; break;
     case LAB_BACKDROP: nc_opt_backdrop = !nc_opt_backdrop; break;
     case LAB_CAMERA:
@@ -333,6 +353,30 @@ static void nc_lab_sync_avatar(void)
     nc_avatar.pos[1] -= nc_objects[nc_player].scale[1];
     nc_avatar.yaw = nc_objects[nc_player].rot[1];
     nc_avatar.scale = 1.f;
+
+    {
+        /* How far it moved since last frame, on the floor. */
+        float dx = nc_avatar.pos[0] - nc_anim_last[0];
+        float dz = nc_avatar.pos[2] - nc_anim_last[2];
+        float travelled = sqrtf(dx * dx + dz * dz);
+        int clip = nc_anim_mode;
+        nc_anim_last[0] = nc_avatar.pos[0];
+        nc_anim_last[2] = nc_avatar.pos[2];
+
+        if (clip == ANIM_AUTO)
+            clip = travelled > 0.004f ? ANIM_WALK : ANIM_IDLE;
+        nc_anim_playing = clip;
+
+        if (clip == ANIM_WALK) nc_anim_time += travelled / NC_STRIDE;
+        else                   nc_anim_time += 1.f / 60.f;
+        if (nc_anim_time > 1000.f) nc_anim_time -= 1000.f;
+
+        nc_skin_pose(&nc_figure_mesh_skeleton, &nc_figure_mesh_clips[clip],
+                     nc_anim_time, 1.f);
+        nc_skin_mesh(&nc_figure_mesh, nc_figure_mesh_vbone);
+        nc_avatar.skin_pos = nc_skin_pos;
+        nc_avatar.skin_nrm = nc_skin_nrm;
+    }
 }
 
 
@@ -365,7 +409,9 @@ static int nc_lab_update(unsigned int pressed, unsigned int held)
 
     if (nc_player >= 0 && nc_player < nc_object_count) {
         NCObject *actor = &nc_objects[nc_player];
-        float speed = 0.12f;
+        /* Metres a frame. At the 30 the console actually runs this is
+         * about 1.5 m/s, which is a walk; the old 0.12 was 7 m/s. */
+        float speed = 0.05f;
         /* Which way the camera is actually looking, flattened onto the ground.
          * Taking this from the orbit angle instead was wrong the moment the
          * camera was the authored one, because an authored camera has a yaw
@@ -429,8 +475,9 @@ static qword_t *nc_lab_draw(qword_t *q)
     q = text(q, 26, 76, line, 0x70);
     sprintf(line, "VRAM TOP %6u  FAILED %d", nc_vram_top, nc_vram_fail);
     q = text(q, 26, 112, line, nc_vram_fail ? 0x80 : 0x50);
-    sprintf(line, "MESH %4d TRI  %4d CULL  %4d OFF",
-            nc_stat_mesh_tris, nc_stat_mesh_culled, nc_stat_mesh_dropped);
+    sprintf(line, "MESH %4d TRI  %4d CULL  ANIM %s",
+            nc_stat_mesh_tris, nc_stat_mesh_culled,
+            ANIM_NAMES[nc_anim_playing]);
     q = text(q, 26, 130, line, 0x70);
     sprintf(line, "%s %s %s TOUCH %d",
             nc_opt_perspective ? "PERSP" : "AFFIN",

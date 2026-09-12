@@ -30,39 +30,72 @@ from .smdimport import Skeleton
 # library needs no bone mapping whatsoever.
 SKELETON = [
     # name, parent, offset from parent, box width, joint the box reaches to.
+    # Mixamo's hierarchy and Mixamo's names, minus the fingers. That is the
+    # base because it is where the animation comes from: a clip downloaded for
+    # this rig drives it with no mapping step, and a mapping step is a place
+    # for a walk to go subtly wrong with nothing to compare against.
+    #
     # The reach is named rather than inferred: averaging every child puts the
     # pelvis box inside the hips and fuses both thighs into one slab, because
     # Hips has three children and the mean of them is Hips.
-    ('Hips',            None,            (0.00,  1.01,  0.00), 0.30, 'LowerBack'),
-    ('LHipJoint',       'Hips',          (0.11, -0.04,  0.00), 0.00, None),
-    ('LeftUpLeg',       'LHipJoint',     (0.00, -0.05,  0.00), 0.15, 'LeftLeg'),
+    ('Hips',            None,            (0.00,  1.01,  0.00), 0.30, 'Spine'),
+    ('Spine',           'Hips',          (0.00,  0.10,  0.00), 0.30, 'Spine1'),
+    ('Spine1',          'Spine',         (0.00,  0.12,  0.00), 0.32, 'Spine2'),
+    ('Spine2',          'Spine1',        (0.00,  0.12,  0.00), 0.34, 'Neck'),
+    ('Neck',            'Spine2',        (0.00,  0.13,  0.00), 0.09, 'Head'),
+    ('Head',            'Neck',          (0.00,  0.10,  0.00), 0.18, None),
+    ('LeftShoulder',    'Spine2',        (0.05,  0.09,  0.00), 0.00, None),
+    # The arms hang. A bone lying along X cannot be swung forward by an X
+    # rotation -- that spins it on its own axis -- so the rest pose puts them
+    # down, where a walk's swing is the same rotation the legs use.
+    ('LeftArm',         'LeftShoulder',  (0.13,  0.00,  0.00), 0.11, 'LeftForeArm'),
+    ('LeftForeArm',     'LeftArm',       (0.04, -0.27,  0.00), 0.09, 'LeftHand'),
+    ('LeftHand',        'LeftForeArm',   (0.02, -0.24,  0.00), 0.08, None),
+    ('RightShoulder',   'Spine2',        (-0.05, 0.09,  0.00), 0.00, None),
+    ('RightArm',        'RightShoulder', (-0.13, 0.00,  0.00), 0.11, 'RightForeArm'),
+    ('RightForeArm',    'RightArm',      (-0.04, -0.27, 0.00), 0.09, 'RightHand'),
+    ('RightHand',       'RightForeArm',  (-0.02, -0.24, 0.00), 0.08, None),
+    ('LeftUpLeg',       'Hips',          (0.11, -0.06,  0.00), 0.15, 'LeftLeg'),
     ('LeftLeg',         'LeftUpLeg',     (0.00, -0.44,  0.00), 0.13, 'LeftFoot'),
     ('LeftFoot',        'LeftLeg',       (0.00, -0.43,  0.00), 0.11, 'LeftToeBase'),
-    ('LeftToeBase',     'LeftFoot',      (0.00, -0.06,  0.10), 0.10, None),
-    ('RHipJoint',       'Hips',          (-0.11, -0.04, 0.00), 0.00, None),
-    ('RightUpLeg',      'RHipJoint',     (0.00, -0.05,  0.00), 0.15, 'RightLeg'),
+    ('LeftToeBase',     'LeftFoot',      (0.00, -0.08,  0.10), 0.10, None),
+    ('RightUpLeg',      'Hips',          (-0.11, -0.06, 0.00), 0.15, 'RightLeg'),
     ('RightLeg',        'RightUpLeg',    (0.00, -0.44,  0.00), 0.13, 'RightFoot'),
     ('RightFoot',       'RightLeg',      (0.00, -0.43,  0.00), 0.11, 'RightToeBase'),
-    ('RightToeBase',    'RightFoot',     (0.00, -0.06,  0.10), 0.10, None),
-    ('LowerBack',       'Hips',          (0.00,  0.09,  0.00), 0.00, None),
-    ('Spine',           'LowerBack',     (0.00,  0.11,  0.00), 0.30, 'Spine1'),
-    ('Spine1',          'Spine',         (0.00,  0.13,  0.00), 0.34, 'Neck'),
-    ('Neck',            'Spine1',        (0.00,  0.10,  0.00), 0.00, None),
-    ('Neck1',           'Neck',          (0.00,  0.05,  0.00), 0.09, 'Head'),
-    ('Head',            'Neck1',         (0.00,  0.10,  0.00), 0.18, None),
-    ('LeftShoulder',    'Spine1',        (0.06,  0.08,  0.00), 0.00, None),
-    ('LeftArm',         'LeftShoulder',  (0.12,  0.00,  0.00), 0.11, 'LeftForeArm'),
-    ('LeftForeArm',     'LeftArm',       (0.26,  0.00,  0.00), 0.09, 'LeftHand'),
-    ('LeftHand',        'LeftForeArm',   (0.23,  0.00,  0.00), 0.08, None),
-    ('RightShoulder',   'Spine1',        (-0.06, 0.08,  0.00), 0.00, None),
-    ('RightArm',        'RightShoulder', (-0.12, 0.00,  0.00), 0.11, 'RightForeArm'),
-    ('RightForeArm',    'RightArm',      (-0.26, 0.00,  0.00), 0.09, 'RightHand'),
-    ('RightHand',       'RightForeArm',  (-0.23, 0.00,  0.00), 0.08, None),
+    ('RightToeBase',    'RightFoot',     (0.00, -0.08,  0.10), 0.10, None),
 ]
 
+# Mixamo prefixes every bone in an exported FBX; CMU and most other libraries
+# name the same joints differently. Resolving through this means a clip from
+# anywhere lands on the right bone without the rig itself having to change.
+ALIASES = {
+    'mixamorig:Hips': 'Hips', 'mixamorig:Spine': 'Spine',
+    'mixamorig:Spine1': 'Spine1', 'mixamorig:Spine2': 'Spine2',
+    'mixamorig:Neck': 'Neck', 'mixamorig:Head': 'Head',
+    'mixamorig:LeftShoulder': 'LeftShoulder', 'mixamorig:LeftArm': 'LeftArm',
+    'mixamorig:LeftForeArm': 'LeftForeArm', 'mixamorig:LeftHand': 'LeftHand',
+    'mixamorig:RightShoulder': 'RightShoulder', 'mixamorig:RightArm': 'RightArm',
+    'mixamorig:RightForeArm': 'RightForeArm', 'mixamorig:RightHand': 'RightHand',
+    'mixamorig:LeftUpLeg': 'LeftUpLeg', 'mixamorig:LeftLeg': 'LeftLeg',
+    'mixamorig:LeftFoot': 'LeftFoot', 'mixamorig:LeftToeBase': 'LeftToeBase',
+    'mixamorig:RightUpLeg': 'RightUpLeg', 'mixamorig:RightLeg': 'RightLeg',
+    'mixamorig:RightFoot': 'RightFoot', 'mixamorig:RightToeBase': 'RightToeBase',
+    # CMU splits the lower spine differently and adds hip and neck stubs.
+    'LowerBack': 'Spine', 'LHipJoint': 'LeftUpLeg', 'RHipJoint': 'RightUpLeg',
+    'Neck1': 'Neck', 'LeftFingerBase': 'LeftHand', 'RightFingerBase': 'RightHand',
+}
+
+
+def resolve(name):
+    """The rig's own name for a joint some other library calls something else."""
+    if name in ALIASES:
+        return ALIASES[name]
+    bare = name.split(':')[-1]
+    return ALIASES.get(bare, bare)
+
 # Where a segment's box ends, for the joints nothing hangs off.
-TIPS = {'Head': (0.00, 0.15, 0.00), 'LeftHand': (0.10, 0.00, 0.00),
-        'RightHand': (-0.10, 0.00, 0.00), 'LeftToeBase': (0.00, 0.00, 0.09),
+TIPS = {'Head': (0.00, 0.15, 0.00), 'LeftHand': (0.01, -0.09, 0.00),
+        'RightHand': (-0.01, -0.09, 0.00), 'LeftToeBase': (0.00, 0.00, 0.09),
         'RightToeBase': (0.00, 0.00, 0.09)}
 
 

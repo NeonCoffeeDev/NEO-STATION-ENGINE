@@ -142,6 +142,7 @@ static texbuffer_t *bound;
 #include "nc_world3d.h"
 #include "nc_figure_mesh.h"
 #include "nc_mesh.h"
+#include "nc_skin.h"
 
 /* How many frames each character of dialogue takes. vn_runtime.h reads it,
  * so it is declared here and seeded from the kit once VN_SPEED exists. */

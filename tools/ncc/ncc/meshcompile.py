@@ -100,3 +100,87 @@ def report(stats, name):
     return ('  %s: %d triangles, %d vertices, %d part(s), %d KB in main memory'
             % (name, stats['triangles'], stats['vertices'], stats['parts'],
                stats['bytes'] // 1024))
+
+
+def _mat34(matrix):
+    """A 4x4 as the twelve floats the runtime actually multiplies by."""
+    return [float(matrix[r][c]) for r in range(3) for c in range(4)]
+
+
+def compile_character(mesh, rig, clips, name, out_path):
+    """Mesh, skeleton, skin and clips as one header.
+
+    They ship together because they are useless apart: a skeleton with no
+    weights poses nothing, weights with no inverse bind put every vertex in
+    the wrong place, and a clip addressed to joints this rig does not have
+    silently animates whatever happens to be at that index.
+    """
+    stats = compile_mesh(mesh, name, out_path)
+    upper = name.upper()
+    lines = ['', '/* ---- skeleton ---- */',
+             '#define %s_BONES %d' % (upper, len(rig)),
+             'typedef struct {',
+             '    const signed short *parent;',
+             '    const float *bind;        /* local, 3x4 per bone */',
+             '    const float *inverse;     /* inverse bind world, 3x4 per bone */',
+             '    int count;',
+             '} NCSkeletonData;',
+             'typedef struct {',
+             '    const unsigned short *joints;',
+             '    const float *rot;         /* frames * joints * 3, radians */',
+             '    const float *root;        /* frames * 3, or 0 */',
+             '    int joint_count, frames;',
+             '    float fps;',
+             '} NCClipData;', '']
+
+    lines.append('static const signed short %s_parent[] = {' % name)
+    lines += _ints(rig.parents)
+    lines.append('};')
+    lines.append('static const float %s_bind[] = {' % name)
+    lines += _floats([v for m in rig.bind_local for v in _mat34(m)])
+    lines.append('};')
+    lines.append('static const float %s_inverse[] = {' % name)
+    lines += _floats([v for m in rig.inverse_bind for v in _mat34(m)])
+    lines.append('};')
+    lines.append('static const NCSkeletonData %s_skeleton = {%s_parent, %s_bind, '
+                 '%s_inverse, %d};' % (name, name, name, name, len(rig)))
+
+    lines.append('static const unsigned char %s_vbone[] = {' % name)
+    lines += _ints(mesh.bones)
+    lines.append('};')
+
+    lines += ['', '/* ---- clips ---- */',
+              '#define %s_CLIPS %d' % (upper, len(clips))]
+    for index, clip in enumerate(clips):
+        lines.append('static const unsigned short %s_clip%d_joints[] = {'
+                     % (name, index))
+        lines += _ints(clip.joints)
+        lines.append('};')
+        lines.append('static const float %s_clip%d_rot[] = {' % (name, index))
+        lines += _floats(clip.rotations.reshape(-1))
+        lines.append('};')
+        if clip.root is not None:
+            lines.append('static const float %s_clip%d_root[] = {' % (name, index))
+            lines += _floats(clip.root.reshape(-1))
+            lines.append('};')
+    lines.append('static const NCClipData %s_clips[] = {' % name)
+    for index, clip in enumerate(clips):
+        root = ('%s_clip%d_root' % (name, index)) if clip.root is not None else '0'
+        lines.append('    {%s_clip%d_joints, %s_clip%d_rot, %s, %d, %d, %.3ff},'
+                     % (name, index, name, index, root,
+                        len(clip.joints), clip.frames, clip.fps))
+    lines.append('};')
+    names = ', '.join('"%s"' % clip.name.upper()[:8] for clip in clips)
+    lines.append('static const char *const %s_clip_names[] = {%s};' % (name, names))
+    lines.append('')
+
+    with open(out_path, 'a', encoding='utf-8') as handle:
+        handle.write('\n'.join(lines))
+
+    extra = (len(rig) * 24 * 4) + len(mesh.bones)
+    for clip in clips:
+        extra += clip.rotations.size * 4 + (clip.root.size * 4 if clip.root is not None else 0)
+    stats['bones'] = len(rig)
+    stats['clips'] = len(clips)
+    stats['bytes'] += extra
+    return stats

@@ -500,12 +500,17 @@ def _build_ps2(src):
         # The reference figure, compiled in so the mesh renderer has something
         # to draw that is original geometry rather than somebody's asset.
         if os.path.exists(os.path.join(src,'src','nc_mesh.h')):
-            from .ncfigure import figure
-            from .meshcompile import compile_mesh, report
+            from .ncfigure import figure, skeleton
+            from .ncanim import idle, walk, rest
+            from .meshcompile import compile_character, report
             try:
-                stats=compile_mesh(figure(),'nc_figure_mesh',
-                                   os.path.join(src,'src','nc_figure_mesh.h'))
-                print(report(stats,'reference figure'))
+                rig=skeleton()
+                stats=compile_character(figure(rig), rig,
+                                        [rest(rig), idle(rig), walk(rig)],
+                                        'nc_figure_mesh',
+                                        os.path.join(src,'src','nc_figure_mesh.h'))
+                print(report(stats,'reference figure')
+                      + ', %d bones, %d clips' % (stats['bones'], stats['clips']))
             except (OSError,ValueError) as exc:raise SystemExit(f"ncc: figure mesh -- {exc}")
     print(f"Building {name}  [PS2]")
     from .vn import compile_content

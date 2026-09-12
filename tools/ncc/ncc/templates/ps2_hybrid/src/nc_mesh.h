@@ -39,6 +39,10 @@ typedef struct {
     float scale;
     int tint[3];
     int active;
+    /* Where the vertices are this frame, if something is posing them. Null
+     * means the mesh stands in its bind pose and the renderer reads the
+     * compiled arrays straight. */
+    const float *skin_pos, *skin_nrm;
 } NCModel;
 
 static void nc_model_init(NCModel *model, const NCMeshData *data)
@@ -49,6 +53,8 @@ static void nc_model_init(NCModel *model, const NCMeshData *data)
     model->yaw = 0.f;
     model->scale = 1.f;
     model->active = 1;
+    model->skin_pos = 0;
+    model->skin_nrm = 0;
 }
 
 /* Pass one: every vertex, once. */
@@ -63,8 +69,8 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
     int i;
 
     for (i = 0; i < count; i++) {
-        const float *p = &data->pos[i * 3];
-        const float *n = &data->nrm[i * 3];
+        const float *p = model->skin_pos ? &model->skin_pos[i * 3] : &data->pos[i * 3];
+        const float *n = model->skin_nrm ? &model->skin_nrm[i * 3] : &data->nrm[i * 3];
         float vx, vy, vz, tx, tz, rx, rz, ry, depth, lit;
         int l, shade;
 
