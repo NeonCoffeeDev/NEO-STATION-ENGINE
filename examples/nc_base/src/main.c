@@ -97,6 +97,21 @@ static int stick_lx, stick_ly, stick_rx, stick_ry;
  * which is exactly when the beam is on the first rows. Whatever the GS has not
  * finished by then is caught mid-repaint. Lower rows are drawn before the beam
  * gets to them, which is why only the top band showed it. */
+/* Graphics memory is nearly full, and an allocation that fails returns -1
+ * rather than saying so. Counting the failures and keeping the highest
+ * address handed out turns "the textures look torn" into a number that can be
+ * read off the television. */
+static int nc_vram_fail;
+static unsigned int nc_vram_top;
+
+static unsigned int nc_vram(int width, int height, int psm)
+{
+    int address = graph_vram_allocate(width, height, psm, GRAPH_ALIGN_PAGE);
+    if (address < 0) { nc_vram_fail++; return (unsigned int)-1; }
+    if ((unsigned int)address > nc_vram_top) nc_vram_top = (unsigned int)address;
+    return (unsigned int)address;
+}
+
 static framebuffer_t frame[2];
 static int frame_count = 1;     /* 2 once the second buffer is really there */
 static int frame_draw;          /* the buffer being drawn into right now */
@@ -163,8 +178,7 @@ static void init_gs(void)
         frame[buffer].height = SCREEN_H;
         frame[buffer].mask = 0;
         frame[buffer].psm = FRAME_PSM;
-        frame[buffer].address = graph_vram_allocate(SCREEN_W, SCREEN_H,
-                                                    FRAME_PSM, GRAPH_ALIGN_PAGE);
+        frame[buffer].address = nc_vram(SCREEN_W, SCREEN_H, FRAME_PSM);
     }
     /* Never trade a picture for a smoother one. If graphics memory cannot hold
      * the second buffer, fall back to the single-buffered behaviour, which at
@@ -192,8 +206,7 @@ static void init_gs(void)
     z.mask = 0;
     z.method = ZTEST_METHOD_ALLPASS;
     z.zsm = GS_ZBUF_16;
-    z.address = graph_vram_allocate(SCREEN_W, SCREEN_H, GS_PSM_16,
-                                    GRAPH_ALIGN_PAGE);
+    z.address = nc_vram(SCREEN_W, SCREEN_H, GS_PSM_16);
     if (z.address == (unsigned int)-1) {
         /* Without it the picture is still a picture, just sorted the old way. */
         z.enable = DRAW_DISABLE;
@@ -202,8 +215,7 @@ static void init_gs(void)
 
     logo_tex.width = nc_logo_width;
     logo_tex.psm = GS_PSM_32;
-    logo_tex.address = graph_vram_allocate(nc_logo_width, nc_logo_height,
-                                           GS_PSM_32, GRAPH_ALIGN_PAGE);
+    logo_tex.address = nc_vram(nc_logo_width, nc_logo_height, GS_PSM_32);
     logo_tex.info.width = draw_log2(nc_logo_width);
     logo_tex.info.height = draw_log2(nc_logo_height);
     logo_tex.info.components = TEXTURE_COMPONENTS_RGBA;
@@ -211,8 +223,7 @@ static void init_gs(void)
 
     ui_skin_tex.width = nc_ui_skin_width;
     ui_skin_tex.psm = GS_PSM_32;
-    ui_skin_tex.address = graph_vram_allocate(nc_ui_skin_width, nc_ui_skin_height,
-                                               GS_PSM_32, GRAPH_ALIGN_PAGE);
+    ui_skin_tex.address = nc_vram(nc_ui_skin_width, nc_ui_skin_height, GS_PSM_32);
     ui_skin_tex.info.width = draw_log2(nc_ui_skin_width);
     ui_skin_tex.info.height = draw_log2(nc_ui_skin_height);
     ui_skin_tex.info.components = TEXTURE_COMPONENTS_RGBA;
@@ -220,8 +231,7 @@ static void init_gs(void)
 
     font_tex.width = nc_font_width;
     font_tex.psm = GS_PSM_32;
-    font_tex.address = graph_vram_allocate(nc_font_width, (nc_font_height + 31) & ~31,
-                                           GS_PSM_32, GRAPH_ALIGN_PAGE);
+    font_tex.address = nc_vram(nc_font_width, (nc_font_height + 31) & ~31, GS_PSM_32);
     font_tex.info.width = draw_log2(nc_font_width);
     font_tex.info.height = draw_log2(nc_font_height);
     font_tex.info.components = TEXTURE_COMPONENTS_RGBA;

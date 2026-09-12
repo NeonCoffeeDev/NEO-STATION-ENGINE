@@ -114,7 +114,70 @@ static void nc_mesh_transform(const NCModel *model, float yaw, float pitch,
         nc_mv_visible[i] = 0;
 }
 
-/* Pass two: the index list, with nothing left to compute. */
+/* Triangles are buffered and emitted together, and the batch is always an
+ * even number of them. This is not an optimisation.
+ *
+ * REGLIST mode packs each register as 64 bits, and draw_prim_end is handed a
+ * qword_t pointer. One triangle carrying ST, RGBAQ and XYZ is 3 vertices x 3
+ * registers = 9 quadwords' worth of halves -- 4.5 quadwords -- so emitting a
+ * primitive per triangle hands draw_prim_end a pointer half a quadword out of
+ * alignment. It writes a GIF tag with the wrong length, and everything after
+ * it in the packet is read as the wrong kind of thing: textures arrive torn,
+ * and the DMA eventually stops. Two triangles is 18 halves, which is 9 whole
+ * quadwords, and every other primitive in this engine was already even by
+ * accident of drawing quads.
+ */
+#define NC_MESH_BATCH 96                  /* even, and +1 for the pad */
+static unsigned short nc_mesh_run[(NC_MESH_BATCH + 1) * 3];
+static int nc_mesh_run_count;
+
+static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
+                              const NCModel *model, float far_s, float far_t,
+                              prim_t *prim, color_t *color, int ceiling)
+{
+    int corner, total;
+    u64 *dw;
+
+    if (!nc_mesh_run_count) return q;
+    if (nc_mesh_run_count & 1) {
+        /* Repeat the last triangle to make the count even. It draws over
+         * itself at identical depth, which the GREATER test rejects, so it
+         * costs a little fill and changes no pixel. */
+        int last = (nc_mesh_run_count - 1) * 3;
+        nc_mesh_run[last + 3] = nc_mesh_run[last];
+        nc_mesh_run[last + 4] = nc_mesh_run[last + 1];
+        nc_mesh_run[last + 5] = nc_mesh_run[last + 2];
+        nc_mesh_run_count++;
+    }
+    total = nc_mesh_run_count * 3;
+    if (q + (total * 2) + 16 >= packet_limit) { nc_mesh_run_count = 0; return q; }
+
+    dw = (u64 *)draw_prim_start(q, 0, prim, color);
+    for (corner = 0; corner < total; corner++) {
+        int v = nc_mesh_run[corner];
+        float w = 1.f / nc_mv_depth[v];
+        texel_t st; xyz_t xyz;
+        int shade = nc_mv_shade[v];
+        st.s = data->uv[v * 2] * far_s * w;
+        st.t = data->uv[v * 2 + 1] * far_t * w;
+        color->r = (model->tint[0] * shade) >> 7;
+        color->g = (model->tint[1] * shade) >> 7;
+        color->b = (model->tint[2] * shade) >> 7;
+        if (color->r > ceiling) color->r = ceiling;
+        if (color->g > ceiling) color->g = ceiling;
+        if (color->b > ceiling) color->b = ceiling;
+        color->q = w;
+        xyz.x = (u16)ftoi4(2048 + nc_mv_x[v]);
+        xyz.y = (u16)ftoi4(2048 + nc_mv_y[v]);
+        xyz.z = nc_depth_value(nc_mv_depth[v]);
+        *dw++ = st.uv; *dw++ = color->rgbaq; *dw++ = xyz.xyz;
+    }
+    q = draw_prim_end((qword_t *)dw, 3, DRAW_STQ2_REGLIST);
+    nc_stat_mesh_tris += nc_mesh_run_count;
+    nc_mesh_run_count = 0;
+    return q;
+}
+
 static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
 {
     const NCMeshData *data;
@@ -123,6 +186,7 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
     int part, ceiling = nc_opt_boost ? 0xFF : 0x80;
 
     nc_stat_mesh_tris = nc_stat_mesh_culled = nc_stat_mesh_dropped = 0;
+    nc_mesh_run_count = 0;
     if (!model->active || !model->data) return q;
     data = model->data;
     if (data->vertices > NC_MESH_MAX_VERTS) return q;   /* refuse, do not clip */
@@ -146,8 +210,8 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
     for (part = 0; part < data->parts_count; part++) {
         const NCMeshPart *run = &data->parts[part];
         int material = run->material;
+        int first = run->first, count = run->count, at;
         float far_s, far_t;
-        unsigned int at;
 
         if (material < 0 || material >= NC_MATERIAL_COUNT) continue;
         q = draw_texturebuffer(q, 0, &nc_world_tex[material], &clut);
@@ -156,12 +220,9 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
         far_t = (float)nc_materials[material].used_height
               / (float)nc_materials[material].height;
 
-        for (at = run->first; at + 2 < (unsigned int)(run->first + run->count); at += 3) {
+        for (at = first; at + 2 < first + count; at += 3) {
             int a = data->index[at], b = data->index[at + 1], c = data->index[at + 2];
             float area;
-            u64 *dw;
-            int corner;
-            int slot[3];
 
             if (!nc_mv_visible[a] || !nc_mv_visible[b] || !nc_mv_visible[c]) {
                 nc_stat_mesh_dropped++;
@@ -173,32 +234,15 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
                  - (nc_mv_x[c] - nc_mv_x[a]) * (nc_mv_y[b] - nc_mv_y[a]);
             if (nc_opt_cull && area <= 0.f) { nc_stat_mesh_culled++; continue; }
 
-            if (q + 16 >= packet_limit) return q;   /* drop, never overrun */
-
-            slot[0] = a; slot[1] = b; slot[2] = c;
-            dw = (u64 *)draw_prim_start(q, 0, &prim, &color);
-            for (corner = 0; corner < 3; corner++) {
-                int v = slot[corner];
-                float w = 1.f / nc_mv_depth[v];
-                texel_t st; xyz_t xyz;
-                int shade = nc_mv_shade[v];
-                st.s = data->uv[v * 2] * far_s * w;
-                st.t = data->uv[v * 2 + 1] * far_t * w;
-                color.r = (model->tint[0] * shade) >> 7;
-                color.g = (model->tint[1] * shade) >> 7;
-                color.b = (model->tint[2] * shade) >> 7;
-                if (color.r > ceiling) color.r = ceiling;
-                if (color.g > ceiling) color.g = ceiling;
-                if (color.b > ceiling) color.b = ceiling;
-                color.q = w;
-                xyz.x = (u16)ftoi4(2048 + nc_mv_x[v]);
-                xyz.y = (u16)ftoi4(2048 + nc_mv_y[v]);
-                xyz.z = nc_depth_value(nc_mv_depth[v]);
-                *dw++ = st.uv; *dw++ = color.rgbaq; *dw++ = xyz.xyz;
-            }
-            q = draw_prim_end((qword_t *)dw, 3, DRAW_STQ2_REGLIST);
-            nc_stat_mesh_tris++;
+            nc_mesh_run[nc_mesh_run_count * 3] = (unsigned short)a;
+            nc_mesh_run[nc_mesh_run_count * 3 + 1] = (unsigned short)b;
+            nc_mesh_run[nc_mesh_run_count * 3 + 2] = (unsigned short)c;
+            nc_mesh_run_count++;
+            if (nc_mesh_run_count >= NC_MESH_BATCH)
+                q = nc_mesh_flush(q, data, model, far_s, far_t, &prim, &color, ceiling);
         }
+        /* A part's triangles cannot spill into the next part's texture. */
+        q = nc_mesh_flush(q, data, model, far_s, far_t, &prim, &color, ceiling);
     }
     return q;
 }

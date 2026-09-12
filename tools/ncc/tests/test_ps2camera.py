@@ -261,3 +261,58 @@ class LightingTests(unittest.TestCase):
 # Index of each face in the runtime's table, named so the tests above read.
 FACE_UP = 3
 FACE_DOWN = 2
+
+
+class PacketAlignmentTests(unittest.TestCase):
+    """Every primitive the runtime emits must land on a quadword boundary.
+
+    PS2SDK packs REGLIST registers as 64 bits each and hands draw_prim_end a
+    qword_t pointer. An odd number of registers leaves that pointer half a
+    quadword out; the GIF tag it writes then has the wrong length, everything
+    after it in the packet is read as the wrong kind of thing, and the console
+    shows torn textures and then stops. Every primitive here was even by
+    accident of drawing quads until a mesh renderer started drawing single
+    triangles, so this is now checked rather than assumed.
+    """
+
+    RUNTIME_DIR = (Path(__file__).resolve().parents[1]
+                   / 'ncc' / 'templates' / 'ps2_hybrid' / 'src')
+
+    def emitters(self):
+        """(file, registers, vertices-per-primitive) read from the source."""
+        found = []
+        for name in ('nc_world3d.h', 'nc_mesh.h'):
+            text = (self.RUNTIME_DIR / name).read_text(encoding='utf-8')
+            for call in re.finditer(r'draw_prim_end\(\(qword_t\s*\*\)dw,\s*(\d+),', text):
+                regs = int(call.group(1))
+                # The loop that fills dw, immediately above the call.
+                before = text[:call.start()]
+                loop = re.findall(r'for\s*\(\s*\w+\s*=\s*0;\s*\w+\s*<\s*([A-Za-z0-9_]+)\s*;',
+                                  before)
+                found.append((name, regs, loop[-1] if loop else '?'))
+        return found
+
+    def test_no_primitive_emits_an_odd_number_of_registers(self):
+        counts = {'6': 6, '2': 2, 'total': 6}   # `total` is always even by construction
+        checked = 0
+        for name, regs, bound in self.emitters():
+            if bound not in counts:
+                continue
+            checked += 1
+            self.assertEqual((counts[bound] * regs) % 2, 0,
+                             '%s emits %s vertices x %d registers, which is odd'
+                             % (name, bound, regs))
+        self.assertGreater(checked, 2, 'the source no longer looks the way this reads it')
+
+    def test_the_mesh_batch_size_is_even(self):
+        """An odd batch would put the pad back and defeat the point of it."""
+        text = (self.RUNTIME_DIR / 'nc_mesh.h').read_text(encoding='utf-8')
+        size = int(re.search(r'#define NC_MESH_BATCH\s+(\d+)', text).group(1))
+        self.assertEqual(size % 2, 0, 'NC_MESH_BATCH is %d' % size)
+
+    def test_the_mesh_pads_an_odd_run_before_emitting(self):
+        text = (self.RUNTIME_DIR / 'nc_mesh.h').read_text(encoding='utf-8')
+        self.assertTrue('nc_mesh_run_count & 1' in text,
+                        'nc_mesh.h no longer makes an odd triangle count even '
+                        'before emitting, so the last primitive of a run lands '
+                        'half a quadword out of alignment')

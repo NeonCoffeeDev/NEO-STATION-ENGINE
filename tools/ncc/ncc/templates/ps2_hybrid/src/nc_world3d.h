@@ -125,7 +125,7 @@ static void nc_world_upload(void) {
          * was already page-aligned, which is exactly why every other texture
          * worked. */
         nc_world_tex[i].width=nc_materials[i].width;nc_world_tex[i].psm=GS_PSM_32;
-        nc_world_tex[i].address=graph_vram_allocate(nc_materials[i].width,nc_materials[i].height,GS_PSM_32,GRAPH_ALIGN_PAGE);
+        nc_world_tex[i].address=nc_vram(nc_materials[i].width,nc_materials[i].height,GS_PSM_32);
         nc_world_tex[i].info.width=draw_log2(nc_materials[i].width);nc_world_tex[i].info.height=draw_log2(nc_materials[i].height);
         nc_world_tex[i].info.components=TEXTURE_COMPONENTS_RGBA;nc_world_tex[i].info.function=TEXTURE_FUNCTION_MODULATE;
         upload=packet_init(qwords,PACKET_NORMAL);

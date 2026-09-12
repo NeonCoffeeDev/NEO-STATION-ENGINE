@@ -13,7 +13,7 @@ static int vn_init(void)
         texbuffer_t *t=&vn_textures[i];
         const VNAsset *a=&vn_assets[i];
         t->width=a->w<64?64:a->w; t->psm=GS_PSM_32;
-        t->address=graph_vram_allocate(t->width,(a->h+31)&~31,GS_PSM_32,GRAPH_ALIGN_PAGE);
+        t->address=nc_vram(t->width,(a->h+31)&~31,GS_PSM_32);
         if (t->address == (unsigned int)-1) return 0;
         t->info.width=draw_log2(a->w); t->info.height=draw_log2(a->h);
         t->info.components=TEXTURE_COMPONENTS_RGBA;

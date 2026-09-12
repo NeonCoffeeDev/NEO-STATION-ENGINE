@@ -411,7 +411,7 @@ static qword_t *nc_lab_draw(qword_t *q)
     /* Always on, menu or not. The numbers are the reason this screen exists,
      * and hiding them behind the menu would mean never seeing what the menu
      * just changed. */
-    q = panel(q, 16, 14, 316, 122, 0x0a, 0x0c, 0x12);
+    q = panel(q, 16, 14, 316, 140, 0x0a, 0x0c, 0x12);
     /* Culling reported as a share of what it was offered. "CULLED 74" alone
      * cannot be checked against anything; "74 OF 144" can. */
     sprintf(line, "DRAWN %2d  TRI %4d  CULL %3d/%3d  SPR %d",
@@ -427,9 +427,11 @@ static qword_t *nc_lab_draw(qword_t *q)
             (int)nc_cam_pos[0], (int)nc_cam_pos[1], (int)nc_cam_pos[2],
             (int)nc_cam_fov);
     q = text(q, 26, 76, line, 0x70);
+    sprintf(line, "VRAM TOP %6u  FAILED %d", nc_vram_top, nc_vram_fail);
+    q = text(q, 26, 112, line, nc_vram_fail ? 0x80 : 0x50);
     sprintf(line, "MESH %4d TRI  %4d CULL  %4d OFF",
             nc_stat_mesh_tris, nc_stat_mesh_culled, nc_stat_mesh_dropped);
-    q = text(q, 26, 112, line, 0x70);
+    q = text(q, 26, 130, line, 0x70);
     sprintf(line, "%s %s %s TOUCH %d",
             nc_opt_perspective ? "PERSP" : "AFFIN",
             nc_opt_cull ? "CULL" : "NOCULL",
