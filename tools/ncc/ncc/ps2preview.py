@@ -33,10 +33,22 @@ from . import ps2budget
 # each bit of i, and the faces are wound the way nc_world_cube winds them.
 CORNERS = [(1 if i & 1 else -1, 1 if i & 2 else -1, 1 if i & 4 else -1)
            for i in range(8)]
-FACES = ((0, 1, 3, 2), (4, 5, 7, 6), (0, 1, 5, 4),
-         (2, 3, 7, 6), (0, 2, 6, 4), (1, 3, 7, 5))
+# Wound so (v1-v0) x (v2-v0) points along each face's own outward normal.
+FACES = ((2, 3, 1, 0), (4, 5, 7, 6), (0, 1, 5, 4),
+         (6, 7, 3, 2), (4, 6, 2, 0), (1, 3, 7, 5))
 FACE_NORMALS = ((0, 0, -1), (0, 0, 1), (0, -1, 0),
                 (0, 1, 0), (-1, 0, 0), (1, 0, 0))
+# Which local axis supplies u and v on each face, and which way round.
+FACE_UV = ((0, 1, 1, -1), (0, -1, 1, -1), (0, -1, 2, -1),
+           (0, 1, 2, -1), (2, -1, 1, -1), (2, 1, 1, -1))
+
+
+def texcoord(face, vertex):
+    """0..1 across the face, from the vertex's own position, as the runtime."""
+    u_axis, u_sign, v_axis, v_sign = FACE_UV[face]
+    sign = lambda axis: 1.0 if vertex & (1 << axis) else -1.0
+    return ((sign(u_axis) * u_sign + 1.0) * 0.5,
+            (sign(v_axis) * v_sign + 1.0) * 0.5)
 
 
 def _rotate(point, rotation):
@@ -143,13 +155,28 @@ def _triangle(colour, depth_of, points, uvs, shade, texture, used,
     opaque = inside & (texel[..., 3] >= 0.5)      # the runtime's alpha test
     if not opaque.any():
         return
-    lit = texel[..., :3] * shade
+    # MODULATE treats 0x80 as 1.0, so a shade above it brightens rather than
+    # overflowing. It is the only way to read a dark texture on a television,
+    # and the runtime's BRIGHTNESS row is exactly this.
+    lit = np.clip(texel[..., :3] * shade, 0.0, 1.0)
     region = colour[low_y:high_y + 1, low_x:high_x + 1]
     region[opaque] = lit[opaque]
 
 
+def facing(quad_points):
+    """Winding of a projected quad. Positive faces the camera.
+
+    The same two edges nc_face_facing uses in the runtime, so a sign error
+    here is a sign error there. Which sign means "towards" was settled by
+    rendering it both ways and looking: the wrong one draws a hollow box you
+    can see the inside of.
+    """
+    (x0, y0), (x1, y1), (x3, y3) = (quad_points[0], quad_points[1], quad_points[3])
+    return (x1 - x0) * (y3 - y0) - (y1 - y0) * (x3 - x0)
+
+
 def render(project, size=None, background=(0x14, 0x18, 0x1a), quantise=None,
-           override_material=None, perspective=True):
+           override_material=None, perspective=True, cull=True, boost=False):
     """Draw the project's 3D world the way the console would.
 
     Returns a PIL image. `quantise` defaults to whatever colour depth the
@@ -209,16 +236,19 @@ def render(project, size=None, background=(0x14, 0x18, 0x1a), quantise=None,
             quad = FACES[face]
             if any(screen_points[v] is None for v in quad):
                 continue
-            # Corner 1 and 2 take the far edge in u, corners 2 and 3 in v --
-            # the same mapping nc_world_cube writes into the UV register.
-            uv = [((used_w - 1) if c in (1, 2) else 0,
-                   (used_h - 1) if c >= 2 else 0) for c in range(4)]
+            if cull and facing([screen_points[v] for v in quad]) <= 0:
+                continue
+            uv = []
+            for corner in range(4):
+                fu, fv = texcoord(face, quad[corner])
+                uv.append((fu * (used_w - 1), fv * (used_h - 1)))
             for a, b, c in ((0, 1, 2), (0, 2, 3)):
                 _triangle(colour, [depths[quad[a]], depths[quad[b]], depths[quad[c]]],
                           [screen_points[quad[a]], screen_points[quad[b]],
                            screen_points[quad[c]]],
-                          [uv[a], uv[b], uv[c]], shades[face], texture,
-                          (used_w, used_h), perspective)
+                          [uv[a], uv[b], uv[c]],
+                          min(2.0, shades[face] * 2.0) if boost else shades[face],
+                          texture, (used_w, used_h), perspective)
 
     pixels = np.clip(colour, 0.0, 1.0)
     if quantise < 8:

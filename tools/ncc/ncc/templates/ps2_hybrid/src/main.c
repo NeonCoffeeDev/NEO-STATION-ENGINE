@@ -871,6 +871,10 @@ int main(void)
             q = draw_menu(q, selected);
             break;
         case SCENE_WORLD3D:
+            /* The 2D layer goes down before the world, which is the whole
+             * point of it: it measures full-screen overdraw arriving before
+             * anything else is drawn. */
+            q = nc_lab_backdrop(q);
             q = nc_world_draw(q);
             /* The world is drawn first and the readout over it, so the numbers
              * describe the frame underneath them. */
