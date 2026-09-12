@@ -76,7 +76,7 @@ def main(argv=None):
 
     ms = sub.add_parser("mesh",
                         help="inspect a model and draw it the way the console would")
-    ms.add_argument("file", help="a .obj (Blender, Crocotile, or a ripped model)")
+    ms.add_argument("file", help="a .obj or binary .fbx (Blender, Crocotile, Maya)")
     ms.add_argument("-o", "--out", help="where to write the preview PNG")
     ms.add_argument("--rotate", type=float, default=210.0,
                     help="turn the model on its Y axis before drawing")
@@ -147,7 +147,11 @@ def _mesh(args):
     import os
     from . import meshimport, ps2preview
     try:
-        mesh = meshimport.load_obj(args.file)
+        if os.path.splitext(args.file)[1].lower() == ".fbx":
+            from . import fbximport
+            mesh = fbximport.load_fbx(args.file)
+        else:
+            mesh = meshimport.load_obj(args.file)
     except (OSError, meshimport.MeshError) as exc:
         raise SystemExit("ncc: %s" % exc)
     print(meshimport.describe(mesh))

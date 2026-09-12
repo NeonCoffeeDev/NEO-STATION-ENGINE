@@ -379,3 +379,87 @@ def render_mesh(mesh, pos, target, fov=55.0, size=ps2camera.SCREEN, lights=None,
         pixels = np.round(pixels * levels) / levels
     image = Image.fromarray((pixels * 255.0 + 0.5).astype(np.uint8), 'RGB')
     return image, {'drawn': drawn, 'culled': culled, 'skipped': skipped}
+
+def render_scene(instances, pos, target, fov=55.0, size=None, lights=None,
+                 ambient=0.35, cull=True, perspective=True, quantise=5,
+                 background=(0x14, 0x18, 0x1a)):
+    """Several models in one shot, sharing one depth buffer.
+
+    Which is the whole point of having a depth buffer: a character standing in
+    a room is two unrelated meshes that have to occlude each other per pixel.
+    Sorting them against each other could not do it, and this is the first
+    thing in the engine that genuinely could not work without it.
+
+    Each instance is a dict: mesh, and optionally position, rotation (degrees
+    about Y) and scale.
+    """
+    from PIL import Image
+    size = size or ps2camera.SCREEN
+    lights = lights if lights is not None else [([0.3, 0.8, -0.5], 0.8)]
+    lights = [(list(np.asarray(d, dtype=np.float64)
+                    / (np.linalg.norm(d) or 1.0)), p) for d, p in lights]
+
+    colour = np.zeros((size[1], size[0], 3), dtype=np.float32)
+    colour[:, :] = np.array(background, dtype=np.float32) / 255.0
+    zbuf = np.zeros((size[1], size[0]), dtype=np.float64)
+    totals = {'drawn': 0, 'culled': 0, 'skipped': 0}
+
+    for instance in instances:
+        mesh = instance['mesh']
+        where = np.asarray(instance.get('position', (0.0, 0.0, 0.0)), dtype=np.float64)
+        scale = float(instance.get('scale', 1.0))
+        angle = math.radians(float(instance.get('rotation', 0.0)))
+        spin = np.array([[math.cos(angle), 0.0, math.sin(angle)],
+                         [0.0, 1.0, 0.0],
+                         [-math.sin(angle), 0.0, math.cos(angle)]], dtype=np.float64)
+        points = mesh.positions.astype(np.float64) @ spin.T * scale + where
+        normals = mesh.normals.astype(np.float64) @ spin.T
+
+        shade = np.full(len(points), ambient, dtype=np.float64)
+        for direction, power in lights:
+            shade += np.clip(normals @ np.asarray(direction), 0.0, None) * power
+        np.clip(shade, 0.0, 1.0, out=shade)
+
+        screen = np.zeros((len(points), 3), dtype=np.float64)
+        visible = np.zeros(len(points), dtype=bool)
+        for i, point in enumerate(points):
+            placed = ps2camera.ps2_pixels(pos, target, fov, point, screen=size)
+            if placed is None:
+                continue
+            visible[i] = True
+            screen[i] = (placed[0] + size[0] * 0.5, placed[1] + size[1] * 0.5, placed[2])
+
+        root = os.path.dirname(os.path.abspath(mesh.source)) if os.path.sep in str(mesh.source) else ''
+        textures = {}
+        for part in mesh.parts:
+            relative = mesh.materials.get(part.material)
+            if relative and relative not in textures:
+                full = relative if os.path.isabs(relative) else os.path.join(root, relative)
+                textures[relative] = _texture(full) if os.path.isfile(full) else None
+            entry = textures.get(relative)
+            tri = mesh.indices[part.first:part.first + part.count].reshape(-1, 3)
+            if entry is None:
+                totals['skipped'] += len(tri)
+                continue
+            texture, used_w, used_h = entry
+            for corners in tri:
+                if not visible[corners].all():
+                    totals['skipped'] += 1
+                    continue
+                p0, p1, p2 = screen[corners[0]], screen[corners[1]], screen[corners[2]]
+                area = ((p1[0] - p0[0]) * (p2[1] - p0[1])
+                        - (p2[0] - p0[0]) * (p1[1] - p0[1]))
+                if cull and area <= 0:
+                    totals['culled'] += 1
+                    continue
+                uv = [(mesh.uvs[c][0] * used_w, mesh.uvs[c][1] * used_h) for c in corners]
+                _triangle(colour, [p0[2], p1[2], p2[2]], [p0, p1, p2], uv,
+                          tuple(shade[c] for c in corners), texture,
+                          (used_w, used_h), perspective, zbuf, wrap=True)
+                totals['drawn'] += 1
+
+    pixels = np.clip(colour, 0.0, 1.0)
+    if quantise < 8:
+        levels = (1 << quantise) - 1
+        pixels = np.round(pixels * levels) / levels
+    return Image.fromarray((pixels * 255.0 + 0.5).astype(np.uint8), 'RGB'), totals

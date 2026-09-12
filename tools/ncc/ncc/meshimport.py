@@ -310,3 +310,28 @@ def describe(mesh):
     if len(mesh.parts) > 8:
         rows.append('    ... and %d more' % (len(mesh.parts) - 8))
     return '\n'.join(rows)
+
+def unit_cube(texture=None, material='cube'):
+    """A two-unit cube as a Mesh, so engine primitives and imported models are
+    the same kind of thing to everything downstream."""
+    corners = [(x, y, z) for z in (-1, 1) for y in (-1, 1) for x in (-1, 1)]
+    faces = [((0, 1, 3, 2), (0, 0, -1)), ((5, 4, 6, 7), (0, 0, 1)),
+             ((4, 5, 1, 0), (0, -1, 0)), ((2, 3, 7, 6), (0, 1, 0)),
+             ((4, 0, 2, 6), (-1, 0, 0)), ((1, 5, 7, 3), (1, 0, 0))]
+    positions, uvs, normals, indices = [], [], [], []
+    for quad, normal in faces:
+        base = len(positions)
+        for slot, corner in enumerate(quad):
+            positions.append(corners[corner])
+            normals.append(normal)
+            uvs.append(((1.0, 0.0), (0.0, 0.0), (0.0, 1.0), (1.0, 1.0))[slot])
+        indices.extend((base, base + 1, base + 2, base, base + 2, base + 3))
+    mesh = Mesh()
+    mesh.source = 'unit_cube'
+    mesh.positions = np.asarray(positions, dtype=np.float32)
+    mesh.uvs = np.asarray(uvs, dtype=np.float32)
+    mesh.normals = np.asarray(normals, dtype=np.float32)
+    mesh.indices = np.asarray(indices, dtype=np.int32)
+    mesh.parts = [Part(material, 0, len(indices))]
+    mesh.materials = {material: texture}
+    return mesh
