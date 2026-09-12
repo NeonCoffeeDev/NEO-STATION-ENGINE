@@ -505,10 +505,16 @@ def _build_ps2(src):
             from .meshcompile import compile_character, report
             try:
                 rig=skeleton()
-                stats=compile_character(figure(rig), rig,
+                mesh=figure(rig)
+                # Material 1 where there is one. The figure rendered as a dark
+                # shape against a dark floor when it took the brand mark, which
+                # reads on a television as "the character is not there".
+                bright={p.material: 1 for p in mesh.parts}
+                stats=compile_character(mesh, rig,
                                         [rest(rig), idle(rig), walk(rig)],
                                         'nc_figure_mesh',
-                                        os.path.join(src,'src','nc_figure_mesh.h'))
+                                        os.path.join(src,'src','nc_figure_mesh.h'),
+                                        material_of=bright)
                 print(report(stats,'reference figure')
                       + ', %d bones, %d clips' % (stats['bones'], stats['clips']))
             except (OSError,ValueError) as exc:raise SystemExit(f"ncc: figure mesh -- {exc}")

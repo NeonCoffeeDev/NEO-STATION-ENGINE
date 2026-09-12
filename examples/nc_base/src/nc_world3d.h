@@ -60,6 +60,7 @@ static texbuffer_t nc_world_tex[NC_MATERIAL_COUNT > 0 ? NC_MATERIAL_COUNT : 1];
 typedef struct {
     float pos[3], rot[3], scale[3];
     float spin[3];              /* degrees per frame, applied to rot */
+    float uv[2];                /* texture repeats across a face */
     int material;
     int tint[3];                /* 0..128, modulated with the texture */
     int lit;                    /* 0 draws full bright, ignoring every light */
@@ -154,6 +155,7 @@ static void nc_world_upload(void) {
 static void nc_object_init(NCObject *object) {
     int i;
     for(i=0;i<3;i++){object->pos[i]=0;object->rot[i]=0;object->scale[i]=1;object->spin[i]=0;object->tint[i]=128;}
+    object->uv[0]=object->uv[1]=1.f;
     object->material=0;object->lit=1;object->active=1;
 }
 
@@ -169,6 +171,8 @@ static void nc_world_reset(void) {
             object->scale[axis]=nc_world_scale[i][axis];
         }
         object->material=nc_world_material[i];
+        object->uv[0]=nc_world_uv[i][0];
+        object->uv[1]=nc_world_uv[i][1];
     }
 }
 
@@ -197,7 +201,9 @@ static void nc_world_animate(void) {
 enum { NC_CAM_AUTHORED, NC_CAM_FOLLOW, NC_CAM_ORBIT, NC_CAM_MODES };
 static const char *const NC_CAM_NAMES[NC_CAM_MODES]={"AUTHORED","FOLLOW","ORBIT"};
 
-static int nc_cam_mode=NC_CAM_AUTHORED;
+/* Following the character by default. An authored camera is the right answer
+ * for a fixed-room game and the wrong one for "is the character there". */
+static int nc_cam_mode=NC_CAM_FOLLOW;
 static float nc_cam_pos[3]=NC_WORLD_CAMERA_POS;
 static float nc_cam_target[3]=NC_WORLD_CAMERA_TARGET;
 static float nc_cam_fov=NC_WORLD_CAMERA_FOV;
@@ -415,6 +421,7 @@ static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float 
             xyz_t xyz;
             xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=nc_depth_value(depth[v]);
             nc_face_texcoord(f,v,&face_u,&face_v);
+            face_u*=object->uv[0];face_v*=object->uv[1];
             if(nc_opt_perspective) {
                 /* ST before RGBAQ: the Q the rasteriser divides by is the one
                  * in the RGBAQ register, so the colour has to be written after

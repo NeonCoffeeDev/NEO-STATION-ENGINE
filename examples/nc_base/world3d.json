@@ -3,16 +3,16 @@
   "target": "ps2",
   "camera": {
     "pos": [
-      -9.25,
-      12.75,
-      -14.75
+      4.0,
+      3.6,
+      9.0
     ],
     "target": [
-      -0.5,
       0,
-      0
+      0.7,
+      -1.0
     ],
-    "fov": 60
+    "fov": 50
   },
   "lights": {
     "Key Light": {
@@ -57,11 +57,15 @@
         0
       ],
       "scale": [
-        5,
+        6,
         0.1,
-        5
+        6
       ],
-      "material": "textures/nc-logo.png"
+      "material": "textures/nc-test-grid.png",
+      "uv_scale": [
+        6,
+        6
+      ]
     },
     "Demo Cube": {
       "position": [
@@ -79,7 +83,7 @@
         1,
         1
       ],
-      "material": "textures/nc-test-grid.png",
+      "material": "textures/nc-logo.png",
       "components": [
         "Transform",
         "Lifecycle",
@@ -90,6 +94,64 @@
       ],
       "scripts": [
         "scripts/demo_cube.nc"
+      ]
+    },
+    "Pillar West": {
+      "position": [
+        -4,
+        0.4,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.4,
+        1.5,
+        0.4
+      ],
+      "material": "textures/nc-logo.png"
+    },
+    "Pillar East": {
+      "position": [
+        4,
+        0.4,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.4,
+        1.5,
+        0.4
+      ],
+      "material": "textures/nc-logo.png"
+    },
+    "Back Wall": {
+      "position": [
+        0,
+        0.4,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        6,
+        1.5,
+        0.3
+      ],
+      "material": "textures/nc-test-grid.png",
+      "uv_scale": [
+        8,
+        2
       ]
     }
   },

@@ -306,6 +306,17 @@ static void init_environment(void)
     lod.k = 0;
     q = draw_texture_sampling(q, 0, &lod);
 
+    /* A texture coordinate past 1.0 has to wrap for a floor to tile rather
+     * than smear its edge texel across everything beyond the first repeat. */
+    {
+        texwrap_t wrap;
+        wrap.horizontal = WRAP_REPEAT;
+        wrap.vertical = WRAP_REPEAT;
+        wrap.minu = wrap.minv = 0;
+        wrap.maxu = wrap.maxv = 0;
+        q = draw_texture_wrapping(q, 0, &wrap);
+    }
+
     /* 16-bit colour is 5 bits a channel. Dithering spends a little spatial
      * noise to buy back the missing levels, which is the difference between a
      * gradient that steps and one that does not. This is the standard 4x4

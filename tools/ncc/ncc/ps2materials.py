@@ -67,6 +67,7 @@ def compile_project(root):
                'extern float nc_world_rot[%d][3];'%max(1,len(objects)),
                'extern float nc_world_scale[%d][3];'%max(1,len(objects)),
                'extern int nc_world_material[%d];'%max(1,len(objects)),
+               'extern float nc_world_uv[%d][2];'%max(1,len(objects)),
                '#define NC_WORLD_CAMERA_POS {%s}'%(','.join(cfloat(v) for v in camera['pos'])),
                '#define NC_WORLD_CAMERA_TARGET {%s}'%(','.join(cfloat(v) for v in camera['target'])),
                '#define NC_WORLD_CAMERA_FOV %s'%cfloat(camera.get('fov',60))]
@@ -96,7 +97,13 @@ def compile_project(root):
     source += ['float nc_world_pos[%d][3]={%s};'%(max(1,len(objects)),triples('position',[0,0,0])),
                'float nc_world_rot[%d][3]={%s};'%(max(1,len(objects)),triples('rotation',[0,0,0])),
                'float nc_world_scale[%d][3]={%s};'%(max(1,len(objects)),triples('scale',[1,1,1])),
-               'int nc_world_material[%d]={%s};'%(max(1,len(objects)),','.join(str(paths.index(obj['material'])) if obj.get('material') in paths else '-1' for _,obj in objects) or '-1')]
+               'int nc_world_material[%d]={%s};'%(max(1,len(objects)),','.join(str(paths.index(obj['material'])) if obj.get('material') in paths else '-1' for _,obj in objects) or '-1'),
+               # How many times the texture repeats across a face. A floor
+               # wants its material tiled; a crate wants it once.
+               'float nc_world_uv[%d][2]={%s};'%(max(1,len(objects)),
+                   ','.join('{%s,%s}'%(cfloat(float(obj.get('uv_scale',[1,1])[0])),
+                                       cfloat(float(obj.get('uv_scale',[1,1])[1])))
+                            for _,obj in objects) or '{1.0f,1.0f}')]
     out=root/'src';out.mkdir(exist_ok=True)
     (out/'nc_materials.h').write_text('\n'.join(header)+'\n',encoding='utf-8')
     (out/'nc_materials.c').write_text('\n'.join(source)+'\n',encoding='utf-8')

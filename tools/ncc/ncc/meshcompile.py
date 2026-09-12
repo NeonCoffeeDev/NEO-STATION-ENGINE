@@ -107,7 +107,7 @@ def _mat34(matrix):
     return [float(matrix[r][c]) for r in range(3) for c in range(4)]
 
 
-def compile_character(mesh, rig, clips, name, out_path):
+def compile_character(mesh, rig, clips, name, out_path, material_of=None):
     """Mesh, skeleton, skin and clips as one header.
 
     They ship together because they are useless apart: a skeleton with no
@@ -115,7 +115,7 @@ def compile_character(mesh, rig, clips, name, out_path):
     the wrong place, and a clip addressed to joints this rig does not have
     silently animates whatever happens to be at that index.
     """
-    stats = compile_mesh(mesh, name, out_path)
+    stats = compile_mesh(mesh, name, out_path, material_of)
     upper = name.upper()
     lines = ['', '/* ---- skeleton ---- */',
              '#define %s_BONES %d' % (upper, len(rig)),

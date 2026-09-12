@@ -722,7 +722,7 @@ static const unsigned short nc_figure_mesh_index[] = {
     472,473,474,472,474,475,476,477,478,476,478,479,
 };
 static const NCMeshPart nc_figure_mesh_parts[] = {
-    {0, 720, 0},
+    {0, 720, 1},
 };
 
 static const NCMeshData nc_figure_mesh = {
