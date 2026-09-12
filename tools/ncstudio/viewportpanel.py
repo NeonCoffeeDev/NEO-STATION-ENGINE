@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox, filedialog
 from theme import BG,FG,CYAN,AMBER,Button
 from ncc.viewportdata import World
+from ncc import ps2camera
 
 
 class ViewportPanel(tk.Frame):
@@ -368,41 +369,27 @@ class ViewportPanel(tk.Frame):
 
     @classmethod
     def camera_frame(cls,pos,target):
-        """Forward/right/up in the handedness the console actually renders.
-
-        The PS2 runtime puts +X on the right when the camera looks down +Z.
-        This used to build right as cross(forward, up), which puts +X on the
-        left -- so the viewport was a mirror image of the television, and every
-        scene composed by eye in here was laid out backwards on hardware. The
-        hardware is the thing that has to be right, so the editor moved."""
-        forward=cls._normal(cls._sub(target,pos))
-        right=cls._normal(cls._cross([0,1,0],forward))
-        up=cls._normal(cls._cross(forward,right))
-        return forward,right,up
+        """Forward/right/up in the handedness the console renders. See ps2camera."""
+        return ps2camera.basis(pos,target)
 
     def output_rect(self):
-        """Where the console's picture lands inside the canvas.
+        """Where the console's picture lands inside this canvas.
 
-        A camera view is a television, not a window: 640x448 stretched to 4:3.
-        Letterboxing it means the framing chosen in here is the framing that
-        reaches the screen, rather than whatever shape the dock happens to be
-        when the panes are dragged around."""
+        A camera view is a television, not a window, so it is letterboxed to
+        4:3. The free editor camera is a window and gets the whole pane."""
         width=max(100,self.canvas.winfo_width());height=max(100,self.canvas.winfo_height())
         if not self.output_mode:return 0.,0.,float(width),float(height)
-        h=min(float(height),width*3./4.);w=h*4./3.
-        return (width-w)*.5,(height-h)*.5,w,h
+        return ps2camera.letterbox(width,height)
 
     def projector(self):
+        """Project world points the way the console will.
+
+        The formula is ps2camera's, not a copy of it -- a test reads the C in
+        nc_world3d.h and checks it agrees with that module, so the viewport
+        cannot drift away from the hardware again without something failing."""
         pos,target,fov=self.camera_basis()
-        forward,right,up=self.camera_frame(pos,target)
-        ox,oy,width,height=self.output_rect()
-        focal=(height*.5)/math.tan(math.radians(fov)*.5)
-        def project(point):
-            delta=self._sub(point,pos);depth=self._dot(delta,forward)
-            if depth<=.05:return None
-            return (ox+width*.5+self._dot(delta,right)*focal/depth,
-                    oy+height*.5-self._dot(delta,up)*focal/depth,depth)
-        return project
+        rect=self.output_rect()
+        return lambda point:ps2camera.project(pos,target,fov,point,rect)
 
     @staticmethod
     def box_geometry(low,high):
@@ -484,12 +471,8 @@ class ViewportPanel(tk.Frame):
         # 4:3, the shape of the television -- not 640:448, the shape of the buffer.
         pos,target,fov=self.camera_basis(True);width,height=260,195
         left=max(8,canvas.winfo_width()-width-14);top=14
-        forward,right,up=self.camera_frame(pos,target)
-        focal=(height*.5)/math.tan(math.radians(fov)*.5)
-        def project(point):
-            delta=self._sub(point,pos);depth=self._dot(delta,forward)
-            if depth<=.05:return None
-            return (left+width*.5+self._dot(delta,right)*focal/depth,top+height*.5-self._dot(delta,up)*focal/depth,depth)
+        rect=(left,top,width,height)
+        def project(point):return ps2camera.project(pos,target,fov,point,rect)
         canvas.create_rectangle(left,top,left+width,top+height,fill='#080d12',outline=AMBER,width=2)
         old=self.interactive;self.interactive=True
         try:

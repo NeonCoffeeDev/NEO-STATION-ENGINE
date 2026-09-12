@@ -66,6 +66,14 @@ def main(argv=None):
     fo.add_argument("out", nargs="?", default="font.png")
     fo.set_defaults(func=_font)
 
+    pv = sub.add_parser("preview",
+                        help="render what the console will draw, to a PNG")
+    pv.add_argument("path", nargs="?", default=".", help="the project")
+    pv.add_argument("-o", "--out", help="where to write the PNG")
+    pv.add_argument("--material", help="draw every object with this texture "
+                    "instead, to judge lighting on a neutral surface")
+    pv.set_defaults(func=_preview)
+
     st = sub.add_parser("studio", help="open the NC Studio GUI")
     st.set_defaults(func=_studio)
 
@@ -99,6 +107,27 @@ def _studio(args):
     if not os.path.isfile(script):
         raise SystemExit(f"ncc: NC Studio not found at {script}")
     return subprocess.call([sys.executable, script])
+
+
+def _preview(args):
+    """Draw the frame on the desk, so a change does not cost a walk to the TV."""
+    import os
+    from . import ps2preview
+    path = os.path.abspath(args.path)
+    if not os.path.isfile(os.path.join(path, "world3d.json")):
+        raise SystemExit("ncc: %s has no world3d.json to draw" % path)
+    out = args.out or os.path.join(path, "preview.png")
+    image = ps2preview.render(path, override_material=args.material)
+    image.save(out)
+    print()
+    print("  %s  (%dx%d, as the console would draw it)" % (out, *image.size))
+    print(ps2preview.describe(path))
+    print()
+    print("  Compare this against the television. Same shapes but different")
+    print("  colours is the frame buffer or the lighting; a texture right here")
+    print("  and flat on the console is the upload.")
+    print()
+    return 0
 
 
 def _targets(args):

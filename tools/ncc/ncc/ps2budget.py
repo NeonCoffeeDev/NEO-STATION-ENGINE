@@ -256,7 +256,10 @@ def frame_setup(project):
         with open(os.path.join(project, "src", "main.c"), encoding="utf-8") as handle:
             text = handle.read()
     except OSError:
-        return "PSMCT32", 1
+        # No runtime to read: assume the older arrangement rather than the
+        # newer one, so an unmeasurable project is never reported as cheaper
+        # than it might be.
+        return "PSMCT32", 1, (640, 448)
     match = re.search(r"#define\s+FRAME_PSM\s+(GS_PSM_\w+)", text)
     psm = _PSM_NAMES.get(match.group(1), "PSMCT32") if match else "PSMCT32"
     count = 2 if re.search(r"framebuffer_t\s+frame\s*\[\s*2\s*\]", text) else 1
