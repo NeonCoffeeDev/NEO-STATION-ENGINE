@@ -90,8 +90,8 @@
           "name": "Neon Coffee Logo",
           "type": "sprite2d",
           "rect": [
-            32,
-            36,
+            272,
+            80,
             97,
             80
           ],

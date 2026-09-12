@@ -1,5 +1,6 @@
 """Compile project PNG materials into bounded GS_PSM_32 native data."""
 import json
+import math
 import re
 from pathlib import Path
 
@@ -69,6 +70,28 @@ def compile_project(root):
                '#define NC_WORLD_CAMERA_POS {%s}'%(','.join(cfloat(v) for v in camera['pos'])),
                '#define NC_WORLD_CAMERA_TARGET {%s}'%(','.join(cfloat(v) for v in camera['target'])),
                '#define NC_WORLD_CAMERA_FOV %s'%cfloat(camera.get('fov',60))]
+    # Lights are authored by the direction they shine; shading wants the
+    # direction *towards* the light, so the vector is negated and normalised
+    # here rather than every frame on a 294 MHz CPU with no divide to spare.
+    lights=[]
+    ambient=0.0
+    for light in world.get('lights',{}).values():
+        direction=[float(v) for v in light.get('direction',[0,-1,0])]
+        length=math.sqrt(sum(v*v for v in direction)) or 1.0
+        lights.append(([-v/length for v in direction],float(light.get('intensity',1.0))))
+        ambient=max(ambient,float(light.get('ambient',0.0)))
+    if not lights:
+        # An unlit world still has to be visible, or removing the last light
+        # reads as a renderer fault rather than as an authoring choice.
+        ambient=max(ambient,1.0)
+    header += ['#define NC_WORLD_LIGHT_COUNT %d'%len(lights),
+               '#define NC_WORLD_AMBIENT %s'%cfloat(round(ambient,4)),
+               'extern float nc_world_light_dir[%d][3];'%max(1,len(lights)),
+               'extern float nc_world_light_power[%d];'%max(1,len(lights))]
+    source += ['float nc_world_light_dir[%d][3]={%s};'%(max(1,len(lights)),
+               ','.join('{%s}'%','.join(cfloat(round(v,6)) for v in d) for d,_ in lights) or '{0,0,0}'),
+               'float nc_world_light_power[%d]={%s};'%(max(1,len(lights)),
+               ','.join(cfloat(round(power,4)) for _,power in lights) or '0.0f')]
     def triples(field,default):return ','.join('{%s}'%','.join(cfloat(v) for v in obj.get(field,default)) for _,obj in objects) or '{0,0,0}'
     source += ['float nc_world_pos[%d][3]={%s};'%(max(1,len(objects)),triples('position',[0,0,0])),
                'float nc_world_rot[%d][3]={%s};'%(max(1,len(objects)),triples('rotation',[0,0,0])),

@@ -310,7 +310,22 @@ def _check_package(path, doc, r):
 def check_ps2(path):
     """Validate the active PS2 layout adapter and report its budgets."""
     from . import build as build_mod
+    from . import ps2budget
     from .targets import TARGETS
+
+    def finish(code):
+        """Graphics memory is reported on every path out of here.
+
+        It used to be reported on none of them: a VN project returned before
+        the hardware section, so the one budget most likely to be exceeded was
+        the one never printed."""
+        try:
+            print(ps2budget.collect(path).render())
+            print(ps2budget.main_memory(path))
+            print()
+        except (OSError, ValueError, KeyError) as exc:
+            print("  Graphics memory not measured: %s" % exc)
+        return code
 
     from .viewportdata import World,load_triggers
     try:
@@ -336,8 +351,8 @@ def check_ps2(path):
         except (OSError, ValueError) as exc:
             print(f"VN cannot export: {exc}")
             return 1
-        print("VN references/font/texture limits passed. Budget excludes stack and runtime allocations.")
-        return 0
+        print("  VN references, font and texture limits passed.")
+        return finish(0)
 
     t = TARGETS["ps2"]
     name = os.path.basename(path)
@@ -359,9 +374,9 @@ def check_ps2(path):
         print("  EXECUTABLE not built yet -- ncc build %s" % name)
 
     print()
-    print("  Layout limits are adapter-specific; executable size excludes stack and runtime allocations.")
-    print()
-    return 0
+    print("  Layout limits are adapter-specific; executable size excludes stack")
+    print("  and runtime allocations.")
+    return finish(0)
 
 
 def run(args):

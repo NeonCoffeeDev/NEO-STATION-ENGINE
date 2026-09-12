@@ -416,6 +416,13 @@ static qword_t *draw_lines(qword_t *q, const char *const *lines, int count,
 
 
 #include "vn_runtime.h"
+static int nc_requested_room=-1,nc_request_menu,nc_vn_scene=-1;
+static void nc_action(int action,int value) {
+    if(action==4) nc_requested_room=value;
+    if(action==6) nc_request_menu=1;
+}
+#include "nc_events.h"
+
 
 /* ---- pause and options ------------------------------------------------- */
 /* START opens this from anywhere, including mid-conversation, and it draws over
@@ -624,6 +631,7 @@ int main(void)
     if (!vn_init()) return 1;
     text_speed = VN_SPEED;
 
+    nc_events(1,0,-1);
     while (1) {
         qword_t *q;
 
@@ -704,6 +712,16 @@ int main(void)
         /* Diagnostic marker: absence alone cannot identify a stale binary. */
 
 
+        nc_vn_scene=(scene==SCENE_STORY && vn_current>=0)?vn_lines[vn_current].scene:-1;
+        nc_events(0,pressed,-1);
+        if(nc_requested_room>=0) {
+            int i;
+            for(i=0;i<(int)(sizeof(vn_lines)/sizeof(vn_lines[0]));i++) {
+                if(vn_lines[i].scene==nc_requested_room) {vn_enter(i);scene=SCENE_STORY;break;}
+            }
+            nc_requested_room=-1;
+        }
+        if(nc_request_menu) {scene=SCENE_MENU;nc_request_menu=0;}
         switch (scene == SCENE_PAUSE ? scene_before_pause : scene) {
         case SCENE_TITLE:
             q = draw_title(q, frames);

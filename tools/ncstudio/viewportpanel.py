@@ -10,6 +10,7 @@ from tkinter import ttk, simpledialog, messagebox, filedialog
 from theme import BG,FG,CYAN,AMBER,Button
 from ncc.viewportdata import World
 
+
 class ViewportPanel(tk.Frame):
     def __init__(self,parent):
         super().__init__(parent,bg=BG);self.group=self;self.project=None;self.world=None;self.drafts={};self.history=[];self.selected=None;self.zoom=1.;self.dragging=None
@@ -365,17 +366,42 @@ class ViewportPanel(tk.Frame):
         offset=[math.sin(yaw)*math.cos(pitch)*distance,-math.sin(pitch)*distance,-math.cos(yaw)*math.cos(pitch)*distance]
         return self._add(target,offset),target,60
 
-    def projector(self):
-        pos,target,fov=self.camera_basis();forward=self._normal(self._sub(target,pos))
-        right=self._normal(self._cross(forward,[0,1,0]))
-        up=self._normal(self._cross(right,forward))
+    @classmethod
+    def camera_frame(cls,pos,target):
+        """Forward/right/up in the handedness the console actually renders.
+
+        The PS2 runtime puts +X on the right when the camera looks down +Z.
+        This used to build right as cross(forward, up), which puts +X on the
+        left -- so the viewport was a mirror image of the television, and every
+        scene composed by eye in here was laid out backwards on hardware. The
+        hardware is the thing that has to be right, so the editor moved."""
+        forward=cls._normal(cls._sub(target,pos))
+        right=cls._normal(cls._cross([0,1,0],forward))
+        up=cls._normal(cls._cross(forward,right))
+        return forward,right,up
+
+    def output_rect(self):
+        """Where the console's picture lands inside the canvas.
+
+        A camera view is a television, not a window: 640x448 stretched to 4:3.
+        Letterboxing it means the framing chosen in here is the framing that
+        reaches the screen, rather than whatever shape the dock happens to be
+        when the panes are dragged around."""
         width=max(100,self.canvas.winfo_width());height=max(100,self.canvas.winfo_height())
+        if not self.output_mode:return 0.,0.,float(width),float(height)
+        h=min(float(height),width*3./4.);w=h*4./3.
+        return (width-w)*.5,(height-h)*.5,w,h
+
+    def projector(self):
+        pos,target,fov=self.camera_basis()
+        forward,right,up=self.camera_frame(pos,target)
+        ox,oy,width,height=self.output_rect()
         focal=(height*.5)/math.tan(math.radians(fov)*.5)
         def project(point):
             delta=self._sub(point,pos);depth=self._dot(delta,forward)
             if depth<=.05:return None
-            return (width*.5+self._dot(delta,right)*focal/depth,
-                    height*.5-self._dot(delta,up)*focal/depth,depth)
+            return (ox+width*.5+self._dot(delta,right)*focal/depth,
+                    oy+height*.5-self._dot(delta,up)*focal/depth,depth)
         return project
 
     @staticmethod
@@ -416,6 +442,9 @@ class ViewportPanel(tk.Frame):
 
     def draw_perspective(self):
         c=self.canvas;project=self.projector()
+        if self.output_mode:
+            ox,oy,w,h=self.output_rect()
+            c.create_rectangle(ox,oy,ox+w,oy+h,outline='#2c3f49')
         if not self.interactive:
             for r in self.rows:self.objects.insert('end',r['key']+' | '+r['name'])
         # Editor grid is world XZ; it is never part of the camera output.
@@ -452,9 +481,10 @@ class ViewportPanel(tk.Frame):
 
     def draw_camera_inset(self,canvas):
         """Low-cost live camera monitor inside SCENE for the selected camera."""
-        pos,target,fov=self.camera_basis(True);width,height=260,182
+        # 4:3, the shape of the television -- not 640:448, the shape of the buffer.
+        pos,target,fov=self.camera_basis(True);width,height=260,195
         left=max(8,canvas.winfo_width()-width-14);top=14
-        forward=self._normal(self._sub(target,pos));right=self._normal(self._cross(forward,[0,1,0]));up=self._normal(self._cross(right,forward))
+        forward,right,up=self.camera_frame(pos,target)
         focal=(height*.5)/math.tan(math.radians(fov)*.5)
         def project(point):
             delta=self._sub(point,pos);depth=self._dot(delta,forward)

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "target": "ps1",
+  "status": "draft",
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On start",
+      "value": "",
+      "x": 274,
+      "y": 79
+    },
+    {
+      "id": 2,
+      "kind": "Change room",
+      "value": "",
+      "x": 473,
+      "y": 288
+    }
+  ],
+  "edges": [
+    [
+      2,
+      1
+    ]
+  ]
+}

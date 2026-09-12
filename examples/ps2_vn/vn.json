@@ -36,7 +36,7 @@
         "choices": [],
         "give": "key",
         "id": "welcome",
-        "next": "2",
+        "next": "choice",
         "scene": "cafe",
         "speaker": "barista",
         "text": "Oh, hey there, Scott... we've been waiting for you to finally get to your first PlayStation 2 build. ",
@@ -68,7 +68,7 @@
         ],
         "give": "",
         "id": "choice",
-        "next": "",
+        "next": "coffee",
         "scene": "cafe",
         "speaker": "barista",
         "text": "Where would you like to go?",
@@ -99,7 +99,8 @@
         "next": "",
         "scene": "cafe",
         "speaker": "barista",
-        "text": "One coffee, coming up. Your inventory lasts until you choose BEGIN again."
+        "text": "One coffee, coming up. Your inventory lasts until you choose BEGIN again.",
+        "cast": []
       },
       {
         "id": "2",
@@ -137,7 +138,7 @@
       ],
       "dialogue": [
         32,
-        232,
+        272,
         576,
         168
       ],
@@ -190,7 +191,6 @@
     ],
     "start": "welcome"
   },
-  "logo_scale_x": 110,
   "story": [
     "THE SHOP IS SHUT. THE SIGN STILL",
     "HUMS.",
@@ -215,6 +215,7 @@
     "",
     "NOW GO AND MAKE SOMETHING."
   ],
-  "subtitle": "PLAYSTATION 2",
+  "logo_scale_x": 200,
+  "subtitle": "VISUAL NOVEL TEST",
   "title": "NEON COFFEE"
 }

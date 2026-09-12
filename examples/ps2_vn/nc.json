@@ -2,5 +2,6 @@
   "format": 1,
   "name": "ps2_vn",
   "template": "ps2_vn",
-  "target": "ps2"
+  "target": "ps2",
+  "event_adapter": "vn_v1"
 }

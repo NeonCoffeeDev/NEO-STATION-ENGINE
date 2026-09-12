@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "target": "ps2",
+  "status": "enabled",
+  "entry": 2,
+  "stages": [
+    {
+      "id": 1,
+      "name": "Target: ps2"
+    },
+    {
+      "id": 2,
+      "name": "Disclaimer (planned)"
+    },
+    {
+      "id": 3,
+      "name": "Entry / menu (planned)"
+    },
+    {
+      "id": 4,
+      "name": "cafe"
+    },
+    {
+      "id": 5,
+      "name": "cafe"
+    },
+    {
+      "id": 6,
+      "name": "street"
+    },
+    {
+      "id": 7,
+      "name": "street"
+    },
+    {
+      "id": 8,
+      "name": "Outcome (planned)"
+    },
+    {
+      "id": 9,
+      "name": "Restart / exit (planned)"
+    }
+  ],
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "On button",
+      "value": "SELECT",
+      "x": 20,
+      "y": 30,
+      "section_id": 5
+    },
+    {
+      "id": 2,
+      "kind": "Show main menu",
+      "value": "0",
+      "x": 230,
+      "y": 30,
+      "section_id": 5
+    }
+  ],
+  "edges": [
+    [
+      1,
+      2
+    ]
+  ]
+}

@@ -1,6 +1,6 @@
 /* Generated PS2 fixed-room events. Do not edit. */
+#include "nc_code_generated.h"
 static void nc_events(int start, unsigned int pressed, int zone) {
-    (void)start; (void)pressed; (void)zone;
     static int active, pending, initialized;
     static unsigned int tick;
     int entering = 0;

@@ -40,6 +40,18 @@
 #define OFF_X (-(SCREEN_W / 2))
 #define OFF_Y (-(SCREEN_H / 2))
 
+/* Frame buffers are 16-bit. Two of them occupy exactly the same graphics
+ * memory as the single 32-bit buffer this used to have -- 140 pages either
+ * way -- so double buffering costs nothing here, and 16-bit halves the write
+ * bandwidth for every pixel the GS lays down. The console is fill-limited
+ * long before it is polygon-limited, and the visual novel is the most
+ * fill-heavy screen in the project.
+ *
+ * The cost is 5 bits per channel instead of 8. Dithering hides the banding,
+ * and a flat terminal palette has little for it to band across. If a
+ * television disagrees, this is the only line that has to change. */
+#define FRAME_PSM GS_PSM_16S
+
 /* The Neon Coffee ground, matching NC Studio and the PS1 runtime. */
 #define BG_R 0x14
 #define BG_G 0x18
@@ -74,7 +86,14 @@ static int scene_before_pause;
 
 static char pad_buffer[256] __attribute__((aligned(64)));
 
-static framebuffer_t frame;
+/* Drawing into the buffer the television is scanning out is what made the top
+ * of the picture crawl: the loop starts redrawing the instant vsync returns,
+ * which is exactly when the beam is on the first rows. Whatever the GS has not
+ * finished by then is caught mid-repaint. Lower rows are drawn before the beam
+ * gets to them, which is why only the top band showed it. */
+static framebuffer_t frame[2];
+static int frame_count = 1;     /* 2 once the second buffer is really there */
+static int frame_draw;          /* the buffer being drawn into right now */
 static zbuffer_t z;
 static texbuffer_t logo_tex, ui_skin_tex, font_tex;
 static packet_t *packet;
@@ -129,12 +148,28 @@ static void load_pad_modules(void)
 
 static void init_gs(void)
 {
-    frame.width = SCREEN_W;
-    frame.height = SCREEN_H;
-    frame.mask = 0;
-    frame.psm = GS_PSM_32;
-    frame.address = graph_vram_allocate(frame.width, frame.height, frame.psm,
-                                        GRAPH_ALIGN_PAGE);
+    int buffer;
+
+    for (buffer = 0; buffer < 2; buffer++) {
+        frame[buffer].width = SCREEN_W;
+        frame[buffer].height = SCREEN_H;
+        frame[buffer].mask = 0;
+        frame[buffer].psm = FRAME_PSM;
+        frame[buffer].address = graph_vram_allocate(SCREEN_W, SCREEN_H,
+                                                    FRAME_PSM, GRAPH_ALIGN_PAGE);
+    }
+    /* Never trade a picture for a smoother one. If graphics memory cannot hold
+     * the second buffer, fall back to the single-buffered behaviour, which at
+     * least shows something rather than refusing to start. */
+    if (frame[1].address == (unsigned int)-1 || frame[1].address == frame[0].address) {
+        frame[1] = frame[0];
+    } else {
+        frame_count = 2;
+        /* graph_initialize is about to display buffer 0, so the first frame is
+         * drawn into buffer 1. Starting the other way round would tear once at
+         * startup for no reason. */
+        frame_draw = 1;
+    }
 
     z.enable = DRAW_DISABLE;
     z.mask = 0;
@@ -169,7 +204,7 @@ static void init_gs(void)
     font_tex.info.components = TEXTURE_COMPONENTS_RGBA;
     font_tex.info.function = TEXTURE_FUNCTION_DECAL;
 
-    graph_initialize(frame.address, frame.width, frame.height, frame.psm, 0, 0);
+    graph_initialize(frame[0].address, SCREEN_W, SCREEN_H, FRAME_PSM, 0, 0);
 }
 
 
@@ -191,6 +226,14 @@ static void upload(void *pixels, int w, int h, texbuffer_t *tex)
 }
 
 
+static const signed char dither_matrix[16] = {
+    -4,  2, -3,  3,
+     0, -2,  1, -1,
+    -3,  3, -4,  2,
+     1, -1,  0, -2
+};
+
+
 static void init_environment(void)
 {
     qword_t *q = packet->data;
@@ -199,7 +242,7 @@ static void init_environment(void)
     ztest_t ztest;
     lod_t lod;
 
-    q = draw_setup_environment(q, 0, &frame, &z);
+    q = draw_setup_environment(q, 0, &frame[0], &z);
     q = draw_primitive_xyoffset(q, 0, 2048 + OFF_X, 2048 + OFF_Y);
 
     /* The alpha test is what makes cut-out textures work without blending:
@@ -222,6 +265,13 @@ static void init_environment(void)
     lod.l = 0;
     lod.k = 0;
     q = draw_texture_sampling(q, 0, &lod);
+
+    /* 16-bit colour is 5 bits a channel. Dithering spends a little spatial
+     * noise to buy back the missing levels, which is the difference between a
+     * gradient that steps and one that does not. This is the standard 4x4
+     * matrix from the GS documentation. */
+    q = draw_dither_matrix(q, (char *)dither_matrix);
+    q = draw_dithering(q, 1);
 
     q = draw_finish(q);
     dma_channel_send_normal(DMA_CHANNEL_GIF, packet->data,
@@ -770,7 +820,10 @@ int main(void)
 
         q = packet->data;
         bound = 0;
-        q = draw_clear(q, 0, OFF_X, OFF_Y, frame.width, frame.height,
+        /* Point the GS at whichever buffer is not on screen. The environment
+         * is set up once; only the destination changes each frame. */
+        q = draw_framebuffer(q, 0, &frame[frame_draw]);
+        q = draw_clear(q, 0, OFF_X, OFF_Y, SCREEN_W, SCREEN_H,
                        BG_R, BG_G, BG_B);
 
         /* Diagnostic marker: absence alone cannot identify a stale binary. */
@@ -865,6 +918,15 @@ int main(void)
                                 q - packet->data, 0, 0);
         draw_wait_finish();
         graph_wait_vsync();
+
+        /* Show the buffer that was just finished and start drawing into the
+         * other one. Swapping after vsync means the display address never
+         * changes part-way down a field. */
+        if (frame_count == 2) {
+            graph_set_framebuffer_filtered(frame[frame_draw].address,
+                                           SCREEN_W, FRAME_PSM, 0, 0);
+            frame_draw ^= 1;
+        }
 
         /* Sound starts once a picture is already on screen, one step per frame.
          * Bringing up the IOP's audio driver touches the only part of this
