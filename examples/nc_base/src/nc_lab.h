@@ -488,9 +488,8 @@ static qword_t *nc_lab_draw(qword_t *q)
     else if (!nc_opt_avatar)
         sprintf(line, "MESH  -- AVATAR IS THE BOX --");
     else
-        sprintf(line, "MESH %4d TRI  %4d CULL  ANIM %s",
-                nc_stat_mesh_tris, nc_stat_mesh_culled,
-                ANIM_NAMES[nc_anim_playing]);
+        sprintf(line, "MESH %4d TRI  VTX %6u TK  EMIT %6u TK",
+                nc_stat_mesh_tris, nc_stat_tk_vertex, nc_stat_tk_emit);
     q = text(q, 26, 130, line, 0x70);
     sprintf(line, "%s %s %s TOUCH %d",
             nc_opt_perspective ? "PERSP" : "AFFIN",

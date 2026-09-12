@@ -60,3 +60,4 @@ examples/*/src/nc_events.h
 examples/*/src/nc_materials.c
 examples/*/src/nc_materials.h
 examples/*/.ncc-cache/
+examples/ps2_bench/bench.elf

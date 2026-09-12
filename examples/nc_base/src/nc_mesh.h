@@ -33,6 +33,12 @@ static unsigned char nc_mv_shade[NC_MESH_MAX_VERTS];
 
 static int nc_stat_mesh_tris, nc_stat_mesh_culled, nc_stat_mesh_dropped;
 
+/* Where the mesh frame actually goes. Two guesses about this have now been
+ * wrong -- a cache theory that predicted fusing the passes would help, and it
+ * bought nothing measurable -- so the split is measured on the console rather
+ * than reasoned about from a listing. */
+static unsigned int nc_stat_tk_vertex, nc_stat_tk_emit, nc_mesh_emit_mark;
+
 /* Where a model stands. Kept separate from NCObject because a mesh has no
  * scale per axis and no six faces -- pretending it is a box would mean the
  * box code growing a branch for something that is not one. */
@@ -186,6 +192,7 @@ static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
     total = nc_mesh_run_count * 3;
     if (q + (total * 2) + 16 >= packet_limit) { nc_mesh_run_count = 0; return q; }
 
+    nc_mesh_emit_mark = cpu_ticks();
     dw = (u64 *)draw_prim_start(q, 0, prim, color);
     for (corner = 0; corner < total; corner++) {
         int v = nc_mesh_run[corner];
@@ -207,6 +214,7 @@ static qword_t *nc_mesh_flush(qword_t *q, const NCMeshData *data,
         *dw++ = st.uv; *dw++ = color->rgbaq; *dw++ = xyz.xyz;
     }
     q = draw_prim_end((qword_t *)dw, 3, DRAW_STQ2_REGLIST);
+    nc_stat_tk_emit += cpu_ticks() - nc_mesh_emit_mark;
     nc_stat_mesh_tris += nc_mesh_run_count;
     nc_mesh_run_count = 0;
     return q;
@@ -231,7 +239,12 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
     yaw = -atan2f(dx, dz);
     pitch = atan2f(dy, sqrtf(dx * dx + dz * dz));
     focal = ((float)SCREEN_H * .5f) / tanf(nc_cam_fov * 0.00872664626f);
-    nc_mesh_transform(model, yaw, pitch, focal);
+    {
+        unsigned int mark = cpu_ticks();
+        nc_mesh_transform(model, yaw, pitch, focal);
+        nc_stat_tk_vertex = cpu_ticks() - mark;
+    }
+    nc_stat_tk_emit = 0;
 
     clut.storage_mode = CLUT_STORAGE_MODE1; clut.load_method = CLUT_NO_LOAD;
     prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
