@@ -77,7 +77,9 @@ class RuntimeProjection:
 
     def __call__(self, pos, target, fov, point, screen_h=448):
         scope = {'math': math, 'SCREEN_H': float(screen_h),
-                 'NC_WORLD_CAMERA_FOV': float(fov),
+                 # The runtime took its field of view from a compiled constant
+                 # and now takes it from a runtime camera; accept either name.
+                 'NC_WORLD_CAMERA_FOV': float(fov), 'nc_cam_fov': float(fov),
                  'NC_PIXEL_ASPECT': self.aspect,
                  'dx': target[0] - pos[0], 'dy': target[1] - pos[1],
                  'dz': target[2] - pos[2],

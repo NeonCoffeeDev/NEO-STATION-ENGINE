@@ -34,6 +34,7 @@
 #include <sifrpc.h>
 #include <loadfile.h>
 #include <iopcontrol.h>
+#include <timer.h>
 
 #define SCREEN_W 640
 #define SCREEN_H 448
@@ -662,6 +663,9 @@ static int options_update(unsigned int pressed)
 
 /* ---- main -------------------------------------------------------------- */
 
+#include "nc_lab.h"
+
+
 int main(void)
 {
     struct padButtonStatus pad;
@@ -715,12 +719,15 @@ int main(void)
     upload(nc_ui_skin, nc_ui_skin_width, nc_ui_skin_height, &ui_skin_tex);
     upload(nc_font, nc_font_width, nc_font_height, &font_tex);
     nc_world_upload();
+    nc_lab_init();
     if (!vn_init()) return 1;
     text_speed = VN_SPEED;
 
     nc_events(1,0,-1);
     while (1) {
         qword_t *q;
+
+        nc_lab_frame_begin();
 
         if (have_pad && padRead(0, 0, &pad) != 0)
             buttons = 0xFFFF ^ pad.btns;    /* the pad reports active-low */
@@ -799,8 +806,18 @@ int main(void)
             break;
 
         case SCENE_WORLD3D:
-            if (pressed & PAD_SQUARE) { inventory_return_scene=SCENE_WORLD3D; scene=SCENE_UI_LAB; }
-            if (pressed & PAD_TRIANGLE) scene = SCENE_MENU;
+            {   /* A count reads; a bit mask does not. */
+                unsigned int bag = vn_inventory;
+                for (nc_persist.carried = 0; bag; bag &= bag - 1)
+                    nc_persist.carried++;
+            }
+            nc_world_animate();
+            /* The lab swallows the pad while its menu is open, so adjusting a
+             * row never also walks the character off the edge of the world. */
+            if (!nc_lab_update(pressed, buttons)) {
+                if (pressed & PAD_SQUARE) { inventory_return_scene=SCENE_WORLD3D; scene=SCENE_UI_LAB; }
+                if (pressed & PAD_TRIANGLE) scene = SCENE_MENU;
+            }
             break;
 
         case SCENE_UI_LAB:
@@ -855,19 +872,9 @@ int main(void)
             break;
         case SCENE_WORLD3D:
             q = nc_world_draw(q);
-            /* Same GS texture as the cubes, sampled as a flat diagnostic tile.
-             * If this is correct but a face is not, the fault is UV/projection;
-             * if both are purple, the material upload is the fault. */
-            if (NC_MATERIAL_COUNT > 0) {
-                q = bind_texture(q, &nc_world_tex[0]);
-                q = sprite(q, 520, 20, 96, 96, 0, 0,
-                           nc_materials[0].used_width,
-                           nc_materials[0].used_height, 0x80);
-            }
-            q = panel(q, 20, 18, 190, 48, 0x0a, 0x0c, 0x12);
-            q = text(q, 32, 28, "NC 3D LAB", 0x80);
-            q = text(q, 510, 120, "MATERIAL", 0x48);
-            q = text(q, 344, 414, "SQUARE INVENTORY", 0x48);
+            /* The world is drawn first and the readout over it, so the numbers
+             * describe the frame underneath them. */
+            q = nc_lab_draw(q);
             break;
         case SCENE_STORY:
             q = vn_draw(q);
@@ -912,6 +919,7 @@ int main(void)
         }
 
         q = draw_finish(q);
+        nc_lab_draw_end();
 
         dma_wait_fast();
         dma_channel_send_normal(DMA_CHANNEL_GIF, packet->data,

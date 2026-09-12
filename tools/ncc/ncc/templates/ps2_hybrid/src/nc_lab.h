@@ -1,0 +1,312 @@
+/* The hardware lab: everything that can only be answered by a television.
+ *
+ * Most of what is uncertain about this engine cannot be settled from a desk.
+ * Whether perspective-correct texturing works, what the frame costs when
+ * twenty objects are on screen, whether bilinear filtering is worth its
+ * bandwidth, whether a camera following a character looks right at all -- each
+ * of those is a trip to the console, and answering them one build at a time is
+ * how a week disappears.
+ *
+ * So they are all switches instead, and the readout on screen carries the
+ * numbers worth reporting back. One boot, one pass, every answer.
+ *
+ * Included after the drawing helpers in main.c, because it draws.
+ */
+#pragma once
+
+/* Data that outlives a scene. Walking from the world into the conversation
+ * and back is the smallest version of the thing a real game does constantly,
+ * and it is worth having something concrete on screen that proves the trip
+ * did not quietly reset it. */
+typedef struct {
+    int spawned;            /* total ever spawned, across levels */
+    int visits;             /* how many times a level has been entered */
+    int level;
+    float player[3];
+    int carried;            /* mirrored from the conversation's inventory */
+} NCPersist;
+
+static NCPersist nc_persist;
+
+enum { NC_LEVEL_AUTHORED, NC_LEVEL_ARENA, NC_LEVEL_COUNT };
+static const char *const NC_LEVEL_NAMES[NC_LEVEL_COUNT] = {"AUTHORED", "ARENA"};
+
+/* ---- levels ---------------------------------------------------------- */
+
+static void nc_lab_load_level(int level)
+{
+    int i;
+    if (level < 0) level = NC_LEVEL_COUNT - 1;
+    if (level >= NC_LEVEL_COUNT) level = 0;
+
+    /* Where the player was standing is kept across the switch; the geometry
+     * is not. That is the split every streaming game makes. */
+    if (nc_player >= 0 && nc_player < nc_object_count)
+        for (i = 0; i < 3; i++) nc_persist.player[i] = nc_objects[nc_player].pos[i];
+
+    nc_persist.level = level;
+    nc_persist.visits++;
+    nc_world_reset();
+
+    if (level == NC_LEVEL_ARENA) {
+        NCObject block;
+        nc_object_count = 0;
+        nc_object_init(&block);
+        block.scale[0] = 7.f; block.scale[1] = 0.2f; block.scale[2] = 7.f;
+        block.pos[1] = -1.2f;
+        nc_world_spawn(&block);
+        for (i = 0; i < 8; i++) {
+            float angle = (float)i * 0.7853981634f;
+            nc_object_init(&block);
+            block.pos[0] = sinf(angle) * 5.f;
+            block.pos[2] = cosf(angle) * 5.f;
+            block.pos[1] = 0.f;
+            block.scale[0] = 0.5f; block.scale[1] = 1.6f; block.scale[2] = 0.5f;
+            block.rot[1] = (float)i * 45.f;
+            nc_world_spawn(&block);
+        }
+    }
+
+    /* The player is a cube until there is a mesh loader to make it anything
+     * else. What is being tested here is the control and the camera, and
+     * those do not care what shape it is. */
+    {
+        NCObject actor;
+        nc_object_init(&actor);
+        actor.scale[0] = 0.4f; actor.scale[1] = 0.8f; actor.scale[2] = 0.4f;
+        actor.tint[0] = 128; actor.tint[1] = 64; actor.tint[2] = 40;
+        for (i = 0; i < 3; i++) actor.pos[i] = nc_persist.player[i];
+        actor.pos[1] = 0.f;
+        nc_player = nc_world_spawn(&actor);
+    }
+}
+
+/* ---- frame cost ------------------------------------------------------ */
+
+/* The EE's cycle counter. Whether it runs at half the core clock is stated
+ * rather than assumed: the raw count is on screen next to the derived figure,
+ * so one look at a console that is plainly running at 60 confirms or refutes
+ * the constant without another build. */
+#define NC_TICKS_ASSUMED 147456000
+
+static unsigned int nc_frame_ticks, nc_draw_ticks;
+static unsigned int nc_tick_mark, nc_frame_mark;
+static int nc_fps_x10;
+
+static void nc_lab_frame_begin(void)
+{
+    unsigned int now = cpu_ticks();
+    if (nc_frame_mark) {
+        unsigned int elapsed = now - nc_frame_mark;
+        /* A gentle average; a number that flickers every field is unreadable
+         * and unreportable. */
+        nc_frame_ticks = nc_frame_ticks ? (nc_frame_ticks * 7 + elapsed) / 8 : elapsed;
+        nc_fps_x10 = nc_frame_ticks ? (int)((NC_TICKS_ASSUMED * 10ULL) / nc_frame_ticks) : 0;
+    }
+    nc_frame_mark = now;
+    nc_tick_mark = now;
+}
+
+static void nc_lab_draw_end(void)
+{
+    unsigned int elapsed = cpu_ticks() - nc_tick_mark;
+    nc_draw_ticks = nc_draw_ticks ? (nc_draw_ticks * 7 + elapsed) / 8 : elapsed;
+}
+
+/* ---- the menu -------------------------------------------------------- */
+
+enum { LAB_SPIN, LAB_TEXTURE, LAB_FILTER, LAB_LIGHT, LAB_MATERIAL, LAB_TINT,
+       LAB_SPAWN, LAB_CAMERA, LAB_LEVEL, LAB_ROWS };
+
+static const char *const LAB_NAMES[LAB_ROWS] = {
+    "SPIN", "TEXTURE", "FILTER", "LIGHTING", "MATERIAL", "TINT",
+    "OBJECTS", "CAMERA", "LEVEL"};
+
+static int nc_lab_open, nc_lab_row, nc_lab_spin, nc_lab_tint;
+
+static const char *const LAB_SPIN_NAMES[3] = {"STILL", "SLOW", "FAST"};
+static const char *const LAB_TINT_NAMES[5] = {"WHITE", "RED", "GREEN", "BLUE", "AMBER"};
+static const int LAB_TINTS[5][3] = {{128,128,128},{128,40,40},{40,128,60},
+                                    {50,70,128},{128,100,40}};
+
+static void nc_lab_apply_spin(void)
+{
+    static const float rate[3] = {0.f, 0.6f, 3.f};
+    int i;
+    for (i = 0; i < nc_object_count; i++) {
+        if (i == nc_player) continue;
+        nc_objects[i].spin[1] = rate[nc_lab_spin];
+    }
+}
+
+static void nc_lab_apply_tint(void)
+{
+    int i, axis;
+    for (i = 0; i < nc_object_count; i++)
+        for (axis = 0; axis < 3; axis++)
+            nc_objects[i].tint[axis] = LAB_TINTS[nc_lab_tint][axis];
+}
+
+static void nc_lab_value(int row, char *out)
+{
+    switch (row) {
+    case LAB_SPIN:     strcpy(out, LAB_SPIN_NAMES[nc_lab_spin]); break;
+    case LAB_TEXTURE:  strcpy(out, nc_opt_perspective ? "PERSPECTIVE" : "AFFINE"); break;
+    case LAB_FILTER:   strcpy(out, nc_opt_filter ? "BILINEAR" : "NEAREST"); break;
+    case LAB_LIGHT:    strcpy(out, nc_opt_lighting ? "ON" : "OFF"); break;
+    case LAB_MATERIAL: sprintf(out, "%d OF %d", nc_objects[0].material + 1,
+                               NC_MATERIAL_COUNT); break;
+    case LAB_TINT:     strcpy(out, LAB_TINT_NAMES[nc_lab_tint]); break;
+    case LAB_SPAWN:    sprintf(out, "%d OF %d", nc_object_count, NC_WORLD_MAX); break;
+    case LAB_CAMERA:   strcpy(out, NC_CAM_NAMES[nc_cam_mode]); break;
+    case LAB_LEVEL:    strcpy(out, NC_LEVEL_NAMES[nc_persist.level]); break;
+    default:           out[0] = 0; break;
+    }
+}
+
+static void nc_lab_adjust(int row, int step)
+{
+    int i;
+    switch (row) {
+    case LAB_SPIN:
+        nc_lab_spin = (nc_lab_spin + 3 + step) % 3;
+        nc_lab_apply_spin();
+        break;
+    case LAB_TEXTURE:  nc_opt_perspective = !nc_opt_perspective; break;
+    case LAB_FILTER:   nc_opt_filter = !nc_opt_filter; break;
+    case LAB_LIGHT:    nc_opt_lighting = !nc_opt_lighting; break;
+    case LAB_MATERIAL:
+        if (NC_MATERIAL_COUNT > 0)
+            for (i = 0; i < nc_object_count; i++)
+                nc_objects[i].material = (nc_objects[i].material + NC_MATERIAL_COUNT + step)
+                                         % NC_MATERIAL_COUNT;
+        break;
+    case LAB_TINT:
+        nc_lab_tint = (nc_lab_tint + 5 + step) % 5;
+        nc_lab_apply_tint();
+        break;
+    case LAB_SPAWN:
+        if (step > 0) {
+            NCObject block;
+            /* Spread new objects around a ring so a stress test stays
+             * readable rather than becoming one cube in twenty places. */
+            float angle = (float)nc_object_count * 0.9f;
+            nc_object_init(&block);
+            block.pos[0] = sinf(angle) * (3.f + (float)(nc_object_count % 3));
+            block.pos[2] = cosf(angle) * (3.f + (float)(nc_object_count % 3));
+            block.pos[1] = 0.4f;
+            block.scale[0] = block.scale[1] = block.scale[2] = 0.5f;
+            for (i = 0; i < 3; i++) block.tint[i] = LAB_TINTS[nc_lab_tint][i];
+            if (nc_world_spawn(&block) >= 0) nc_persist.spawned++;
+            nc_lab_apply_spin();
+        } else if (nc_object_count > 1) {
+            nc_object_count--;
+            if (nc_player >= nc_object_count) nc_player = -1;
+        }
+        break;
+    case LAB_CAMERA:
+        nc_cam_mode = (nc_cam_mode + NC_CAM_MODES + step) % NC_CAM_MODES;
+        break;
+    case LAB_LEVEL:
+        nc_lab_load_level(nc_persist.level + step);
+        nc_lab_apply_spin();
+        nc_lab_apply_tint();
+        break;
+    }
+}
+
+/* Returns 0 when the lab wants to hand the button back to the scene. */
+static int nc_lab_update(unsigned int pressed, unsigned int held)
+{
+    if (pressed & PAD_SELECT) {
+        nc_lab_open = !nc_lab_open;
+        nc_sfx_family(nc_role_shift);
+        return 1;
+    }
+    if (nc_lab_open) {
+        if (pressed & PAD_UP)   { nc_lab_row = (nc_lab_row + LAB_ROWS - 1) % LAB_ROWS; nc_sfx_family(nc_role_move); }
+        if (pressed & PAD_DOWN) { nc_lab_row = (nc_lab_row + 1) % LAB_ROWS; nc_sfx_family(nc_role_move); }
+        if (pressed & PAD_LEFT)  { nc_lab_adjust(nc_lab_row, -1); nc_sfx_family(nc_role_confirm); }
+        if (pressed & (PAD_RIGHT | PAD_CROSS)) { nc_lab_adjust(nc_lab_row, 1); nc_sfx_family(nc_role_confirm); }
+        return 1;
+    }
+
+    /* Driving a character and orbiting the camera are held, not pressed --
+     * they are the one part of this that has to feel like a game. */
+    if (nc_player >= 0 && nc_player < nc_object_count) {
+        NCObject *actor = &nc_objects[nc_player];
+        float speed = 0.12f;
+        /* Movement is relative to where the camera is looking, or walking
+         * left sends the character somewhere else entirely. */
+        float facing = (nc_cam_mode == NC_CAM_AUTHORED) ? 0.f : nc_cam_angle;
+        float fx = sinf(facing), fz = cosf(facing);
+        if (held & PAD_UP)    { actor->pos[0] += fx * speed; actor->pos[2] += fz * speed; }
+        if (held & PAD_DOWN)  { actor->pos[0] -= fx * speed; actor->pos[2] -= fz * speed; }
+        if (held & PAD_LEFT)  { actor->pos[0] -= fz * speed; actor->pos[2] += fx * speed; }
+        if (held & PAD_RIGHT) { actor->pos[0] += fz * speed; actor->pos[2] -= fx * speed; }
+        if (held & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT))
+            actor->rot[1] = facing * 57.2957795f;
+    }
+    if (held & PAD_L2) nc_cam_angle -= 0.03f;
+    if (held & PAD_R2) nc_cam_angle += 0.03f;
+    return 0;
+}
+
+/* ---- the readout ----------------------------------------------------- */
+
+static qword_t *nc_lab_draw(qword_t *q)
+{
+    char line[64];
+    int i, y;
+
+    /* Always on, menu or not. The numbers are the reason this screen exists,
+     * and hiding them behind the menu would mean never seeing what the menu
+     * just changed. */
+    q = panel(q, 16, 14, 300, 104, 0x0a, 0x0c, 0x12);
+    sprintf(line, "OBJ %2d/%2d   TRI %4d   SPAWNED %d",
+            nc_stat_objects, NC_WORLD_MAX, nc_stat_tris, nc_persist.spawned);
+    q = text(q, 26, 22, line, 0x70);
+    sprintf(line, "FRAME %7u TK   DRAW %7u TK", nc_frame_ticks, nc_draw_ticks);
+    q = text(q, 26, 40, line, 0x70);
+    sprintf(line, "%d.%d FPS IF TICK IS %d HZ", nc_fps_x10 / 10, nc_fps_x10 % 10,
+            NC_TICKS_ASSUMED);
+    q = text(q, 26, 58, line, 0x50);
+    sprintf(line, "CAM %s %d,%d,%d", NC_CAM_NAMES[nc_cam_mode],
+            (int)nc_cam_pos[0], (int)nc_cam_pos[1], (int)nc_cam_pos[2]);
+    q = text(q, 26, 76, line, 0x70);
+    sprintf(line, "%s  %s  LIGHT %s", nc_opt_perspective ? "PERSP" : "AFFINE",
+            nc_opt_filter ? "BILIN" : "NEAR", nc_opt_lighting ? "ON" : "OFF");
+    q = text(q, 26, 94, line, 0x70);
+
+    /* Persistence, stated plainly. A number that survives a trip through the
+     * conversation and back is the only proof that it survived. */
+    sprintf(line, "LEVEL %s  VISITS %d  CARRIED %d",
+            NC_LEVEL_NAMES[nc_persist.level], nc_persist.visits, nc_persist.carried);
+    q = text(q, 26, SCREEN_H - 60, line, 0x50);
+    q = text(q, 26, SCREEN_H - 40,
+             nc_lab_open ? "D-PAD MOVE/ADJUST   SELECT CLOSE"
+                         : "D-PAD WALK  L2/R2 ORBIT  SELECT LAB", 0x48);
+    q = text(q, 26, SCREEN_H - 22, "SQUARE BAG   TRIANGLE MENU", 0x40);
+
+    if (!nc_lab_open)
+        return q;
+
+    q = panel(q, 352, 14, 272, 20 + LAB_ROWS * 20, 0x0a, 0x0c, 0x12);
+    q = panel(q, 352, 14, 272, 2, 0x5f, 0xd4, 0xd0);
+    for (i = 0; i < LAB_ROWS; i++) {
+        int bright = i == nc_lab_row ? 0x80 : 0x44;
+        y = 26 + i * 20;
+        q = text(q, 360, y, i == nc_lab_row ? ">" : " ", bright);
+        q = text(q, 376, y, LAB_NAMES[i], bright);
+        nc_lab_value(i, line);
+        q = text(q, 490, y, line, bright);
+    }
+    return q;
+}
+
+static void nc_lab_init(void)
+{
+    nc_persist.level = NC_LEVEL_AUTHORED;
+    nc_lab_load_level(NC_LEVEL_AUTHORED);
+    nc_lab_apply_spin();
+}

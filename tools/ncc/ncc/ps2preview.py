@@ -7,9 +7,9 @@ at a picture they had to work that hard to see.
 
 So this draws the frame on the desk instead. Not an approximation of it: the
 same projection ps2camera describes and test_ps2camera proves the runtime C
-evaluates to, the same face ordering, the same lighting, the same affine
-texture mapping the GS does when a primitive carries UV rather than STQ, and
-the same 5-bits-a-channel quantisation a 16-bit frame buffer ends at.
+evaluates to, the same face ordering, the same lighting, the same choice
+between perspective-correct and affine texture mapping the runtime offers,
+and the same 5-bits-a-channel quantisation a 16-bit frame buffer ends at.
 
 Where this and the television disagree, one of them is wrong and the
 difference says which part. If the shapes match and the colours do not, it is
@@ -89,13 +89,20 @@ def _texture(path):
     return np.asarray(canvas, dtype=np.float32) / 255.0, image.width, image.height
 
 
-def _triangle(colour, depth_of, points, uvs, shade, texture, used):
-    """Fill one triangle with affine texture mapping.
+def _triangle(colour, depth_of, points, uvs, shade, texture, used,
+              perspective=True):
+    """Fill one triangle, perspective-correct or affine.
 
-    Affine, not perspective-correct, because that is what the GS does for a
-    primitive carrying UV instead of STQ -- which is what nc_world_cube emits.
-    Reproducing the warp is the point; a "better" renderer here would hide a
-    difference rather than show it.
+    Both, because the runtime offers both. Affine interpolates the texture
+    coordinate straight across the screen, which is what the GS does for a
+    primitive carrying fixed-point UV, and it visibly bends a large floor
+    along the diagonal of every quad. Perspective-correct divides through by
+    an interpolated 1/z, which is what the GS does when the primitive carries
+    ST with a per-vertex Q.
+
+    Reproducing whichever one the runtime is set to is the point; a renderer
+    that was always "better" than the console would hide the difference
+    instead of showing it.
     """
     height, width = colour.shape[:2]
     xs = [p[0] for p in points]
@@ -118,9 +125,17 @@ def _triangle(colour, depth_of, points, uvs, shade, texture, used):
         return
     # Painter's algorithm, as the runtime does it -- faces are already sorted
     # back to front, so a later face simply wins.
-    depth = w0 * depth_of[0] + w1 * depth_of[1] + w2 * depth_of[2]
-    u = w0 * uvs[0][0] + w1 * uvs[1][0] + w2 * uvs[2][0]
-    v = w0 * uvs[0][1] + w1 * uvs[1][1] + w2 * uvs[2][1]
+    if perspective:
+        inverse = [1.0 / d if d else 0.0 for d in depth_of]
+        across = w0 * inverse[0] + w1 * inverse[1] + w2 * inverse[2]
+        across = np.where(np.abs(across) < 1e-9, 1e-9, across)
+        u = (w0 * uvs[0][0] * inverse[0] + w1 * uvs[1][0] * inverse[1]
+             + w2 * uvs[2][0] * inverse[2]) / across
+        v = (w0 * uvs[0][1] * inverse[0] + w1 * uvs[1][1] * inverse[1]
+             + w2 * uvs[2][1] * inverse[2]) / across
+    else:
+        u = w0 * uvs[0][0] + w1 * uvs[1][0] + w2 * uvs[2][0]
+        v = w0 * uvs[0][1] + w1 * uvs[1][1] + w2 * uvs[2][1]
     tex_h, tex_w = texture.shape[:2]
     ui = np.clip(u.astype(np.int32), 0, tex_w - 1)
     vi = np.clip(v.astype(np.int32), 0, tex_h - 1)
@@ -131,11 +146,10 @@ def _triangle(colour, depth_of, points, uvs, shade, texture, used):
     lit = texel[..., :3] * shade
     region = colour[low_y:high_y + 1, low_x:high_x + 1]
     region[opaque] = lit[opaque]
-    del depth
 
 
 def render(project, size=None, background=(0x14, 0x18, 0x1a), quantise=None,
-           override_material=None):
+           override_material=None, perspective=True):
     """Draw the project's 3D world the way the console would.
 
     Returns a PIL image. `quantise` defaults to whatever colour depth the
@@ -204,7 +218,7 @@ def render(project, size=None, background=(0x14, 0x18, 0x1a), quantise=None,
                           [screen_points[quad[a]], screen_points[quad[b]],
                            screen_points[quad[c]]],
                           [uv[a], uv[b], uv[c]], shades[face], texture,
-                          (used_w, used_h))
+                          (used_w, used_h), perspective)
 
     pixels = np.clip(colour, 0.0, 1.0)
     if quantise < 8:

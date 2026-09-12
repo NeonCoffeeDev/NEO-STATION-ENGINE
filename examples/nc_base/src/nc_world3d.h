@@ -1,4 +1,11 @@
-/* Shared starter PS2 world pass. Authored data comes from world3d.json. */
+/* Shared starter PS2 world pass. Authored data comes from world3d.json.
+ *
+ * The world is compiled into arrays by ps2materials, and then copied into a
+ * mutable list at startup. Authored data says where things begin; it is not
+ * where they stay. Spawning, moving and re-materialising objects at runtime is
+ * the whole point of an engine, and a renderer that can only draw the arrays
+ * the compiler emitted cannot be one.
+ */
 #pragma once
 #include <math.h>
 #include "nc_materials.h"
@@ -11,7 +18,33 @@
  * draws a plain 4:3 rectangle and needs no factor of its own. */
 #define NC_PIXEL_ASPECT 1.0714286f
 
+#define NC_WORLD_MAX 24
+#define NC_DEG 0.01745329252f
+
 static texbuffer_t nc_world_tex[NC_MATERIAL_COUNT > 0 ? NC_MATERIAL_COUNT : 1];
+
+typedef struct {
+    float pos[3], rot[3], scale[3];
+    float spin[3];              /* degrees per frame, applied to rot */
+    int material;
+    int tint[3];                /* 0..128, modulated with the texture */
+    int lit;                    /* 0 draws full bright, ignoring every light */
+    int active;
+} NCObject;
+
+static NCObject nc_objects[NC_WORLD_MAX];
+static int nc_object_count;
+
+/* Runtime render switches. These exist because this cannot be tested from a
+ * desk -- when the television disagrees with the preview, the fastest way to
+ * find out which half is wrong is to flip one thing at a time on the console
+ * and look. */
+static int nc_opt_perspective = 1;     /* STQ with 1/z, or plain affine UV */
+static int nc_opt_filter;              /* nearest or bilinear */
+static int nc_opt_lighting = 1;
+
+/* Filled every frame, read by the lab readout. */
+static int nc_stat_objects, nc_stat_tris;
 
 static void nc_world_upload(void) {
     int i;
@@ -40,6 +73,83 @@ static void nc_world_upload(void) {
     }
 }
 
+/* ---- the world, as a thing that can change -------------------------- */
+
+static void nc_object_init(NCObject *object) {
+    int i;
+    for(i=0;i<3;i++){object->pos[i]=0;object->rot[i]=0;object->scale[i]=1;object->spin[i]=0;object->tint[i]=128;}
+    object->material=0;object->lit=1;object->active=1;
+}
+
+static void nc_world_reset(void) {
+    int i,axis;
+    nc_object_count=0;
+    for(i=0;i<NC_WORLD_OBJECT_COUNT && i<NC_WORLD_MAX;i++) {
+        NCObject *object=&nc_objects[nc_object_count++];
+        nc_object_init(object);
+        for(axis=0;axis<3;axis++) {
+            object->pos[axis]=nc_world_pos[i][axis];
+            object->rot[axis]=nc_world_rot[i][axis];
+            object->scale[axis]=nc_world_scale[i][axis];
+        }
+        object->material=nc_world_material[i];
+    }
+}
+
+/* Returns the new object's index, or -1 when the list is full. Refusing at the
+ * limit rather than wrapping means a stress test reports a number that is
+ * true. */
+static int nc_world_spawn(const NCObject *from) {
+    if(nc_object_count>=NC_WORLD_MAX) return -1;
+    nc_objects[nc_object_count]=*from;
+    nc_objects[nc_object_count].active=1;
+    return nc_object_count++;
+}
+
+static void nc_world_animate(void) {
+    int i,axis;
+    for(i=0;i<nc_object_count;i++)
+        for(axis=0;axis<3;axis++) {
+            nc_objects[i].rot[axis]+=nc_objects[i].spin[axis];
+            if(nc_objects[i].rot[axis]>=360.f) nc_objects[i].rot[axis]-=360.f;
+            if(nc_objects[i].rot[axis]<0.f) nc_objects[i].rot[axis]+=360.f;
+        }
+}
+
+/* ---- camera ---------------------------------------------------------- */
+
+enum { NC_CAM_AUTHORED, NC_CAM_FOLLOW, NC_CAM_ORBIT, NC_CAM_MODES };
+static const char *const NC_CAM_NAMES[NC_CAM_MODES]={"AUTHORED","FOLLOW","ORBIT"};
+
+static int nc_cam_mode=NC_CAM_AUTHORED;
+static float nc_cam_pos[3]=NC_WORLD_CAMERA_POS;
+static float nc_cam_target[3]=NC_WORLD_CAMERA_TARGET;
+static float nc_cam_fov=NC_WORLD_CAMERA_FOV;
+static float nc_cam_angle=0.9f, nc_cam_height=6.f, nc_cam_distance=12.f;
+static int nc_player=-1;               /* which object the pad drives */
+
+static void nc_camera_update(void) {
+    const float authored_pos[3]=NC_WORLD_CAMERA_POS;
+    const float authored_target[3]=NC_WORLD_CAMERA_TARGET;
+    int axis;
+    if(nc_cam_mode==NC_CAM_AUTHORED) {
+        for(axis=0;axis<3;axis++){nc_cam_pos[axis]=authored_pos[axis];nc_cam_target[axis]=authored_target[axis];}
+        return;
+    }
+    /* FOLLOW and ORBIT are the same arc; one is centred on the player and the
+     * other on the origin, which is what makes it useful to have both when a
+     * character has walked out of the authored shot. */
+    if(nc_cam_mode==NC_CAM_FOLLOW && nc_player>=0 && nc_player<nc_object_count)
+        for(axis=0;axis<3;axis++) nc_cam_target[axis]=nc_objects[nc_player].pos[axis];
+    else
+        for(axis=0;axis<3;axis++) nc_cam_target[axis]=0.f;
+    nc_cam_pos[0]=nc_cam_target[0]+sinf(nc_cam_angle)*nc_cam_distance;
+    nc_cam_pos[1]=nc_cam_target[1]+nc_cam_height;
+    nc_cam_pos[2]=nc_cam_target[2]-cosf(nc_cam_angle)*nc_cam_distance;
+}
+
+/* ---- lighting -------------------------------------------------------- */
+
 /* The six faces of the unit box, and the outward normal of each. Face n's
  * normal is constant in object space, so lighting is six dot products per
  * object rather than one per pixel -- which is the only kind this console
@@ -47,17 +157,14 @@ static void nc_world_upload(void) {
 static const int nc_faces[6][4]={{0,1,3,2},{4,5,7,6},{0,1,5,4},{2,3,7,6},{0,2,6,4},{1,3,7,5}};
 static const float nc_face_normal[6][3]={{0,0,-1},{0,0,1},{0,-1,0},{0,1,0},{-1,0,0},{1,0,0}};
 
-/* How lit each face of the current object is, 0..1. Filled per object by
- * nc_world_shade so the face loop can stay a straight run of primitives. */
 static float nc_face_light[6];
 
-static void nc_world_shade(int object) {
-    float ax=nc_world_rot[object][0]*0.01745329252f;
-    float ay=nc_world_rot[object][1]*0.01745329252f;
-    float az=nc_world_rot[object][2]*0.01745329252f;
+static void nc_world_shade(const NCObject *object) {
+    float ax=object->rot[0]*NC_DEG, ay=object->rot[1]*NC_DEG, az=object->rot[2]*NC_DEG;
     int f,l;
     for(f=0;f<6;f++) {
         float nx=nc_face_normal[f][0],ny=nc_face_normal[f][1],nz=nc_face_normal[f][2],tx,ty,tz,lit;
+        if(!object->lit || !nc_opt_lighting) { nc_face_light[f]=1.f; continue; }
         /* Same rotation order the vertices use, so a normal never disagrees
          * with the face it belongs to. */
         ty=ny*cosf(ax)-nz*sinf(ax);tz=ny*sinf(ax)+nz*cosf(ax);ny=ty;nz=tz;
@@ -72,40 +179,119 @@ static void nc_world_shade(int object) {
     }
 }
 
-static qword_t *nc_world_cube(qword_t *q,float *px,float *py,float *depth,int *visible,int material) {
+/* ---- drawing --------------------------------------------------------- */
+
+static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float *py,
+                              float *depth,int *visible) {
     static const int tri[6]={0,1,2,0,2,3};
-    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};int f,i,order[6]={0,1,2,3,4,5};float face_depth[6];
+    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};
+    int material=object->material,f,i,order[6]={0,1,2,3,4,5};float face_depth[6];
+    float far_s,far_t;
     if(material<0||material>=NC_MATERIAL_COUNT)return q;
-    lod.calculation=LOD_USE_K;lod.mag_filter=LOD_MAG_NEAREST;lod.min_filter=LOD_MIN_NEAREST;clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
+    lod.calculation=LOD_USE_K;
+    lod.mag_filter=nc_opt_filter?LOD_MAG_LINEAR:LOD_MAG_NEAREST;
+    lod.min_filter=nc_opt_filter?LOD_MIN_LINEAR:LOD_MIN_NEAREST;
+    clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
     q=draw_texture_sampling(q,0,&lod);q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
-    prim.type=PRIM_TRIANGLE;prim.shading=PRIM_SHADE_FLAT;prim.mapping=DRAW_ENABLE;prim.mapping_type=PRIM_MAP_UV;prim.colorfix=PRIM_FIXED;color.a=0x80;color.q=1.0f;
+    prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_FIXED;
+    /* Perspective correction is not a mode the GS is missing -- it is what it
+     * does when a primitive carries ST and a per-vertex Q of 1/z instead of
+     * fixed-point UV. Affine is kept alongside it because it is the only way
+     * to tell, on a television, whether a wrong-looking floor is the mapping
+     * or something else. */
+    prim.mapping_type=nc_opt_perspective?PRIM_MAP_ST:PRIM_MAP_UV;
+    prim.shading=nc_opt_perspective?PRIM_SHADE_GOURAUD:PRIM_SHADE_FLAT;
+    color.a=0x80;color.q=1.0f;
+    /* The artwork occupies the top-left of a power-of-two texture, so the far
+     * edge of the picture is not 1.0. */
+    far_s=(float)nc_materials[material].used_width/(float)nc_materials[material].width;
+    far_t=(float)nc_materials[material].used_height/(float)nc_materials[material].height;
     for(f=0;f<6;f++)face_depth[f]=(depth[nc_faces[f][0]]+depth[nc_faces[f][1]]+depth[nc_faces[f][2]]+depth[nc_faces[f][3]])*.25f;
     for(i=0;i<5;i++)for(f=i+1;f<6;f++)if(face_depth[order[i]]<face_depth[order[f]]){int swap=order[i];order[i]=order[f];order[f]=swap;}
-    for(i=0;i<6;i++){u64 *dw;int shade;f=order[i];if(!visible[nc_faces[f][0]]||!visible[nc_faces[f][1]]||!visible[nc_faces[f][2]]||!visible[nc_faces[f][3]])continue;
+    for(i=0;i<6;i++){u64 *dw;int shade,n;f=order[i];
+        if(!visible[nc_faces[f][0]]||!visible[nc_faces[f][1]]||!visible[nc_faces[f][2]]||!visible[nc_faces[f][3]])continue;
         /* 0x80 is full brightness through MODULATE, not 0xFF. */
         shade=(int)(nc_face_light[f]*128.f);if(shade>0x80)shade=0x80;
-        color.r=color.g=color.b=shade;dw=(u64*)draw_prim_start(q,0,&prim,&color);
-        {int n;for(n=0;n<6;n++){int corner=tri[n],v=nc_faces[f][corner];int u=(corner==1||corner==2)?nc_materials[material].used_width-1:0;int t=corner>=2?nc_materials[material].used_height-1:0;texel_t uv;xyz_t xyz;
-            uv.uv=(u64)ftoi4(u)|((u64)ftoi4(t)<<32);xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=32;*dw++=uv.uv;*dw++=xyz.xyz;}}
-        q=draw_prim_end((qword_t*)dw,2,DRAW_UV_REGLIST);
+        color.r=(object->tint[0]*shade)>>7;
+        color.g=(object->tint[1]*shade)>>7;
+        color.b=(object->tint[2]*shade)>>7;
+        dw=(u64*)draw_prim_start(q,0,&prim,&color);
+        for(n=0;n<6;n++){
+            int corner=tri[n],v=nc_faces[f][corner];
+            xyz_t xyz;
+            xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=32;
+            if(nc_opt_perspective) {
+                /* ST before RGBAQ: the Q the rasteriser divides by is the one
+                 * in the RGBAQ register, so the colour has to be written after
+                 * the texture coordinate that belongs with it. Reversing these
+                 * two silently pairs each vertex with the previous vertex's
+                 * depth, which looks almost right and is not. */
+                texel_t st;
+                float w=1.f/depth[v];
+                st.s=((corner==1||corner==2)?far_s:0.f)*w;
+                st.t=((corner>=2)?far_t:0.f)*w;
+                color.q=w;
+                *dw++=st.uv;*dw++=color.rgbaq;*dw++=xyz.xyz;
+            } else {
+                texel_t uv;
+                int u=(corner==1||corner==2)?nc_materials[material].used_width-1:0;
+                int t=corner>=2?nc_materials[material].used_height-1:0;
+                uv.uv=(u64)ftoi4(u)|((u64)ftoi4(t)<<32);
+                *dw++=uv.uv;*dw++=xyz.xyz;
+            }
+        }
+        q=nc_opt_perspective?draw_prim_end((qword_t*)dw,3,DRAW_STQ2_REGLIST)
+                            :draw_prim_end((qword_t*)dw,2,DRAW_UV_REGLIST);
+        nc_stat_tris+=2;
     }return q;
 }
 
 static qword_t *nc_world_draw(qword_t *q) {
-    const float camera_pos[3]=NC_WORLD_CAMERA_POS,camera_target[3]=NC_WORLD_CAMERA_TARGET;
-    float dx=camera_target[0]-camera_pos[0],dy=camera_target[1]-camera_pos[1],dz=camera_target[2]-camera_pos[2];
-    float yaw=-atan2f(dx,dz),pitch=atan2f(dy,sqrtf(dx*dx+dz*dz));int object,i;
-    for(object=0;object<NC_WORLD_OBJECT_COUNT;object++){
+    float dx,dy,dz,yaw,pitch,focal;
+    int order[NC_WORLD_MAX];
+    float centre[NC_WORLD_MAX];
+    int drawn=0,slot,i,j;
+
+    nc_camera_update();
+    dx=nc_cam_target[0]-nc_cam_pos[0];dy=nc_cam_target[1]-nc_cam_pos[1];dz=nc_cam_target[2]-nc_cam_pos[2];
+    yaw=-atan2f(dx,dz);pitch=atan2f(dy,sqrtf(dx*dx+dz*dz));
+    focal=((float)SCREEN_H*.5f)/tanf(nc_cam_fov*0.00872664626f);
+    nc_stat_tris=0;
+
+    /* Objects are sorted against each other as well as their own faces. With
+     * no depth buffer, list order is draw order, and a spawned cube that
+     * appeared in front of a wall it is standing behind is the result. */
+    for(i=0;i<nc_object_count;i++) {
+        float ox,oy,oz,flat_z;
+        if(!nc_objects[i].active) continue;
+        ox=nc_objects[i].pos[0]-nc_cam_pos[0];oy=nc_objects[i].pos[1]-nc_cam_pos[1];oz=nc_objects[i].pos[2]-nc_cam_pos[2];
+        /* Deliberately not named rx/rz: test_ps2camera reads the vertex
+         * projection out of this file by variable name, and a second `rz`
+         * earlier in the function would be the one it found. */
+        flat_z=-ox*sinf(yaw)+oz*cosf(yaw);
+        centre[drawn]=oy*sinf(pitch)+flat_z*cosf(pitch);
+        order[drawn++]=i;
+    }
+    for(i=0;i+1<drawn;i++)for(j=i+1;j<drawn;j++)
+        if(centre[i]<centre[j]){int s=order[i];float c=centre[i];order[i]=order[j];centre[i]=centre[j];order[j]=s;centre[j]=c;}
+    nc_stat_objects=drawn;
+
+    for(slot=0;slot<drawn;slot++){
+        const NCObject *object=&nc_objects[order[slot]];
         float px[8],py[8],depths[8];int visible[8];
+        float ax=object->rot[0]*NC_DEG,ay=object->rot[1]*NC_DEG,az=object->rot[2]*NC_DEG;
         nc_world_shade(object);
         for(i=0;i<8;i++){float vx=(i&1)?1:-1,vy=(i&2)?1:-1,vz=(i&4)?1:-1,tx,ty,tz;
-            float ax=nc_world_rot[object][0]*0.01745329252f,ay=nc_world_rot[object][1]*0.01745329252f,az=nc_world_rot[object][2]*0.01745329252f;
-            vx*=nc_world_scale[object][0];vy*=nc_world_scale[object][1];vz*=nc_world_scale[object][2];
-            ty=vy*cosf(ax)-vz*sinf(ax);tz=vy*sinf(ax)+vz*cosf(ax);vy=ty;vz=tz;tx=vx*cosf(ay)+vz*sinf(ay);tz=-vx*sinf(ay)+vz*cosf(ay);vx=tx;vz=tz;tx=vx*cosf(az)-vy*sinf(az);ty=vx*sinf(az)+vy*cosf(az);vx=tx;vy=ty;
-            vx+=nc_world_pos[object][0]-camera_pos[0];vy+=nc_world_pos[object][1]-camera_pos[1];vz+=nc_world_pos[object][2]-camera_pos[2];
-            {float rx=vx*cosf(yaw)+vz*sinf(yaw),rz=-vx*sinf(yaw)+vz*cosf(yaw),ry=vy*cosf(pitch)-rz*sinf(pitch),depth=vy*sinf(pitch)+rz*cosf(pitch);float focal=((float)SCREEN_H*.5f)/tanf(NC_WORLD_CAMERA_FOV*0.00872664626f);
-             visible[i]=depth>=0.3f;depths[i]=depth;if(visible[i]){px[i]=rx*focal*NC_PIXEL_ASPECT/depth;py[i]=-ry*focal/depth;}}
+            vx*=object->scale[0];vy*=object->scale[1];vz*=object->scale[2];
+            ty=vy*cosf(ax)-vz*sinf(ax);tz=vy*sinf(ax)+vz*cosf(ax);vy=ty;vz=tz;
+            tx=vx*cosf(ay)+vz*sinf(ay);tz=-vx*sinf(ay)+vz*cosf(ay);vx=tx;vz=tz;
+            tx=vx*cosf(az)-vy*sinf(az);ty=vx*sinf(az)+vy*cosf(az);vx=tx;vy=ty;
+            vx+=object->pos[0]-nc_cam_pos[0];vy+=object->pos[1]-nc_cam_pos[1];vz+=object->pos[2]-nc_cam_pos[2];
+            {float rx=vx*cosf(yaw)+vz*sinf(yaw),rz=-vx*sinf(yaw)+vz*cosf(yaw);
+             float ry=vy*cosf(pitch)-rz*sinf(pitch),depth=vy*sinf(pitch)+rz*cosf(pitch);
+             visible[i]=depth>=0.3f;depths[i]=depth;
+             if(visible[i]){px[i]=rx*focal*NC_PIXEL_ASPECT/depth;py[i]=-ry*focal/depth;}}
         }
-        q=nc_world_cube(q,px,py,depths,visible,nc_world_material[object]);
+        q=nc_world_cube(q,object,px,py,depths,visible);
     }return q;
 }
