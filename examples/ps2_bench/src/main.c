@@ -144,7 +144,7 @@ static qword_t *test_quad(qword_t *q, int x, int y, int size, int path)
     }
 
     prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
-    prim.colorfix = PRIM_FIXED;
+    prim.colorfix = PRIM_UNFIXED;
     prim.shading = (path == PATH_UV) ? PRIM_SHADE_FLAT : PRIM_SHADE_GOURAUD;
     prim.mapping_type = (path == PATH_UV) ? PRIM_MAP_UV : PRIM_MAP_ST;
     color.r = color.g = color.b = 0x80; color.a = 0x80; color.q = w;
@@ -270,7 +270,7 @@ static qword_t *pass_emit(qword_t *q, int triangles)
     int done = 0;
 
     prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
-    prim.colorfix = PRIM_FIXED; prim.shading = PRIM_SHADE_GOURAUD;
+    prim.colorfix = PRIM_UNFIXED; prim.shading = PRIM_SHADE_GOURAUD;
     prim.mapping_type = PRIM_MAP_ST;
     color.a = 0x80; color.q = 1.0f;
 
@@ -312,7 +312,7 @@ static qword_t *pass_emit_interleaved(qword_t *q, int triangles)
     int done = 0;
 
     prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
-    prim.colorfix = PRIM_FIXED; prim.shading = PRIM_SHADE_GOURAUD;
+    prim.colorfix = PRIM_UNFIXED; prim.shading = PRIM_SHADE_GOURAUD;
     prim.mapping_type = PRIM_MAP_ST;
     color.a = 0x80; color.q = 1.0f;
 

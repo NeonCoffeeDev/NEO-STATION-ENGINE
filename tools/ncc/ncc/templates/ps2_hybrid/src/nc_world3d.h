@@ -341,7 +341,7 @@ static qword_t *nc_world_wire(qword_t *q,const NCObject *object,float *px,float 
                                   {0,4},{1,5},{2,6},{3,7}};
     prim_t prim={0};color_t color={0};int e;
     prim.type=PRIM_LINE;prim.shading=PRIM_SHADE_FLAT;prim.mapping=DRAW_DISABLE;
-    prim.blending=nc_opt_blend?DRAW_ENABLE:DRAW_DISABLE;prim.colorfix=PRIM_FIXED;
+    prim.blending=nc_opt_blend?DRAW_ENABLE:DRAW_DISABLE;prim.colorfix=PRIM_UNFIXED;
     color.r=(unsigned char)object->tint[0];color.g=(unsigned char)object->tint[1];
     color.b=(unsigned char)object->tint[2];color.a=0x80;color.q=1.0f;
     for(e=0;e<12;e++) {
@@ -369,7 +369,13 @@ static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float 
     if(material<0||material>=NC_MATERIAL_COUNT)return q;
     clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
     q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
-    prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_FIXED;
+    /* PRIM bit 10, FIX, is fragment value control. Set, the GS stops
+     * interpolating across the primitive and every pixel takes one
+     * texture coordinate -- one texel stretched over the whole triangle,
+     * which is a solid colour with the geometry still correct. That is
+     * every "the texture is not showing" in this project, and PS2SDK's
+     * own textured rectangle, which always worked, leaves it clear. */
+    prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_UNFIXED;
     prim.blending=nc_opt_blend?DRAW_ENABLE:DRAW_DISABLE;
     /* Perspective correction is not a mode the GS is missing -- it is what it
      * does when a primitive carries ST and a per-vertex Q of 1/z instead of
@@ -459,7 +465,7 @@ static qword_t *nc_world_billboard(qword_t *q,const NCBillboard *flat,
     tall=flat->size[1]*focal/depth;
     clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
     q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
-    prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_FIXED;
+    prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_UNFIXED;
     prim.shading=PRIM_SHADE_GOURAUD;prim.mapping_type=PRIM_MAP_ST;
     prim.blending=nc_opt_blend?DRAW_ENABLE:DRAW_DISABLE;
     far_s=(float)nc_materials[material].used_width/(float)nc_materials[material].width;

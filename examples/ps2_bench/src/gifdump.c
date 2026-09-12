@@ -147,7 +147,7 @@ static void build_primitives(void)
 
     /* The one that does not. */
     prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
-    prim.colorfix = PRIM_FIXED; prim.shading = PRIM_SHADE_FLAT;
+    prim.colorfix = PRIM_UNFIXED; prim.shading = PRIM_SHADE_FLAT;
     prim.mapping_type = PRIM_MAP_UV;
     color.r = color.g = color.b = 0x80; color.a = 0x80; color.q = 1.0f;
     dw = (u64 *)draw_prim_start(scratch_tri, 0, &prim, &color);

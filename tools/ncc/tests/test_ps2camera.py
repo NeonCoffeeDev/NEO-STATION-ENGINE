@@ -355,3 +355,37 @@ class TextureRegisterTests(unittest.TestCase):
         """14 bits of 12.4 fixed point tops out at 1023 texels."""
         self.assertLessEqual(511 * 16, 0x3FFF)
         self.assertGreater(1024 * 16, 0x3FFF)
+
+
+class PrimFlagTests(unittest.TestCase):
+    """PRIM's FIX bit must stay clear on anything textured.
+
+    FIX is fragment value control. With it set the GS stops interpolating
+    across the primitive, so every pixel takes a single texture coordinate --
+    one texel stretched over the whole triangle. The geometry stays perfectly
+    correct, which is why this read as "the texture is not loading" for weeks
+    and survived a page-alignment fix, a UV register fix, and three separate
+    theories about the coordinate itself.
+
+    PS2SDK's own draw_rect_textured leaves FIX clear, which is exactly why the
+    2D path always worked and every hand-built triangle did not.
+    """
+
+    RUNTIME_DIR = (Path(__file__).resolve().parents[1]
+                   / 'ncc' / 'templates' / 'ps2_hybrid' / 'src')
+
+    def test_no_runtime_primitive_sets_fix(self):
+        for name in ('nc_world3d.h', 'nc_mesh.h'):
+            text = (self.RUNTIME_DIR / name).read_text(encoding='utf-8')
+            self.assertNotIn('PRIM_FIXED', text,
+                             '%s sets PRIM FIX, which stops the GS '
+                             'interpolating texture coordinates' % name)
+
+    def test_the_textured_paths_still_ask_for_texturing(self):
+        """Clearing one flag must not have cleared the ones that matter."""
+        for name in ('nc_world3d.h', 'nc_mesh.h'):
+            text = (self.RUNTIME_DIR / name).read_text(encoding='utf-8')
+            self.assertIn('mapping = DRAW_ENABLE', text.replace(' ', ' ')
+                          if 'mapping = DRAW_ENABLE' in text else
+                          text.replace('mapping=DRAW_ENABLE',
+                                       'mapping = DRAW_ENABLE'))

@@ -255,8 +255,14 @@ static qword_t *nc_mesh_draw(qword_t *q, const NCModel *model)
     nc_stat_tk_emit = 0;
 
     clut.storage_mode = CLUT_STORAGE_MODE1; clut.load_method = CLUT_NO_LOAD;
+    /* PRIM bit 10, FIX, is fragment value control. Set, the GS stops
+     * interpolating across the primitive and every pixel takes one
+     * texture coordinate -- one texel stretched over the whole triangle,
+     * which is a solid colour with the geometry still correct. That is
+     * every "the texture is not showing" in this project, and PS2SDK's
+     * own textured rectangle, which always worked, leaves it clear. */
     prim.type = PRIM_TRIANGLE; prim.mapping = DRAW_ENABLE;
-    prim.colorfix = PRIM_FIXED; prim.shading = PRIM_SHADE_GOURAUD;
+    prim.colorfix = PRIM_UNFIXED; prim.shading = PRIM_SHADE_GOURAUD;
     prim.mapping_type = PRIM_MAP_ST;
     prim.blending = nc_opt_blend ? DRAW_ENABLE : DRAW_DISABLE;
     color.a = nc_opt_blend == 1 ? 0x40 : 0x80;
