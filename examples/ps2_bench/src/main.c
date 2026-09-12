@@ -233,7 +233,7 @@ static void run_benchmarks(void)
         for (i = 0; i < BENCH_VERTS; i++) sink += 1.f;
         { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
     }
-    record("LOOP OVERHEAD", best, BENCH_VERTS);
+    record("LOOP FLOOR", best, BENCH_VERTS);
 
     best = 0xFFFFFFFFu;
     for (r = 0; r < REPEATS; r++) {
@@ -247,14 +247,14 @@ static void run_benchmarks(void)
         mark = cpu_ticks(); pass_project(0, 1);
         { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
     }
-    record("PROJECT + LIGHT", best, BENCH_VERTS);
+    record("PROJ+LIGHT", best, BENCH_VERTS);
 
     best = 0xFFFFFFFFu;
     for (r = 0; r < REPEATS; r++) {
         mark = cpu_ticks(); pass_project(1, 1);
         { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
     }
-    record("PROJECT+LIGHT+SKIN", best, BENCH_VERTS);
+    record("PROJ+LGT+SKIN", best, BENCH_VERTS);
 
     best = 0xFFFFFFFFu;
     for (r = 0; r < REPEATS; r++) {
@@ -263,7 +263,7 @@ static void run_benchmarks(void)
         { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
         (void)q;
     }
-    record("EMIT TRIANGLE", best, BENCH_TRIS);
+    record("EMIT TRI", best, BENCH_TRIS);
 
     best = 0xFFFFFFFFu;
     for (r = 0; r < REPEATS; r++) {
@@ -293,7 +293,7 @@ static void run_benchmarks(void)
         { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
         sink += acc;
     }
-    record("READ SEQUENTIAL", best, 8192);
+    record("READ SEQ", best, 8192);
 
     /* 16 floats apart is 64 bytes: one cache line per access, so every read
      * misses. The gap between this and the row above is what a cache miss
@@ -306,7 +306,7 @@ static void run_benchmarks(void)
         { unsigned int d = cpu_ticks() - mark; if (d < best) best = d; }
         sink += acc;
     }
-    record("READ STRIDED 64B", best, 8192 / 16);
+    record("READ STRIDE64", best, 8192 / 16);
 
     (void)sink;
 }
@@ -324,16 +324,31 @@ static void upload_font(void)
     dma_wait_fast();
 }
 
+/* The sheet is 256x16 holding 8x8 cells in a 32 by 2 grid, and every glyph is
+ * drawn at twice that so it can be read from a sofa. Guessing this layout --
+ * one row of 8x16 cells -- is what produced a screen of scrambled blocks the
+ * first time, so the numbers here are the engine's own. */
+#define CELL 8
+#define GLYPH_W 16
+#define GLYPH_H 16
+#define FIRST_CHAR 32
+#define FONT_COLUMNS 32
+#define FONT_ROWS 2
+
 static qword_t *glyph(qword_t *q, int x, int y, int code, int bright)
 {
     texrect_t r;
-    int column = code - 32;
-    if (column < 0 || column > 94) return q;
+    int index = code - FIRST_CHAR;
+    int u, v;
+    if (index < 0 || index >= FONT_COLUMNS * FONT_ROWS || code == ' ') return q;
     if (q + 16 >= packet_limit) return q;
-    r.v0.x = (float)(OFF_X + x);      r.v0.y = (float)(OFF_Y + y);      r.v0.z = 0;
-    r.t0.u = (float)(column * 8);     r.t0.v = 0.f;
-    r.v1.x = (float)(OFF_X + x + 8);  r.v1.y = (float)(OFF_Y + y + 16); r.v1.z = 0;
-    r.t1.u = (float)(column * 8 + 8); r.t1.v = 16.f;
+    u = (index % FONT_COLUMNS) * CELL;
+    v = (index / FONT_COLUMNS) * CELL;
+    r.v0.x = (float)(OFF_X + x); r.v0.y = (float)(OFF_Y + y); r.v0.z = 0;
+    r.t0.u = (float)u;           r.t0.v = (float)v;
+    r.v1.x = (float)(OFF_X + x + GLYPH_W);
+    r.v1.y = (float)(OFF_Y + y + GLYPH_H); r.v1.z = 0;
+    r.t1.u = (float)(u + CELL);  r.t1.v = (float)(v + CELL);
     r.color.r = r.color.g = r.color.b = bright;
     r.color.a = 0x80; r.color.q = 1.0f;
     return draw_rect_textured(q, 0, &r);
@@ -345,7 +360,7 @@ static qword_t *text(qword_t *q, int x, int y, const char *s, int bright)
         char c = *s++;
         if (c >= 'a' && c <= 'z') c = (char)(c - 32);
         q = glyph(q, x, y, c, bright);
-        x += 8;
+        x += GLYPH_W;
     }
     return q;
 }
@@ -414,27 +429,27 @@ int main(void)
         clut.storage_mode = CLUT_STORAGE_MODE1; clut.load_method = CLUT_NO_LOAD;
         q = draw_texturebuffer(q, 0, &font_tex, &clut);
 
-        q = text(q, 24, 14, "NC BENCH   TICK 147456000 HZ   FIELD 2460060 TK", 0x80);
-        q = text(q, 24, 38, "                      TOTAL TK    OPS   TK/OP", 0x50);
+        q = text(q, 16, 10, "NC BENCH  FIELD=2460060 TK", 0x80);
+        q = text(q, 16, 30, "ROW              TOTAL   TK/OP", 0x50);
         for (row = 0; row < row_count; row++) {
-            int y = 58 + row * 18;
+            int y = 50 + row * 20;
             unsigned int per = row_ops[row] ? row_ticks[row] / row_ops[row] : 0;
             unsigned int frac = row_ops[row]
-                ? (row_ticks[row] * 100 / row_ops[row]) % 100 : 0;
-            sprintf(line, "%-20s %8u %6d %5u.%02u",
-                    row_name[row], row_ticks[row], row_ops[row], per, frac);
-            q = text(q, 24, y, line, 0x80);
+                ? (row_ticks[row] * 100u / (unsigned)row_ops[row]) % 100 : 0;
+            sprintf(line, "%-14s%8u%4u.%02u",
+                    row_name[row], row_ticks[row], per, frac);
+            q = text(q, 16, y, line, 0x80);
         }
-        sprintf(line, "A FIELD BUYS %u PROJECTED VERTICES",
+        sprintf(line, "FIELD=%u VTX",
                 row_count > 3 && row_ticks[3]
                     ? (unsigned int)((u64)TICKS_PER_FIELD * BENCH_VERTS / row_ticks[3])
                     : 0);
-        q = text(q, 24, 58 + row_count * 18 + 16, line, 0x70);
-        sprintf(line, "A FIELD BUYS %u EMITTED TRIANGLES",
+        q = text(q, 16, 50 + row_count * 20 + 12, line, 0x70);
+        sprintf(line, "FIELD=%u TRI",
                 row_count > 4 && row_ticks[4]
                     ? (unsigned int)((u64)TICKS_PER_FIELD * BENCH_TRIS / row_ticks[4])
                     : 0);
-        q = text(q, 24, 58 + row_count * 18 + 34, line, 0x70);
+        q = text(q, 16, 50 + row_count * 20 + 32, line, 0x70);
 
         q = draw_finish(q);
         dma_wait_fast();
