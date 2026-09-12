@@ -299,8 +299,23 @@ def describe(mesh):
     textures = texture_report(mesh)
     total32 = sum(t['bytes32'] for t in textures.values())
     total16 = sum(t['bytes16'] for t in textures.values())
-    rows.append('  TEXTURES   %d distinct, %d KB at 32-bit, %d KB at 16-bit'
-                % (len(textures), total32 // 1024, total16 // 1024))
+    rows.append('  TEXTURES   %d distinct' % len(textures))
+    # Costed every way the hardware can hold them, because the decision is
+    # always "which of these fits" and never "is 32-bit fine".
+    from . import palette as palette_mod
+    from PIL import Image
+    total8 = total4 = 0
+    for entry in textures.values():
+        with Image.open(entry['path']) as image:
+            width, height = image.size
+        total8 += palette_mod.cost(width, height, 8)
+        total4 += palette_mod.cost(width, height, 4)
+    for label, total in (('32-bit', total32), ('16-bit', total16),
+                         ('8-bit palette', total8), ('4-bit palette', total4)):
+        rows.append('    %-16s %6d KB%s'
+                    % (label, total // 1024,
+                       '   <- 4 MB of graphics memory, minus 1.7 MB of buffers'
+                       if label == '32-bit' else ''))
     rows.append('')
     rows.append('  Parts, largest first -- each one is a texture bind per frame:')
     for part in sorted(mesh.parts, key=lambda p: -p.count)[:8]:
