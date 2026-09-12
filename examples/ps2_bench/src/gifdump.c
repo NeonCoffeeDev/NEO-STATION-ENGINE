@@ -94,6 +94,22 @@ static void decode(const char *what, qword_t *tag)
         (unsigned int)((low >> 15) & 1));
     say("  FLG=%s PRE=%u PRIM=%03X", mode[flg], pre, prim);
     say("  REGS=%08X%08X", (unsigned int)(high >> 32), (unsigned int)high);
+    {
+        /* The register list, named. 0=PRIM 1=RGBAQ 2=ST 3=UV 5=XYZ2 14=A+D */
+        static const char *const reg[16] = {
+            "PRIM","RGBAQ","ST","UV","XYZF2","XYZ2","TEX0","CLAMP",
+            "FOG","?","XYZF3","XYZ3","?","?","A+D","NOP"};
+        char names[40];
+        unsigned int slot;
+        names[0] = 0;
+        for (slot = 0; slot < nreg && slot < 6; slot++) {
+            unsigned int which = (unsigned int)((high >> (slot * 4)) & 0xF);
+            if (strlen(names) + strlen(reg[which]) + 2 >= sizeof(names)) break;
+            if (slot) strcat(names, " ");
+            strcat(names, reg[which]);
+        }
+        say("  %s", names);
+    }
 }
 
 static void dump(const char *what, qword_t *base, int count, int limit)
@@ -150,13 +166,15 @@ static void build_primitives(void)
     end = draw_prim_end((qword_t *)dw, 2, DRAW_UV_REGLIST);
     tri_qwords = (int)(end - scratch_tri);
 
-    say("GIF TAGS");
+    say("RECT Q=%d", rect_qwords);
     decode("RECT", scratch_rect);
-    say("  QWORDS=%d", rect_qwords);
-    decode("TRI", scratch_tri);
-    say("  QWORDS=%d", tri_qwords);
-    dump("R", scratch_rect + 1, rect_qwords - 1, 2);
-    dump("T", scratch_tri + 1, tri_qwords - 1, 2);
+    say("TRI Q=%d  TAG0 THEN TAG3", tri_qwords);
+    decode("T0", scratch_tri);
+    /* draw_prim_start writes an A+D block setting PRIM and RGBAQ, then leaves
+     * a quadword for draw_prim_end to fill in. That second tag is the one the
+     * vertex registers are read under, and it is the one never looked at. */
+    decode("T3", scratch_tri + 3);
+    dump("V", scratch_tri + 4, tri_qwords - 4, 2);
 }
 
 /* ---- just enough to show it ------------------------------------------- */
