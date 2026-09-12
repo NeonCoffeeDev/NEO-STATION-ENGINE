@@ -28,6 +28,10 @@ typedef struct {
 
 static NCPersist nc_persist;
 
+/* The first object index this row is allowed to remove: everything below it
+ * is level geometry or the character. */
+static int nc_first_spawn;
+
 enum { NC_LEVEL_AUTHORED, NC_LEVEL_ARENA, NC_LEVEL_COUNT };
 static const char *const NC_LEVEL_NAMES[NC_LEVEL_COUNT] = {"AUTHORED", "ARENA"};
 
@@ -86,6 +90,7 @@ static void nc_lab_load_level(int level)
         actor.pos[1] = 0.f;
         nc_player = nc_world_spawn(&actor);
     }
+    nc_first_spawn = nc_object_count;
 }
 
 /* ---- frame cost ------------------------------------------------------ */
@@ -241,7 +246,8 @@ static void nc_lab_value(int row, char *out)
                                NC_MATERIAL_COUNT); break;
     case LAB_TINT:     strcpy(out, LAB_TINT_NAMES[nc_lab_tint]); break;
     case LAB_FOV:      sprintf(out, "%d DEG", (int)nc_cam_fov); break;
-    case LAB_SPAWN:    sprintf(out, "%d OF %d", nc_object_count, NC_WORLD_MAX); break;
+    case LAB_SPAWN:    sprintf(out, "%d +%d OF %d", nc_first_spawn,
+                               nc_object_count - nc_first_spawn, NC_WORLD_MAX); break;
     case LAB_SPRITE:   sprintf(out, "%d OF %d", nc_sprite_count, NC_SPRITE_MAX); break;
     case LAB_AVATAR:   strcpy(out, nc_opt_avatar ? "FIGURE" : "BOX"); break;
     case LAB_ANIM:     strcpy(out, ANIM_NAMES[nc_anim_mode]); break;
@@ -301,9 +307,12 @@ static void nc_lab_adjust(int row, int step)
             for (i = 0; i < 3; i++) block.tint[i] = LAB_TINTS[nc_lab_tint][i];
             if (nc_world_spawn(&block) >= 0) nc_persist.spawned++;
             nc_lab_apply_spin();
-        } else if (nc_object_count > 1) {
+        } else if (nc_object_count > nc_first_spawn) {
+            /* Only boxes this row added. The level's own geometry and the
+             * character are not test boxes, and the character is spawned last
+             * -- so removing from the end took it away on the first press,
+             * which left nothing to animate and no way back but reloading. */
             nc_object_count--;
-            if (nc_player >= nc_object_count) nc_player = -1;
         }
         break;
     case LAB_SPRITE:
@@ -475,9 +484,14 @@ static qword_t *nc_lab_draw(qword_t *q)
     q = text(q, 26, 76, line, 0x70);
     sprintf(line, "VRAM TOP %6u  FAILED %d", nc_vram_top, nc_vram_fail);
     q = text(q, 26, 112, line, nc_vram_fail ? 0x80 : 0x50);
-    sprintf(line, "MESH %4d TRI  %4d CULL  ANIM %s",
-            nc_stat_mesh_tris, nc_stat_mesh_culled,
-            ANIM_NAMES[nc_anim_playing]);
+    if (nc_player < 0)
+        sprintf(line, "MESH  -- NO CHARACTER IN THE SCENE --");
+    else if (!nc_opt_avatar)
+        sprintf(line, "MESH  -- AVATAR IS THE BOX --");
+    else
+        sprintf(line, "MESH %4d TRI  %4d CULL  ANIM %s",
+                nc_stat_mesh_tris, nc_stat_mesh_culled,
+                ANIM_NAMES[nc_anim_playing]);
     q = text(q, 26, 130, line, 0x70);
     sprintf(line, "%s %s %s TOUCH %d",
             nc_opt_perspective ? "PERSP" : "AFFIN",
