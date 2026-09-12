@@ -40,7 +40,8 @@ static int nc_object_count;
  * find out which half is wrong is to flip one thing at a time on the console
  * and look. */
 static int nc_opt_perspective = 1;     /* STQ with 1/z, or plain affine UV */
-static int nc_opt_filter;              /* nearest or bilinear */
+static int nc_opt_filter = 1;          /* nearest or bilinear; bilinear reads
+                                        * better on a real television */
 static int nc_opt_lighting = 1;
 static int nc_opt_cull = 1;            /* drop faces that point away */
 static int nc_opt_wireframe;
@@ -50,6 +51,7 @@ static int nc_opt_collide = 1;
 
 /* Filled every frame, read by the lab readout. */
 static int nc_stat_objects, nc_stat_tris, nc_stat_culled, nc_stat_sprites;
+static int nc_stat_faces;              /* considered, before culling */
 static int nc_stat_touching;
 
 /* Billboards: a flat picture that always faces the camera, sorted against the
@@ -90,8 +92,15 @@ static void nc_world_upload(void) {
          * textured cube became a flat wrong colour and why memory after the
          * packet was being written through. */
         int qwords = (nc_materials[i].width * nc_materials[i].height) / 4 + 64;
+        /* Page alignment, not block. The GS stores a texture swizzled within
+         * its pages, so a texture that does not begin on a page boundary is
+         * read back with the wrong pattern -- which reads as one flat colour
+         * rather than as noise, and so looks like "no texture is loading"
+         * rather than like corruption. Every other texture in this project
+         * was already page-aligned, which is exactly why every other texture
+         * worked. */
         nc_world_tex[i].width=nc_materials[i].width;nc_world_tex[i].psm=GS_PSM_32;
-        nc_world_tex[i].address=graph_vram_allocate(nc_materials[i].width,nc_materials[i].height,GS_PSM_32,GRAPH_ALIGN_BLOCK);
+        nc_world_tex[i].address=graph_vram_allocate(nc_materials[i].width,nc_materials[i].height,GS_PSM_32,GRAPH_ALIGN_PAGE);
         nc_world_tex[i].info.width=draw_log2(nc_materials[i].width);nc_world_tex[i].info.height=draw_log2(nc_materials[i].height);
         nc_world_tex[i].info.components=TEXTURE_COMPONENTS_RGBA;nc_world_tex[i].info.function=TEXTURE_FUNCTION_MODULATE;
         upload=packet_init(qwords,PACKET_NORMAL);
@@ -318,17 +327,14 @@ static qword_t *nc_world_wire(qword_t *q,const NCObject *object,float *px,float 
 static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float *py,
                               float *depth,int *visible) {
     static const int tri[6]={0,1,2,0,2,3};
-    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};
+    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};
     int material=object->material,f,i,order[6]={0,1,2,3,4,5};float face_depth[6];
     int ceiling=nc_opt_boost?0xFF:0x80;
     float far_s,far_t;
     if(nc_opt_wireframe) return nc_world_wire(q,object,px,py,visible);
     if(material<0||material>=NC_MATERIAL_COUNT)return q;
-    lod.calculation=LOD_USE_K;
-    lod.mag_filter=nc_opt_filter?LOD_MAG_LINEAR:LOD_MAG_NEAREST;
-    lod.min_filter=nc_opt_filter?LOD_MIN_LINEAR:LOD_MIN_NEAREST;
     clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
-    q=draw_texture_sampling(q,0,&lod);q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
+    q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
     prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_FIXED;
     prim.blending=nc_opt_blend?DRAW_ENABLE:DRAW_DISABLE;
     /* Perspective correction is not a mode the GS is missing -- it is what it
@@ -338,7 +344,11 @@ static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float 
      * or something else. */
     prim.mapping_type=nc_opt_perspective?PRIM_MAP_ST:PRIM_MAP_UV;
     prim.shading=nc_opt_perspective?PRIM_SHADE_GOURAUD:PRIM_SHADE_FLAT;
-    color.a=0x80;color.q=1.0f;
+    /* Every texel in these materials is fully opaque, so blending source-over
+     * at full alpha is indistinguishable from not blending -- which is why
+     * OPAQUE and ALPHA looked identical. ALPHA asks for translucency, so it
+     * gets some. */
+    color.a=nc_opt_blend==1?0x40:0x80;color.q=1.0f;
     /* The artwork occupies the top-left of a power-of-two texture, so the far
      * edge of the picture is not 1.0. */
     far_s=(float)nc_materials[material].used_width/(float)nc_materials[material].width;
@@ -347,6 +357,7 @@ static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float 
     for(i=0;i<5;i++)for(f=i+1;f<6;f++)if(face_depth[order[i]]<face_depth[order[f]]){int swap=order[i];order[i]=order[f];order[f]=swap;}
     for(i=0;i<6;i++){u64 *dw;int shade,n;f=order[i];
         if(!visible[nc_faces[f][0]]||!visible[nc_faces[f][1]]||!visible[nc_faces[f][2]]||!visible[nc_faces[f][3]])continue;
+        nc_stat_faces++;
         if(nc_opt_cull && nc_face_facing(nc_faces[f],px,py)<=0.f){nc_stat_culled++;continue;}
         /* 0x80 is full brightness through MODULATE, not 0xFF -- which is why
          * going past it brightens rather than overflows, and is the only way
@@ -398,17 +409,14 @@ static qword_t *nc_world_billboard(qword_t *q,const NCBillboard *flat,
                                    float cx,float cy,float depth,float focal)
 {
     static const int tri[6]={0,1,2,0,2,3};
-    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};lod_t lod={0};
+    prim_t prim={0};color_t color={0};clutbuffer_t clut={0};
     float half_w,tall,far_s,far_t;int n;u64 *dw;
     int material=flat->material;
     if(material<0||material>=NC_MATERIAL_COUNT||depth<0.3f)return q;
     half_w=flat->size[0]*.5f*focal*NC_PIXEL_ASPECT/depth;
     tall=flat->size[1]*focal/depth;
-    lod.calculation=LOD_USE_K;
-    lod.mag_filter=nc_opt_filter?LOD_MAG_LINEAR:LOD_MAG_NEAREST;
-    lod.min_filter=nc_opt_filter?LOD_MIN_LINEAR:LOD_MIN_NEAREST;
     clut.storage_mode=CLUT_STORAGE_MODE1;clut.load_method=CLUT_NO_LOAD;
-    q=draw_texture_sampling(q,0,&lod);q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
+    q=draw_texturebuffer(q,0,&nc_world_tex[material],&clut);
     prim.type=PRIM_TRIANGLE;prim.mapping=DRAW_ENABLE;prim.colorfix=PRIM_FIXED;
     prim.shading=PRIM_SHADE_GOURAUD;prim.mapping_type=PRIM_MAP_ST;
     prim.blending=nc_opt_blend?DRAW_ENABLE:DRAW_DISABLE;
@@ -449,7 +457,20 @@ static qword_t *nc_world_draw(qword_t *q) {
     dx=nc_cam_target[0]-nc_cam_pos[0];dy=nc_cam_target[1]-nc_cam_pos[1];dz=nc_cam_target[2]-nc_cam_pos[2];
     yaw=-atan2f(dx,dz);pitch=atan2f(dy,sqrtf(dx*dx+dz*dz));
     focal=((float)SCREEN_H*.5f)/tanf(nc_cam_fov*0.00872664626f);
-    nc_stat_tris=0;nc_stat_culled=0;nc_stat_sprites=0;
+    nc_stat_tris=0;nc_stat_culled=0;nc_stat_sprites=0;nc_stat_faces=0;
+
+    /* Sampling is state for the whole drawing context, not a property of a
+     * primitive. Setting it once a frame costs less packet than setting it per
+     * object, and it makes explicit what was already happening by accident:
+     * the choice carries on to the text drawn after the world, which is where
+     * bilinear is most visible on a television. */
+    {
+        lod_t lod={0};
+        lod.calculation=LOD_USE_K;
+        lod.mag_filter=nc_opt_filter?LOD_MAG_LINEAR:LOD_MAG_NEAREST;
+        lod.min_filter=nc_opt_filter?LOD_MIN_LINEAR:LOD_MIN_NEAREST;
+        q=draw_texture_sampling(q,0,&lod);
+    }
 
     if(nc_opt_blend) {
         blend_t blend;

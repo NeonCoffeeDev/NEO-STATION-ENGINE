@@ -125,6 +125,11 @@ static void nc_lab_draw_end(void)
 static int nc_opt_backdrop;
 static int nc_backdrop_scroll;
 
+/* A multiple of both tile sizes, so the counter wrapping is itself seamless.
+ * Wrapping at 1024 put a jump in the scroll every few seconds because 1024 is
+ * not a whole number of tiles. */
+#define NC_BACKDROP_PERIOD 480
+
 /* Two layers of the same tile at different speeds and sizes. Parallax is the
  * oldest trick in 2D and it is still the fastest way to find out whether a
  * console can afford a full screen of overdraw before anything else is drawn
@@ -134,16 +139,19 @@ static qword_t *nc_lab_backdrop(qword_t *q)
     int layer, x, y;
     if (!nc_opt_backdrop || NC_MATERIAL_COUNT <= 0)
         return q;
-    nc_backdrop_scroll = (nc_backdrop_scroll + 1) & 1023;
+    nc_backdrop_scroll = (nc_backdrop_scroll + 1) % NC_BACKDROP_PERIOD;
     q = bind_texture(q, &nc_world_tex[0]);
     for (layer = 0; layer < 2; layer++) {
         int size = layer ? 96 : 160;
         int speed = layer ? 2 : 1;
+        /* Both axes have to step by a whole tile to come back to where they
+         * started. Scrolling y by half of x looked right until the horizontal
+         * shift wrapped and the vertical one did not. */
         int shift = (nc_backdrop_scroll * speed) % size;
         int bright = layer ? 0x30 : 0x1c;
         for (y = -size; y < SCREEN_H + size; y += size)
             for (x = -size; x < SCREEN_W + size; x += size)
-                q = sprite(q, x + shift, y + shift / 2, size, size, 0, 0,
+                q = sprite(q, x + shift, y + shift, size, size, 0, 0,
                            nc_materials[0].used_width,
                            nc_materials[0].used_height, bright);
     }
@@ -161,7 +169,10 @@ static const char *const LAB_NAMES[LAB_ROWS] = {
     "BLEND", "BRIGHTNESS", "MATERIAL", "TINT", "FOV", "BOXES",
     "SPRITES", "COLLISION", "BACKDROP", "CAMERA", "LEVEL"};
 
-static int nc_lab_open, nc_lab_row, nc_lab_spin, nc_lab_tint;
+/* Open on arrival. This is a test build; the menu is the reason to be here,
+ * and it was being missed entirely on the first visit. */
+static int nc_lab_open = 1;
+static int nc_lab_row, nc_lab_spin, nc_lab_tint;
 
 static const char *const LAB_SPIN_NAMES[3] = {"STILL", "SLOW", "FAST"};
 static const char *const LAB_BLEND_NAMES[3] = {"OPAQUE", "ALPHA", "ADDITIVE"};
@@ -343,8 +354,11 @@ static qword_t *nc_lab_draw(qword_t *q)
      * and hiding them behind the menu would mean never seeing what the menu
      * just changed. */
     q = panel(q, 16, 14, 316, 104, 0x0a, 0x0c, 0x12);
-    sprintf(line, "DRAWN %2d  TRI %4d  CULLED %3d  SPR %d",
-            nc_stat_objects, nc_stat_tris, nc_stat_culled, nc_stat_sprites);
+    /* Culling reported as a share of what it was offered. "CULLED 74" alone
+     * cannot be checked against anything; "74 OF 144" can. */
+    sprintf(line, "DRAWN %2d  TRI %4d  CULL %3d/%3d  SPR %d",
+            nc_stat_objects, nc_stat_tris, nc_stat_culled, nc_stat_faces,
+            nc_stat_sprites);
     q = text(q, 26, 22, line, 0x70);
     sprintf(line, "FRAME %7u TK  DRAW %7u TK", nc_frame_ticks, nc_draw_ticks);
     q = text(q, 26, 40, line, 0x70);
