@@ -74,6 +74,18 @@ def main(argv=None):
                     "instead, to judge lighting on a neutral surface")
     pv.set_defaults(func=_preview)
 
+    ms = sub.add_parser("mesh",
+                        help="inspect a model and draw it the way the console would")
+    ms.add_argument("file", help="a .obj (Blender, Crocotile, or a ripped model)")
+    ms.add_argument("-o", "--out", help="where to write the preview PNG")
+    ms.add_argument("--rotate", type=float, default=210.0,
+                    help="turn the model on its Y axis before drawing")
+    ms.add_argument("--height", type=float, default=1.8,
+                    help="world height to scale it to; a cube here is 2 units")
+    ms.add_argument("--turnaround", action="store_true",
+                    help="draw it from four sides instead of one")
+    ms.set_defaults(func=_mesh)
+
     st = sub.add_parser("studio", help="open the NC Studio GUI")
     st.set_defaults(func=_studio)
 
@@ -126,6 +138,45 @@ def _preview(args):
     print("  Compare this against the television. Same shapes but different")
     print("  colours is the frame buffer or the lighting; a texture right here")
     print("  and flat on the console is the upload.")
+    print()
+    return 0
+
+
+def _mesh(args):
+    """Read a model, say what it will cost, and draw it without a console."""
+    import os
+    from . import meshimport, ps2preview
+    try:
+        mesh = meshimport.load_obj(args.file)
+    except (OSError, meshimport.MeshError) as exc:
+        raise SystemExit("ncc: %s" % exc)
+    print(meshimport.describe(mesh))
+
+    factor = mesh.scale_to_height(args.height)
+    mesh.centre_on_floor()
+    print()
+    print("  SCALE      x%.5f to stand %.1f units tall" % (factor, args.height))
+
+    out = args.out or os.path.splitext(args.file)[0] + "_preview.png"
+    if args.turnaround:
+        from PIL import Image
+        sheet = Image.new("RGB", (640, 448), (10, 12, 14))
+        for index, angle in enumerate((0, 90, 180, 270)):
+            image, _ = ps2preview.render_mesh(
+                mesh, [0, args.height * 0.72, -args.height * 1.7],
+                [0, args.height * 0.5, 0], fov=45, quantise=8, rotation=angle)
+            sheet.paste(image.resize((320, 224), Image.LANCZOS),
+                        ((index % 2) * 320, (index // 2) * 224))
+        sheet.save(out)
+        stats = {"drawn": "4 views", "culled": "-", "skipped": "-"}
+    else:
+        image, stats = ps2preview.render_mesh(
+            mesh, [args.height * 0.9, args.height * 0.78, -args.height * 1.45],
+            [0, args.height * 0.5, 0], fov=50, quantise=8, rotation=args.rotate)
+        image.save(out)
+    print("  DRAWN      %s triangles, %s backfacing, %s off screen"
+          % (stats["drawn"], stats["culled"], stats["skipped"]))
+    print("  %s" % out)
     print()
     return 0
 
