@@ -21,6 +21,31 @@
 #define NC_WORLD_MAX 24
 #define NC_DEG 0.01745329252f
 
+/* Depth written per vertex, for the 16-bit depth buffer. Larger is nearer --
+ * the GS test is GREATER -- and the value is 1/z rather than z, which spends
+ * the sixteen bits on the distances a player is close enough to notice. */
+#define NC_Z_NEAR 0.3f
+static unsigned int nc_depth_value(float depth)
+{
+    float value = 65535.f * NC_Z_NEAR / depth;
+    if (value >= 65535.f) return 65535u;
+    if (value <= 1.f) return 1u;
+    return (unsigned int)value;
+}
+
+/* The depth test belongs to the world pass alone. Everything 2D is drawn
+ * afterwards at one depth and would fight it, so the pass switches the test on
+ * when it starts and hands it back the way it found it. */
+static qword_t *nc_depth_test(qword_t *q, int method)
+{
+    atest_t atest; dtest_t dtest; ztest_t ztest;
+    atest.enable = DRAW_ENABLE; atest.method = ATEST_METHOD_GREATER;
+    atest.compval = 0x00; atest.keep = ATEST_KEEP_FRAMEBUFFER;
+    dtest.enable = DRAW_DISABLE; dtest.pass = 0;
+    ztest.enable = DRAW_ENABLE; ztest.method = method;
+    return draw_pixel_test(q, 0, &atest, &dtest, &ztest);
+}
+
 static texbuffer_t nc_world_tex[NC_MATERIAL_COUNT > 0 ? NC_MATERIAL_COUNT : 1];
 
 typedef struct {
@@ -316,7 +341,7 @@ static qword_t *nc_world_wire(qword_t *q,const NCObject *object,float *px,float 
         dw=(u64*)draw_prim_start(q,0,&prim,&color);
         for(n=0;n<2;n++){
             xyz_t xyz;int v=edge[e][n];
-            xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=32;
+            xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=65535;   /* wireframe shows every edge, so nothing occludes it */
             *dw++=color.rgbaq;*dw++=xyz.xyz;
         }
         q=draw_prim_end((qword_t*)dw,2,DRAW_RGBAQ_REGLIST);
@@ -373,7 +398,7 @@ static qword_t *nc_world_cube(qword_t *q,const NCObject *object,float *px,float 
             int corner=tri[n],v=nc_faces[f][corner];
             float face_u,face_v;
             xyz_t xyz;
-            xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=32;
+            xyz.x=(u16)ftoi4(2048+px[v]);xyz.y=(u16)ftoi4(2048+py[v]);xyz.z=nc_depth_value(depth[v]);
             nc_face_texcoord(f,v,&face_u,&face_v);
             if(nc_opt_perspective) {
                 /* ST before RGBAQ: the Q the rasteriser divides by is the one
@@ -437,7 +462,7 @@ static qword_t *nc_world_billboard(qword_t *q,const NCBillboard *flat,
         st.s=((corner==1||corner==2)?far_s:0.f)*w;
         st.t=((corner>=2)?far_t:0.f)*w;
         color.q=w;
-        xyz.x=(u16)ftoi4(2048+x);xyz.y=(u16)ftoi4(2048+y);xyz.z=32;
+        xyz.x=(u16)ftoi4(2048+x);xyz.y=(u16)ftoi4(2048+y);xyz.z=nc_depth_value(depth);   /* flat: every corner at the anchor depth, so it slots between boxes */
         *dw++=st.uv;*dw++=color.rgbaq;*dw++=xyz.xyz;
     }
     q=draw_prim_end((qword_t*)dw,3,DRAW_STQ2_REGLIST);
@@ -458,6 +483,7 @@ static qword_t *nc_world_draw(qword_t *q) {
     yaw=-atan2f(dx,dz);pitch=atan2f(dy,sqrtf(dx*dx+dz*dz));
     focal=((float)SCREEN_H*.5f)/tanf(nc_cam_fov*0.00872664626f);
     nc_stat_tris=0;nc_stat_culled=0;nc_stat_sprites=0;nc_stat_faces=0;
+    if(z.enable) q=nc_depth_test(q,ZTEST_METHOD_GREATER);
 
     /* Sampling is state for the whole drawing context, not a property of a
      * primitive. Setting it once a frame costs less packet than setting it per
@@ -541,5 +567,7 @@ static qword_t *nc_world_draw(qword_t *q) {
              if(visible[i]){px[i]=rx*focal*NC_PIXEL_ASPECT/depth;py[i]=-ry*focal/depth;}}
         }
         q=nc_world_cube(q,object,px,py,depths,visible);
-    }return q;
+    }
+    if(z.enable) q=nc_depth_test(q,ZTEST_METHOD_ALLPASS);
+    return q;
 }

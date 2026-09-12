@@ -321,25 +321,52 @@ static int nc_lab_update(unsigned int pressed, unsigned int held)
         return 1;
     }
 
-    /* Driving a character and orbiting the camera are held, not pressed --
-     * this is the one part of the lab that has to feel like a game. */
+    /* The right stick drives the camera. That is not a period detail to be
+     * respectful about -- it is how anyone picking up a pad today expects to
+     * look around, and getting it wrong makes everything built on top feel
+     * wrong. L2/R2 stay as a fallback for a pad with no sticks. */
+    nc_cam_angle += (float)stick_rx * 0.00055f;
+    nc_cam_height -= (float)stick_ry * 0.004f;
+    if (held & PAD_L2) nc_cam_angle -= 0.03f;
+    if (held & PAD_R2) nc_cam_angle += 0.03f;
+    if (nc_cam_height < 1.f)  nc_cam_height = 1.f;
+    if (nc_cam_height > 16.f) nc_cam_height = 16.f;
+
     if (nc_player >= 0 && nc_player < nc_object_count) {
         NCObject *actor = &nc_objects[nc_player];
         float speed = 0.12f;
-        /* Movement is relative to where the camera is looking, or walking left
-         * sends the character somewhere else entirely. */
-        float facing = (nc_cam_mode == NC_CAM_AUTHORED) ? 0.f : nc_cam_angle;
-        float fx = sinf(facing), fz = cosf(facing);
-        if (held & PAD_UP)    { actor->pos[0] += fx * speed; actor->pos[2] += fz * speed; }
-        if (held & PAD_DOWN)  { actor->pos[0] -= fx * speed; actor->pos[2] -= fz * speed; }
-        if (held & PAD_LEFT)  { actor->pos[0] -= fz * speed; actor->pos[2] += fx * speed; }
-        if (held & PAD_RIGHT) { actor->pos[0] += fz * speed; actor->pos[2] -= fx * speed; }
-        if (held & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT))
-            actor->rot[1] = facing * 57.2957795f;
+        /* Which way the camera is actually looking, flattened onto the ground.
+         * Taking this from the orbit angle instead was wrong the moment the
+         * camera was the authored one, because an authored camera has a yaw
+         * of its own that the orbit angle knows nothing about -- so "forward"
+         * meant a different direction depending on the mode. */
+        float look_x = nc_cam_target[0] - nc_cam_pos[0];
+        float look_z = nc_cam_target[2] - nc_cam_pos[2];
+        float length = sqrtf(look_x * look_x + look_z * look_z);
+        float fx, fz, move_x = 0.f, move_z = 0.f;
+        if (length < 0.001f) { fx = 0.f; fz = 1.f; }
+        else { fx = look_x / length; fz = look_z / length; }
+
+        if (held & PAD_UP)    { move_x += fx; move_z += fz; }
+        if (held & PAD_DOWN)  { move_x -= fx; move_z -= fz; }
+        /* Screen-left is the camera's left: rotate forward by a quarter turn. */
+        if (held & PAD_LEFT)  { move_x -= fz; move_z += fx; }
+        if (held & PAD_RIGHT) { move_x += fz; move_z -= fx; }
+        /* The left stick does the same thing, proportionally. */
+        move_x += (fx * (float)stick_ly * -1.f + fz * (float)stick_lx) / 128.f;
+        move_z += (fz * (float)stick_ly * -1.f - fx * (float)stick_lx) / 128.f;
+
+        if (move_x != 0.f || move_z != 0.f) {
+            float scale = sqrtf(move_x * move_x + move_z * move_z);
+            /* Diagonals must not be faster than straight lines. */
+            if (scale > 1.f) { move_x /= scale; move_z /= scale; }
+            actor->pos[0] += move_x * speed;
+            actor->pos[2] += move_z * speed;
+            /* Face where it is going, not where the camera is pointing. */
+            actor->rot[1] = atan2f(move_x, move_z) * 57.2957795f;
+        }
         nc_world_collide(nc_player);
     }
-    if (held & PAD_L2) nc_cam_angle -= 0.03f;
-    if (held & PAD_R2) nc_cam_angle += 0.03f;
     return 0;
 }
 
@@ -383,8 +410,25 @@ static qword_t *nc_lab_draw(qword_t *q)
     q = text(q, 26, SCREEN_H - 60, line, 0x50);
     q = text(q, 26, SCREEN_H - 40,
              nc_lab_open ? "D-PAD MOVE/ADJUST   SELECT CLOSE"
-                         : "D-PAD WALK  L2/R2 ORBIT  SELECT LAB", 0x48);
+                         : "L-STICK WALK  R-STICK LOOK  SELECT LAB", 0x48);
     q = text(q, 26, SCREEN_H - 22, "SQUARE BAG   TRIANGLE MENU", 0x40);
+
+    /* The same material, drawn through the 2D path that the logo, the font and
+     * the visual novel all use and that is known to work. If the tile shows
+     * artwork and the boxes do not, the upload is fine and the fault is in how
+     * the world pass samples it. If the tile is flat too, it is the upload.
+     * One look, no rebuild. */
+    if (NC_MATERIAL_COUNT > 0 && !nc_lab_open) {
+        q = text(q, 26, SCREEN_H - 196, "MATERIAL VIA 2D PATH", 0x48);
+        q = bind_texture(q, &nc_world_tex[0]);
+        q = sprite(q, 26, SCREEN_H - 180, 96, 96, 0, 0,
+                   nc_materials[0].used_width, nc_materials[0].used_height, 0x80);
+        if (NC_MATERIAL_COUNT > 1) {
+            q = bind_texture(q, &nc_world_tex[1]);
+            q = sprite(q, 130, SCREEN_H - 180, 96, 96, 0, 0,
+                       nc_materials[1].used_width, nc_materials[1].used_height, 0x80);
+        }
+    }
 
     if (!nc_lab_open)
         return q;

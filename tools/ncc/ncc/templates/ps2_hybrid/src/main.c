@@ -87,6 +87,11 @@ static int scene_before_pause;
 
 static char pad_buffer[256] __attribute__((aligned(64)));
 
+/* Stick positions, -128..127, zero at rest. Read once a frame so everything
+ * downstream sees the same value. */
+static int stick_lx, stick_ly, stick_rx, stick_ry;
+#define STICK_DEAD 24
+
 /* Drawing into the buffer the television is scanning out is what made the top
  * of the picture crawl: the loop starts redrawing the instant vsync returns,
  * which is exactly when the beam is on the first rows. Whatever the GS has not
@@ -172,11 +177,26 @@ static void init_gs(void)
         frame_draw = 1;
     }
 
-    z.enable = DRAW_DISABLE;
+    /* A real depth buffer. Sorting whole objects by their centre cannot be
+     * made to work: a floor large enough to stand on has a centre further away
+     * than the things standing on it from one angle and nearer from another,
+     * so it takes turns being drawn in front of and behind them. No ordering
+     * of draws fixes that. Per-pixel depth does.
+     *
+     * 16-bit, at 640x448, which is 560 KB -- paid for by halving the UI skin.
+     * The distribution is 1/z, so precision is spent where things are close
+     * enough to notice it. */
+    z.enable = DRAW_ENABLE;
     z.mask = 0;
     z.method = ZTEST_METHOD_ALLPASS;
-    z.zsm = GS_ZBUF_32;
-    z.address = 0;
+    z.zsm = GS_ZBUF_16;
+    z.address = graph_vram_allocate(SCREEN_W, SCREEN_H, GS_PSM_16,
+                                    GRAPH_ALIGN_PAGE);
+    if (z.address == (unsigned int)-1) {
+        /* Without it the picture is still a picture, just sorted the old way. */
+        z.enable = DRAW_DISABLE;
+        z.address = 0;
+    }
 
     logo_tex.width = nc_logo_width;
     logo_tex.psm = GS_PSM_32;
@@ -255,7 +275,11 @@ static void init_environment(void)
     atest.keep = ATEST_KEEP_FRAMEBUFFER;
     dtest.enable = DRAW_DISABLE;
     dtest.pass = 0;
-    ztest.enable = DRAW_DISABLE;
+    /* Always enabled, never testing. The GS wants the depth test switched on
+     * for the rest of the pipeline to behave; "off" is spelled ALLPASS. The
+     * full-screen clear at the top of every frame passes through here at z=0
+     * and is what clears the depth buffer -- no separate pass needed. */
+    ztest.enable = z.enable ? DRAW_ENABLE : DRAW_DISABLE;
     ztest.method = ZTEST_METHOD_ALLPASS;
     q = draw_pixel_test(q, 0, &atest, &dtest, &ztest);
 
@@ -688,6 +712,9 @@ int main(void)
     load_pad_modules();
     padInit(0);
     padPortOpen(0, 0, pad_buffer);
+    /* Ask for analogue. A right stick is how a camera is driven now, and a
+     * pad that refuses simply keeps working on the d-pad. */
+    padSetMainMode(0, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_LOCK);
     do {
         state = padGetState(0, 0);
         if (state == PAD_STATE_DISCONN)
@@ -729,8 +756,21 @@ int main(void)
 
         nc_lab_frame_begin();
 
-        if (have_pad && padRead(0, 0, &pad) != 0)
+        if (have_pad && padRead(0, 0, &pad) != 0) {
             buttons = 0xFFFF ^ pad.btns;    /* the pad reports active-low */
+            /* Centred is 128. A dead zone keeps a worn stick from drifting the
+             * camera on its own, which reads as a fault rather than as wear. */
+            if (pad.mode >> 4 == PAD_TYPE_DUALSHOCK) {
+                stick_rx = (int)pad.rjoy_h - 128; stick_ry = (int)pad.rjoy_v - 128;
+                stick_lx = (int)pad.ljoy_h - 128; stick_ly = (int)pad.ljoy_v - 128;
+                if (stick_rx > -STICK_DEAD && stick_rx < STICK_DEAD) stick_rx = 0;
+                if (stick_ry > -STICK_DEAD && stick_ry < STICK_DEAD) stick_ry = 0;
+                if (stick_lx > -STICK_DEAD && stick_lx < STICK_DEAD) stick_lx = 0;
+                if (stick_ly > -STICK_DEAD && stick_ly < STICK_DEAD) stick_ly = 0;
+            } else {
+                stick_rx = stick_ry = stick_lx = stick_ly = 0;
+            }
+        }
         pressed = buttons & ~last;
         last = buttons;
 

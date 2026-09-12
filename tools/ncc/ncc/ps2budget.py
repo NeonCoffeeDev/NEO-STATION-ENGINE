@@ -271,6 +271,28 @@ def frame_setup(project):
                         int(height.group(1)) if height else 448)
 
 
+_ZBUF_NAMES = {"GS_ZBUF_32": "PSMZ32", "GS_ZBUF_24": "PSMZ24",
+               "GS_ZBUF_16": "PSMZ16", "GS_ZBUF_16S": "PSMZ16S"}
+
+
+def depth_setup(project):
+    """The depth buffer's format, or None if the project has no depth test.
+
+    Read out of the runtime like everything else here, because a depth buffer
+    is the single largest thing a project can add to graphics memory and
+    forgetting to count it is how a budget that says 88% turns out to be 105%.
+    """
+    try:
+        with open(os.path.join(project, "src", "main.c"), encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        return None
+    if not re.search(r"z\.enable\s*=\s*DRAW_ENABLE", text):
+        return None
+    match = re.search(r"z\.zsm\s*=\s*(GS_ZBUF_\w+)", text)
+    return _ZBUF_NAMES.get(match.group(1), "PSMZ32") if match else "PSMZ32"
+
+
 def collect(project, frame_psm=None, frame_count=None, screen=None, z_psm=None):
     """Everything this project will put in graphics memory."""
     ledger = Ledger()
@@ -281,6 +303,7 @@ def collect(project, frame_psm=None, frame_count=None, screen=None, z_psm=None):
     frame_psm = frame_psm or detected_psm
     frame_count = frame_count or detected_count
     screen = screen or detected_screen
+    z_psm = z_psm or depth_setup(root)
     if frame_count == 1:
         ledger.note("single frame buffer: the picture is redrawn in the buffer "
                     "the television is scanning out, which shows as a flickering "

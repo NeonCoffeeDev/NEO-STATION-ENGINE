@@ -469,7 +469,11 @@ def _build_ps2(src):
                 if root not in source.parents or source.suffix.lower()!='.png' or not source.is_file():
                     raise ValueError('ui_skin must reference a project-local PNG')
                 output=root/'src/ui_skin_data.c';tool=Path(tc.project_root())/'tools/png2ps2.py'
-                result=subprocess.run([sys.executable,str(tool),str(source),str(output),'nc_ui_skin'],capture_output=True,text=True)
+                # Half resolution. At full size this one texture cost 256 KB of
+                # the 4 MB of graphics memory -- more than the depth buffer that
+                # makes 3D sort correctly, and it is drawn at 288x80. Resolution
+                # nobody can see is the cheapest thing in a project to give up.
+                result=subprocess.run([sys.executable,str(tool),str(source),str(output),'nc_ui_skin','200'],capture_output=True,text=True)
                 if result.returncode:raise ValueError(result.stderr or result.stdout)
                 print('  UI Menu + HUD kit skin -> src/ui_skin_data.c')
         except (OSError,ValueError,KeyError,TypeError) as exc:raise SystemExit(f"ncc: screens.json brand logo -- {exc}")
